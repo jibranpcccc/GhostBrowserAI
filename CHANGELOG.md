@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-07-10
+### Added
+- **Zero-Setup Execution:** End users no longer need to manually install Playwright or Chromium binaries! When they run the server executable for the first time, it automatically detects if the browser binaries are missing and securely downloads them into their AppData folder in the background.
+
 ## [1.2.0] - 2026-07-10
 ### Added
 - **Full Profile Edit Interface:** Upgraded the simple "Rename" pencil icon to a full "Edit Settings" (⚙️) gear button. Users can now deeply modify proxies, timezone, locale, and hardware stealth toggles for an existing profile without needing to delete and recreate it, matching the capability of AdsPower and GoLogin.
