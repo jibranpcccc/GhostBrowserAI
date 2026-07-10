@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-07-10
+### Added
+- **Full Profile Edit Interface:** Upgraded the simple "Rename" pencil icon to a full "Edit Settings" (⚙️) gear button. Users can now deeply modify proxies, timezone, locale, and hardware stealth toggles for an existing profile without needing to delete and recreate it, matching the capability of AdsPower and GoLogin.
+- **Deep Proxy Swapping:** Proxies assigned via the new Edit menu are dynamically updated inside the anti-detect extension on the next launch.
+
 ## [1.1.0] - 2026-07-10
 ### Added
 - **Auto-Open Dashboard:** The executable now automatically launches your default web browser and navigates directly to the dashboard when the server starts. You no longer have to manually type `http://127.0.0.1:8000`.
