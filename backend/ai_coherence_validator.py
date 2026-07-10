@@ -47,7 +47,8 @@ class AICoherenceValidator:
             issues.append(f"Timezone {tz} is slightly anomalous with locale {locale}.")
             
         # 4. User Agent and Client Hints match
-        ua = fingerprint.get("user_agent", "")
+        # MED-02 FIX: Key is 'userAgent' (camelCase) not 'user_agent' — was always empty string before
+        ua = fingerprint.get("userAgent", "")
         sec_ua = fingerprint.get("sec_ch_ua", "")
         sec_plat = fingerprint.get("sec_ch_ua_platform", "").strip('"')
         
@@ -77,7 +78,7 @@ class AICoherenceValidator:
         if "amd" in vendor and "radeon" not in renderer and "amd" not in renderer:
             score -= 30
             issues.append(f"WebGL Vendor is AMD but renderer is {renderer}")
-        if "nvidia" in vendor and "geforce" not in renderer and "rtx" not in renderer and "gtx" not in renderer:
+        if "nvidia" in vendor and "geforce" not in renderer and "rtx" not in renderer and "gtx" not in renderer and "quadro" not in renderer and "titan" not in renderer and "a" not in renderer:
             score -= 30
             issues.append(f"WebGL Vendor is NVIDIA but renderer is {renderer}")
         if "intel" in vendor and "iris" not in renderer and "hd graphics" not in renderer and "uhd" not in renderer:

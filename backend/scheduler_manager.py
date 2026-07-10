@@ -24,7 +24,15 @@ class SchedulerManager:
             try:
                 with open(SCHEDULES_FILE, "r") as f:
                     self.schedules = json.load(f)
-            except:
+            except Exception:
+                # ROBUSTNESS FIX: Backup corrupted file before resetting
+                import shutil
+                backup_path = SCHEDULES_FILE + f".corrupted.{int(datetime.now().timestamp())}.json"
+                try:
+                    shutil.copy2(SCHEDULES_FILE, backup_path)
+                    print(f"[SchedulerManager] ⚠️ Corrupted schedules file backed up to {backup_path}")
+                except Exception:
+                    pass
                 self.schedules = []
         else:
             self.schedules = []
@@ -76,7 +84,7 @@ class SchedulerManager:
                         _, step = part.split("/")
                         return val % int(step) == 0
                     return int(part) == val
-                except: return False
+                except Exception: return False
             
             return (match_part(minute, dt.minute) and
                     match_part(hour, dt.hour) and
@@ -92,8 +100,13 @@ class SchedulerManager:
                 for job in self.schedules:
                     if self._is_time_match(job["cron"], now):
                         print(f"[Scheduler] Triggering job {job['id']} (Macro: {job['macro_id']})")
-                        # Run it in background so it doesn't block the scheduler
-                        asyncio.create_task(self.runner.run_macro_bulk(job["profile_ids"], job["macro_id"]))
+                        # C4 FIX: Fetch the macro dict before passing to run_macro_bulk
+                        # run_macro_bulk expects (profile_ids: List[str], macro: dict), not macro_id
+                        macro = self.macro_manager.get_macro(job["macro_id"])
+                        if macro:
+                            asyncio.create_task(self.runner.run_macro_bulk(job["profile_ids"], macro))
+                        else:
+                            print(f"[Scheduler] ⚠️  Macro {job['macro_id']} not found! Skipping job {job['id']}.")
             
             # Sleep 1 second (this loop wakes every second but triggers logic only when second == 0)
             await asyncio.sleep(1)

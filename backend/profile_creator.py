@@ -162,7 +162,7 @@ class ProfileCreationOrchestrator:
                 print(f"[Orchestrator] Skipping Cookie Warmer as requested.")
             
             # Step 6: Pre-Launch Verification Complete
-            print(f"[Orchestrator] ✅ Profile is Zero-Leak! (Score: {validation_result.get('score', 'N/A')})")
+            print(f"[Orchestrator] ✅ Profile is Zero-Leak! (Score: {validation_result.get('final_score', 'N/A')})")
             return {"status": "success", "profile": final_profile}
             
         return {"status": "error", "message": "Failed to create a coherent, leak-free profile after maximum attempts."}

@@ -86,6 +86,7 @@
                 <span class="topbar-stat-label">RAM</span>
                 <span class="topbar-stat-value" id="topbar-ram">--</span>
             </div>
+            <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">🌙</button>
             <button class="btn-primary" onclick="openCreateModal()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
                 New AI Profile
@@ -250,7 +251,7 @@
                         <th style="text-align:right">Actions</th>
                     </tr>
                 </thead>
-                <tbody id="macros-grid">
+                <tbody id="macros-grid-old">
                     <tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--text-muted);">No macros created yet.</td></tr>
                 </tbody>
             </table>
@@ -268,7 +269,7 @@
                         <th style="text-align:right">Actions</th>
                     </tr>
                 </thead>
-                <tbody id="schedules-grid">
+                <tbody id="schedules-grid-old">
                     <tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted);">No active scheduled jobs.</td></tr>
                 </tbody>
             </table>

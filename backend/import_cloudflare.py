@@ -5,10 +5,11 @@ import sys
 # Add parent directory to path so we can import backend modules
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from backend.ai_generator import generate_fingerprint_kimi
+from backend.ai_generator import generate_fingerprint_ai
 from backend.profile_manager import profile_manager
+from backend.config import get_data_dir
 
-CF_ACCOUNTS_FILE = r"C:\Users\jibra\Desktop\1\hermes agent\cloudflare_working_accounts.txt"
+CF_ACCOUNTS_FILE = os.path.join(get_data_dir(), "cloudflare_accounts.txt")
 
 async def process_accounts():
     if not os.path.exists(CF_ACCOUNTS_FILE):
@@ -31,8 +32,8 @@ async def process_accounts():
         print(f"[{idx+1}/{len(lines)}] Generating robust fingerprint for account {account_id[:8]}...")
         
         try:
-            # We call the Kimi AI generator
-            ai_fingerprint = await generate_fingerprint_kimi(account_id, api_token)
+            # We call the Kimi AI generator (uses racing proxy with all Cloudflare accounts)
+            ai_fingerprint = await generate_fingerprint_ai()
             
             # The generator returns specific fields, we map them into our "advanced" structure
             advanced = {

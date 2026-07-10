@@ -1,6 +1,7 @@
 import asyncio
 import random
 import math
+import time
 from playwright.async_api import Page, Locator
 
 def _cubic_bezier(t, p0, p1, p2, p3):
@@ -208,4 +209,186 @@ class BehaviorEngine:
             except Exception:
                 continue
         return False
+
+    # ------------------------------------------------------------------
+    # New human-like behaviors
+    # ------------------------------------------------------------------
+
+    async def random_idle_pause(self, min_seconds: float = 2.0, max_seconds: float = 8.0):
+        """
+        Simulate a human idle period — reading content, thinking, or distracted.
+
+        During idle, the mouse stays in place (no movement), which is exactly
+        what a real user does when reading.  The duration is randomised so that
+        behaviour looks organic rather than rhythmic.
+        """
+        duration = random.uniform(min_seconds, max_seconds)
+        # Occasionally add a tiny mouse jitter (1-2px) to avoid perfect stillness
+        jitter_count = random.randint(0, 3)
+        for _ in range(jitter_count):
+            await asyncio.sleep(duration / max(jitter_count, 1))
+            jitter_x = self.current_mouse_x + random.uniform(-2, 2)
+            jitter_y = self.current_mouse_y + random.uniform(-2, 2)
+            await self.page.mouse.move(jitter_x, jitter_y)
+        else:
+            if jitter_count == 0:
+                await asyncio.sleep(duration)
+
+    async def viewport_scroll(self, direction: str = "down", intensity: str = "medium"):
+        """
+        Scroll the viewport in a realistic pattern.
+
+        direction: "down", "up", or "random"
+        intensity: "light" (1-3 scrolls), "medium" (3-6), "heavy" (6-10)
+        """
+        if direction == "random":
+            direction = random.choice(["down", "up"])
+
+        intensity_map = {"light": (1, 3), "medium": (3, 6), "heavy": (6, 10)}
+        min_scrolls, max_scrolls = intensity_map.get(intensity, (3, 6))
+        scroll_count = random.randint(min_scrolls, max_scrolls)
+
+        sign = 1 if direction == "down" else -1
+
+        for _ in range(scroll_count):
+            amt = sign * random.randint(150, 600)
+            await self.page.mouse.wheel(0, amt)
+            # Vary the delay between scrolls — sometimes fast, sometimes thoughtful
+            delay = random.uniform(0.3, 1.5)
+            # 15% chance of a micro-pause (reading)
+            if random.random() < 0.15:
+                delay += random.uniform(1.0, 3.0)
+            await asyncio.sleep(delay)
+
+    async def random_tab_switch(self, context=None):
+        """
+        Simulate switching to another browser tab (or opening one).
+
+        If the page has a browser context with multiple pages, switch between
+        them.  Otherwise, this simulates the user pressing Ctrl+Tab or
+        Alt+Tab to switch focus — which is detectable as a blur/focus event
+        on the page.
+        """
+        if context is None:
+            context = self.page.context
+
+        pages = context.pages
+        if len(pages) > 1:
+            # Switch to a random other tab
+            other_pages = [p for p in pages if p != self.page]
+            if other_pages:
+                target = random.choice(other_pages)
+                await target.bring_to_front()
+                # Dwell on the other tab briefly
+                await asyncio.sleep(random.uniform(0.5, 3.0))
+                # Come back to original tab
+                await self.page.bring_to_front()
+        else:
+            # Single tab — simulate window-level blur/focus
+            try:
+                await self.page.evaluate("""() => {
+                    window.dispatchEvent(new Event('blur'));
+                    document.dispatchEvent(new Event('visibilitychange'));
+                    document.visibilityState = 'hidden';
+                }""")
+                await asyncio.sleep(random.uniform(1.0, 4.0))
+                await self.page.evaluate("""() => {
+                    document.visibilityState = 'visible';
+                    window.dispatchEvent(new Event('focus'));
+                    document.dispatchEvent(new Event('visibilitychange'));
+                }""")
+            except Exception:
+                pass
+
+    async def simulate_keyboard_shortcut(self):
+        """
+        Simulate a realistic keyboard shortcut — the kind a user presses
+        out of habit or muscle memory.
+
+        Shortcuts chosen are harmless in most contexts and produce realistic
+        keyboard event patterns that bots normally don't emit.
+        """
+        shortcuts = [
+            ("Control", "a"),       # Select all — common when re-reading
+            ("Control", "c"),       # Copy (nothing selected = harmless)
+            ("Control", "f"),       # Find — user looking for something
+            ("Control", "r"),       # Reload — 10% chance, don't actually reload
+            ("Control", "l"),       # Focus address bar
+            ("Home",),              # Jump to top of page
+            ("End",),               # Jump to bottom
+            ("Shift+Tab",),         # Navigate backward
+            ("Tab",),               # Navigate forward
+            ("Escape",),            # Dismiss something
+        ]
+
+        shortcut = random.choice(shortcuts)
+
+        # For Ctrl+R, intercept before it actually reloads the page
+        if shortcut == ("Control", "r"):
+            try:
+                await self.page.evaluate("""() => {
+                    // Prevent the reload
+                    window.addEventListener('beforeunload', function(e) {
+                        e.preventDefault();
+                        e.returnValue = '';
+                    }, { once: true });
+                }""")
+            except Exception:
+                pass
+
+        try:
+            if len(shortcut) == 1:
+                await self.page.keyboard.press(shortcut[0])
+            else:
+                # Hold modifier, press key, release
+                await self.page.keyboard.down(shortcut[0])
+                await asyncio.sleep(random.uniform(0.02, 0.08))
+                await self.page.keyboard.press(shortcut[1])
+                await self.page.keyboard.up(shortcut[0])
+        except Exception:
+            pass
+
+        # Small pause after shortcut (user reads result)
+        await asyncio.sleep(random.uniform(0.3, 1.0))
+
+    async def human_browse_session(self, duration_seconds: int = 30):
+        """
+        High-level: run a mixed browsing session on the current page.
+
+        Combines scrolling, idle pauses, mouse movements, keyboard shortcuts,
+        and occasional tab switches into a realistic session.  Useful for
+        cookie warming and general anti-detect behaviour.
+        """
+        session_start = time.time()
+
+        while (time.time() - session_start) < duration_seconds:
+            # Choose a random behaviour
+            behaviours = [
+                self.viewport_scroll("random", "medium"),
+                self.random_idle_pause(2.0, 6.0),
+                self._random_mouse_move(),
+                self.simulate_keyboard_shortcut(),
+                self.random_tab_switch(),
+            ]
+
+            chosen = random.choice(behaviours)
+            try:
+                await chosen
+            except Exception as e:
+                # Non-fatal — continue session
+                pass
+
+            # Inter-behaviour pause
+            await asyncio.sleep(random.uniform(0.5, 2.0))
+
+    async def _random_mouse_move(self):
+        """Move mouse to a random viewport position using bezier path."""
+        vp_width = await self.page.evaluate("window.innerWidth")
+        vp_height = await self.page.evaluate("window.innerHeight")
+        if not vp_width or not vp_height:
+            vp_width, vp_height = 1280, 720
+
+        target_x = random.randint(50, max(100, int(vp_width) - 50))
+        target_y = random.randint(50, max(100, int(vp_height) - 50))
+        await self.human_move(target_x, target_y)
 

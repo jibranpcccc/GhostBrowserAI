@@ -39,18 +39,26 @@ class ProfileManager:
                         if "proxy" in pdata and isinstance(pdata["proxy"], str) and pdata["proxy"].startswith("enc:"):
                             try:
                                 pdata["proxy"] = json.loads(self.cipher.decrypt(pdata["proxy"][4:].encode()).decode())
-                            except:
+                            except Exception:
                                 pdata["proxy"] = None
                                 
                         if "advanced" in pdata and isinstance(pdata["advanced"], str) and pdata["advanced"].startswith("enc:"):
                             try:
                                 pdata["advanced"] = json.loads(self.cipher.decrypt(pdata["advanced"][4:].encode()).decode())
-                            except:
+                            except Exception:
                                 pdata["advanced"] = {}
                                 
                         self.profiles[pid] = pdata
                         
             except json.JSONDecodeError:
+                # ROBUSTNESS FIX: Backup corrupted file before resetting, so data can be recovered
+                import shutil
+                backup_path = self.metadata_file + f".corrupted.{int(datetime.now().timestamp())}.json"
+                try:
+                    shutil.copy2(self.metadata_file, backup_path)
+                    print(f"[ProfileManager] ⚠️ Corrupted metadata backed up to {backup_path}")
+                except Exception:
+                    pass
                 self.profiles = {}
         else:
             self.profiles = {}

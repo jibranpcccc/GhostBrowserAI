@@ -99,11 +99,13 @@ class CloudflareManager:
         ]
 
         if not healthy:
-            # All on cooldown — clear and recycle rather than blocking forever
-            print("[Cloudflare Manager] 🔄 All accounts on cooldown — resetting cooldowns.")
-            self.cooldowns.clear()
-            self._save_cooldowns()
-            healthy = self.accounts
+            # MED-08 FIX: Don't reset all cooldowns at once - this causes a cascade of 429 rate limits
+            # that can permanently blacklist API tokens. Instead, find the account whose cooldown
+            # expires soonest and return None so the caller can show a proper error.
+            soonest = min(self.cooldowns.values(), default=0)
+            wait_s = max(0, int(soonest - now))
+            print(f"[Cloudflare Manager] ⏳ All accounts on cooldown. Shortest remaining: {wait_s}s.")
+            return None
 
         if not healthy:
             return None

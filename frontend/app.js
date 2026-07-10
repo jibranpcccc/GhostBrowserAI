@@ -132,22 +132,16 @@ function renderCFAccounts(data) {
 
     const items = [];
 
-    data.healthy_accounts.forEach(acc => {
+    // HIGH-01 FIX: API returns data.accounts[] not data.healthy_accounts[] / data.cooldown_accounts[]
+    // Iterating data.accounts and filtering by status fixes the permanently blank AI Status page.
+    (data.accounts || []).forEach(acc => {
+        const isCooling = acc.status === 'cooldown';
+        const mins = isCooling ? Math.ceil((acc.cooldown_remaining_seconds || 0) / 60) : 0;
         items.push(`
             <div class="cf-account-item">
-                <div class="cf-status healthy">✓ Healthy</div>
+                <div class="cf-status ${isCooling ? 'cooldown' : 'healthy'}">${isCooling ? '⏳ Cooldown' : '✓ Healthy'}</div>
                 <div class="cf-account-id">${acc.account_id}</div>
-            </div>
-        `);
-    });
-
-    data.cooldown_accounts.forEach(acc => {
-        const mins = Math.ceil(acc.cooldown_remaining_seconds / 60);
-        items.push(`
-            <div class="cf-account-item">
-                <div class="cf-status cooldown">⏳ Cooldown</div>
-                <div class="cf-account-id">${acc.account_id}</div>
-                <div class="cf-cooldown-timer">${mins}m left</div>
+                ${isCooling ? `<div class="cf-cooldown-timer">${mins}m left</div>` : ''}
             </div>
         `);
     });
@@ -365,7 +359,8 @@ async function openMetadataModal(id) {
     try {
         const res = await fetch(`${API}/api/profiles`);
         const data = await res.json();
-        const p = data.profiles.find(x => x.id === id);
+        // HIGH-02 FIX: API returns flat array, not {profiles: [...]}. Use data.find() directly.
+        const p = Array.isArray(data) ? data.find(x => x.id === id) : null;
         if (p) {
             document.getElementById('profile-tags').value = p.tags || '';
             document.getElementById('proxy-pin').value = p.proxy_pin || '';
@@ -597,11 +592,13 @@ async function bulkDelete() {
 }
 
 // Modal Tabs Logic
-function switchModalTab(tabName) {
+// HIGH-05 FIX: Accept 'el' parameter instead of relying on implicit global 'event' object.
+// The implicit 'event' fails in strict mode and Firefox.
+function switchModalTab(tabName, el) {
     document.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
     
-    event.target.classList.add('active');
+    if (el) el.classList.add('active');
     document.getElementById('tab-' + tabName).classList.add('active');
 }
 
@@ -1065,8 +1062,25 @@ async function importProxies() {
 }
 
 async function testAllProxies() {
-    showToast('Testing proxies... (check backend logs)', 'info');
-    addActivity('Proxy health test triggered', 'info');
+    // LOW-02 FIX: Actually call the proxy health check API instead of just showing a toast
+    const btn = document.getElementById('btn-test-proxies');
+    if (btn) { btn.disabled = true; btn.textContent = 'Testing...'; }
+    showToast('Running health check on all proxies...', 'info');
+    try {
+        const res = await fetch(`${API}/api/proxies/test`, { method: 'POST' });
+        if (res.ok) {
+            const data = await res.json();
+            showToast(data.message || 'Proxy health check complete', 'success');
+            addActivity(data.message || 'Proxy health check complete', 'success');
+            fetchProxies();
+        } else {
+            showToast('Health check failed', 'error');
+        }
+    } catch(e) {
+        showToast('Health check failed: ' + e.message, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Test All'; }
+    }
 }
 
 async function scrapeFreeProxies() {
@@ -1519,7 +1533,8 @@ async function saveTagsNotes() {
     const tags = tagsStr.split(',').map(t => t.trim()).filter(t => t.length > 0);
     
     try {
-        const res = await fetch(`${API}/api/profiles/${id}/tags_notes`, {
+        // HIGH-03 FIX: Correct endpoint is /metadata (PATCH), not /tags_notes which doesn't exist
+        const res = await fetch(`${API}/api/profiles/${id}/metadata`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ tags, notes })
@@ -1879,3 +1894,245 @@ function toggleAutoReplenish() {
     localStorage.setItem('auto_replenish', isChecked);
     showToast(isChecked ? 'Auto-Replenish Enabled' : 'Auto-Replenish Disabled', isChecked ? 'success' : 'info');
 }
+
+// =========================================================
+// THEME TOGGLE
+// =========================================================
+function toggleTheme() {
+    const root = document.documentElement;
+    const current = root.getAttribute('data-theme') || 'dark';
+    const next = current === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    const btn = document.querySelector('.theme-toggle');
+    if (btn) btn.textContent = next === 'dark' ? '🌙' : '☀️';
+}
+
+// Load saved theme on startup
+(function() {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+        const btn = document.querySelector('.theme-toggle');
+        if (btn) btn.textContent = '☀️';
+    }
+})();
+
+// =========================================================
+// FOLDERS
+// =========================================================
+async function fetchFolders() {
+    try {
+        const res = await fetch(`${API}/api/folders`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const folders = data.folders || data || [];
+        // Update sidebar if it exists
+        const sidebar = document.getElementById('folder-list');
+        if (sidebar) {
+            sidebar.innerHTML = '<div class="folder-item active" onclick="filterByFolder(null)">📁 All Profiles</div>' +
+                folders.map(f => `<div class="folder-item" onclick="filterByFolder('${f.id}')">📁 ${f.name}</div>`).join('');
+        }
+    } catch (e) { /* backend not running */ }
+}
+
+// =========================================================
+// COOKIE ROBOT
+// =========================================================
+async function startCookieRobot(profileIds) {
+    if (!profileIds || profileIds.length === 0) {
+        showToast('Select at least one profile', 'error');
+        return;
+    }
+    try {
+        const res = await fetch(`${API}/api/cookie-robot/start`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ profile_ids: profileIds })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showToast('Cookie Robot started!', 'success');
+        } else {
+            showToast(data.message || 'Failed', 'error');
+        }
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function fetchCookieRobotStatus() {
+    try {
+        const res = await fetch(`${API}/api/cookie-robot/status`);
+        if (!res.ok) return;
+        const data = await res.json();
+        // Update UI if widget exists
+        const widget = document.getElementById('cookie-robot-widget');
+        if (widget && data && Object.keys(data).length > 0) {
+            widget.innerHTML = Object.entries(data).map(([pid, status]) => {
+                const pct = status.sites_visited / status.total_sites * 100 || 0;
+                return `<div class="cookie-robot-widget">
+                    <span>${pid.slice(0,8)}: ${status.status}</span>
+                    <div class="warming-progress"><div class="warming-progress-bar" style="width:${pct}%"></div></div>
+                </div>`;
+            }).join('');
+        }
+    } catch (e) { /* backend not running */ }
+}
+
+// =========================================================
+// SYNC (Synchronizer)
+// =========================================================
+async function startSyncSession(profileIds) {
+    try {
+        const res = await fetch(`${API}/api/sync/start`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ profile_ids: profileIds })
+        });
+        const data = await res.json();
+        if (res.ok) showToast(`Sync started for ${profileIds.length} profiles`, 'success');
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function stopSyncSession() {
+    try {
+        await fetch(`${API}/api/sync/stop`, { method: 'POST' });
+        showToast('Sync stopped', 'info');
+    } catch (e) { /* backend not running */ }
+}
+
+// =========================================================
+// API KEYS
+// =========================================================
+async function fetchApiKeys() {
+    try {
+        const res = await fetch(`${API}/api/api-keys`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const keys = data.keys || data || [];
+        const container = document.getElementById('api-keys-list');
+        if (container) {
+            if (keys.length === 0) {
+                container.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:1rem;">No API keys yet. Create one to enable external automation.</p>';
+            } else {
+                container.innerHTML = keys.map(k => `<div class="api-key-row">
+                    <span class="api-key-value">${k.key || k.api_key || '?'}</span>
+                    <span style="color:var(--text-muted);font-size:0.8rem;">${k.name || 'unnamed'}</span>
+                    <button class="btn-secondary" onclick="revokeApiKey('${k.id}')">Revoke</button>
+                </div>`).join('');
+            }
+        }
+    } catch (e) { /* backend not running */ }
+}
+
+async function createApiKey(name) {
+    try {
+        const res = await fetch(`${API}/api/api-keys`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name || 'new-key' })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showToast('API key created!', 'success');
+            fetchApiKeys();
+        }
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function revokeApiKey(keyId) {
+    try {
+        await fetch(`${API}/api/api-keys/${keyId}`, { method: 'DELETE' });
+        showToast('Key revoked', 'info');
+        fetchApiKeys();
+    } catch (e) { /* backend not running */ }
+}
+
+// =========================================================
+// TEAM MANAGEMENT
+// =========================================================
+async function fetchTeamMembers() {
+    try {
+        const res = await fetch(`${API}/api/team/members`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const members = data.members || data || [];
+        const container = document.getElementById('team-members-list');
+        if (container) {
+            container.innerHTML = members.map(m => `<div class="team-member-row">
+                <span style="font-weight:600;">${m.name}</span>
+                <span class="role-badge ${m.role}">${m.role}</span>
+                <span style="color:var(--text-muted);font-size:0.8rem;">${m.email || ''}</span>
+            </div>`).join('') || '<p style="color:var(--text-muted);text-align:center;padding:1rem;">No team members yet.</p>';
+        }
+    } catch (e) { /* backend not running */ }
+}
+
+// =========================================================
+// RPA RECORDER
+// =========================================================
+async function startRpaRecording(profileId) {
+    try {
+        const res = await fetch(`${API}/api/rpa/record/start`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ profile_id: profileId })
+        });
+        const data = await res.json();
+        if (res.ok) showToast('Recording started', 'success');
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function stopRpaRecording() {
+    try {
+        const res = await fetch(`${API}/api/rpa/record/stop`, { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) showToast('Recorded ' + (data.steps || 0) + ' actions', 'success');
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function bulkLaunchProfiles(profileIds) {
+    try {
+        const res = await fetch(`${API}/api/profiles/bulk/launch`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ profile_ids: profileIds })
+        });
+        if (res.ok) showToast('Launching ' + profileIds.length + ' profiles...', 'success');
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function bulkCloseProfiles(profileIds) {
+    try {
+        const res = await fetch(`${API}/api/profiles/bulk/close`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ profile_ids: profileIds })
+        });
+        if (res.ok) showToast('Closing ' + profileIds.length + ' profiles...', 'success');
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function exportProfiles(profileIds) {
+    try {
+        const res = await fetch(`${API}/api/profiles/export`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ profile_ids: profileIds || [] })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'ghostbrowser_profiles_export.json';
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('Profiles exported!', 'success');
+        }
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+setInterval(() => {
+    fetchCookieRobotStatus();
+}, 5000); 

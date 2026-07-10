@@ -8,11 +8,12 @@ import json
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from backend.profile_manager import profile_manager, PROFILES_DIR
-from backend.ai_generator import generate_fingerprint_kimi
+from backend.ai_generator import generate_fingerprint_ai
+from backend.config import get_data_dir
 from playwright.async_api import async_playwright
 import playwright_stealth
 
-CF_ACCOUNTS_FILE = r"C:\Users\jibra\Desktop\1\hermes agent\cloudflare_working_accounts.txt"
+CF_ACCOUNTS_FILE = os.path.join(get_data_dir(), "cloudflare_accounts.txt")
 
 async def reset_profiles():
     print("Deleting all existing profiles...")
@@ -38,8 +39,8 @@ async def create_five_profiles():
         account_id = parts[0].strip()
         api_token = parts[1].strip()
         
-        print(f"[{idx+1}/5] Generating robust fingerprint for account {account_id[:8]}...")
-        ai_fingerprint = await generate_fingerprint_kimi(account_id, api_token)
+        print(f"[{idx+1}/5] Generating robust fingerprint via Kimi AI (racing proxy)...")
+        ai_fingerprint = await generate_fingerprint_ai()
         
         advanced = {
             "os": ai_fingerprint.get("os", "Windows"),
@@ -81,7 +82,9 @@ async def test_profiles(profiles):
     print("\nTesting profiles for uniqueness...")
     playwright = await async_playwright().start()
     
-    os.makedirs(r"C:\Users\jibra\.gemini\antigravity\brain\19f79db5-76e3-409c-9fd8-996a3c208d7a\scratch", exist_ok=True)
+    # FIX: Use configurable output path instead of hardcoded .gemini path
+    output_dir = os.path.join(get_data_dir(), "test_screenshots")
+    os.makedirs(output_dir, exist_ok=True)
     
     for idx, profile in enumerate(profiles):
         print(f"\n--- Testing Profile {idx+1}: {profile['name']} ---")
@@ -149,8 +152,8 @@ async def test_profiles(profiles):
         try:
             await page.goto("https://browserleaks.com/canvas", wait_until="domcontentloaded", timeout=30000)
             await asyncio.sleep(5)
-            await page.screenshot(path=rf"C:\Users\jibra\.gemini\antigravity\brain\19f79db5-76e3-409c-9fd8-996a3c208d7a\scratch\canvas_profile_{idx+1}.png", full_page=True)
-            print(f"Canvas screenshot saved to scratch/canvas_profile_{idx+1}.png")
+            await page.screenshot(path=os.path.join(output_dir, f"canvas_profile_{idx+1}.png"), full_page=True)
+            print(f"Canvas screenshot saved to test_screenshots/canvas_profile_{idx+1}.png")
         except Exception as e:
             print(f"Failed to load canvas test: {e}")
             
