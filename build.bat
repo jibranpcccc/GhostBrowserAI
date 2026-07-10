@@ -16,6 +16,7 @@ pyinstaller --noconfirm ^
   --name "GhostBrowser" ^
   --add-data "frontend;frontend" ^
   --add-data "backend/extensions;backend/extensions" ^
+  --add-data "cloudflare_accounts.txt;." ^
   --hidden-import "playwright.async_api" ^
   --hidden-import "playwright_stealth" ^
   --hidden-import "uvicorn" ^

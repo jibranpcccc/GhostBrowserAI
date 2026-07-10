@@ -29,16 +29,15 @@ class ProxyScraper:
         return []
 
     async def check_proxy(self, proxy_str: str, client: httpx.AsyncClient):
+        # C3 FIX: httpx 0.28+ removed 'proxies=' parameter, use 'proxy=' instead
         if proxy_str.startswith("http"):
             url = proxy_str
         else:
             url = f"http://{proxy_str}"
-            
-        proxies = {"http://": url, "https://": url}
-        
+
         try:
             # Very fast timeout just to check absolute basic connectivity first
-            async with httpx.AsyncClient(proxies=proxies, timeout=2.0) as test_client:
+            async with httpx.AsyncClient(proxy=url, timeout=2.0) as test_client:
                 # Google is highly available and blocks bad proxies, good test target
                 resp = await test_client.get("http://www.google.com/generate_204")
                 if resp.status_code == 204:
@@ -94,7 +93,7 @@ class ProxyScraper:
             try:
                 with open(PROXY_STORE_FILE, "r") as f:
                     existing = json.load(f)
-            except: pass
+            except Exception: pass
             
         # Keep non-free proxies, and append new free ones
         merged = [p for p in existing if p.get("type") != "free_scraped"]

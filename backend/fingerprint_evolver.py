@@ -1,6 +1,6 @@
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from backend.profile_manager import profile_manager
 
 class FingerprintEvolver:
@@ -15,40 +15,51 @@ class FingerprintEvolver:
         if not profile: return False
         
         advanced = profile.get("advanced", {})
+        updates = {}
+        advanced_updates = {}
         
         # 1. Bump Chrome Minor Version String if present in User Agent
         ua = profile.get("user_agent", "")
         if "Chrome/" in ua:
             try:
-                # e.g., "Mozilla/5.0... Chrome/114.0.5735.199 Safari/537.36"
                 parts = ua.split("Chrome/")
                 version_part = parts[1].split(" ")[0]
                 v_split = version_part.split(".")
                 
-                # Increment the build/patch number slightly to simulate a background browser update
                 if len(v_split) == 4:
-                    build = int(v_split[2])
                     patch = int(v_split[3])
-                    v_split[3] = str(patch + 1) # minor patch bump
+                    v_split[3] = str(patch + 1)
                     
                     new_version = ".".join(v_split)
                     new_ua = ua.replace(version_part, new_version)
                     
-                    profile["user_agent"] = new_ua
+                    updates["user_agent"] = new_ua
                     
-                    # Also update sec-ch-ua if present
+                    # HIGH-08 FIX: Also update sec_ch_ua AND client_hints.uaFullVersion
+                    # Without this, navigator.userAgent and navigator.userAgentData.getHighEntropyValues
+                    # return mismatched versions — a strong bot signal.
                     if "sec_ch_ua" in advanced:
-                        advanced["sec_ch_ua"] = advanced["sec_ch_ua"].replace(version_part, new_version)
+                        advanced_updates["sec_ch_ua"] = advanced["sec_ch_ua"].replace(version_part, new_version)
+                    
+                    # Update uaFullVersion inside client_hints dict
+                    client_hints = advanced.get("client_hints", {})
+                    if client_hints:
+                        client_hints["uaFullVersion"] = new_version
+                        advanced_updates["client_hints"] = client_hints
+                        
             except Exception:
-                pass # If parsing fails, just skip UA evolution
+                pass
                 
         # 2. Increment "profile age" counter
-        age = profile.get("age_days", 0)
-        profile["age_days"] = age + 1
-        profile["last_evolved"] = datetime.utcnow().isoformat()
+        updates["age_days"] = profile.get("age_days", 0) + 1
+        updates["last_evolved"] = datetime.now(timezone.utc).isoformat()
         
-        # Save back to disk
-        profile_manager._save_metadata()
+        if advanced_updates:
+            updates["advanced"] = advanced_updates
+        
+        # LOW-04 FIX: Use update_profile() instead of direct dict mutation + private _save_metadata()
+        # This is thread-safe and goes through proper validation.
+        profile_manager.update_profile(profile_id, updates)
         return True
 
 fingerprint_evolver = FingerprintEvolver()

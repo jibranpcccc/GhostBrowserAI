@@ -1,0 +1,50 @@
+===============================================================================
+  INTEGRATION INSTRUCTIONS for backend/main.py
+  Add the following lines to register the three new modules.
+===============================================================================
+
+--- 1. IMPORTS (add after existing imports, ~line 15) ---
+
+from backend.team_manager import router as team_router
+from backend.profile_transfer import router as transfer_router
+from backend.api_keys import router as api_keys_router
+
+--- 2. ROUTER REGISTRATION (add after `app = FastAPI(...)` and CORS setup, ~line 50) ---
+
+app.include_router(team_router)
+app.include_router(transfer_router)
+app.include_router(api_keys_router)
+
+===============================================================================
+  NEW ENDPOINTS SUMMARY
+===============================================================================
+
+Team Management (/api/team):
+  POST   /api/team/members                  Add a team member
+  GET    /api/team/members                  List all team members
+  PUT    /api/team/members/{id}/role         Change a member's role
+  DELETE /api/team/members/{id}              Remove a member
+  GET    /api/team/members/{id}/permissions   Get allowed actions for a member
+  POST   /api/team/profiles/{pid}/lock       Lock a profile to a member
+  POST   /api/team/profiles/{pid}/unlock     Unlock a profile
+  GET    /api/team/profiles/locked           List locked profiles
+
+Profile Transfer (/api/profiles):
+  POST   /api/profiles/export               Export profiles (JSON, optional encrypt)
+  POST   /api/profiles/import               Import profiles (JSON, optional encrypted)
+  POST   /api/profiles/import/csv           Bulk import from CSV file
+  GET    /api/profiles/export/file          Export all to file, returns filepath
+
+API Keys (/api/api-keys):
+  GET    /api/api-keys                       List all API keys (masked)
+  POST   /api/api-keys                       Create a new API key
+  DELETE /api/api-keys/{key}                 Revoke an API key
+
+===============================================================================
+  DATA FILES CREATED (under profiles_data/)
+===============================================================================
+
+  team_data.json       — team member records
+  locked_profiles.json — profile lock mapping
+  api_keys.json        — API key storage
+  exports/             — directory for exported profile files

@@ -1,7 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from pydantic import BaseModel
-from typing import Optional
 from typing import Optional, List, Dict, Any
 import uvicorn
 import os
@@ -17,20 +18,46 @@ from backend.macro_manager import macro_manager
 from backend.macro_runner import MacroRunner
 from backend.config import get_data_dir
 from backend.scheduler_manager import SchedulerManager
+# H4+H5 FIX: Move system_monitor import to top of file (was at line 569, after its first use in lifespan)
+from backend.system_monitor import system_monitor
+
+# --- Agent 1: New API Routers ---
+from backend.api_automation import router as api_automation_router
+from backend.synchronizer import router as synchronizer_router
+from backend.rpa_recorder import router as rpa_recorder_router
+from backend.profile_folders import router as profile_folders_router
+from backend.bulk_operations import router as bulk_operations_router
 
 scheduler_manager = SchedulerManager(
-    browser_manager=None, # Will rely on imports inside runner if needed, or pass the module
+    browser_manager=None,
     profile_manager=profile_manager,
     macro_manager=macro_manager
 )
 
-app = FastAPI(title="AI Anti-Detect Browser API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    import backend.browser_manager as bm
+    scheduler_manager.browser_manager = bm
+    scheduler_manager.runner.browser_manager = bm
+    await system_monitor.start()
+    scheduler_manager.start()
+    yield
+    # Shutdown
+    system_monitor.stop()
+    scheduler_manager.stop()
+    # Close shared httpx client to prevent resource leak (CRIT-07)
+    from backend.ai_generator import _shared_client
+    await _shared_client.aclose()
+
+app = FastAPI(title="AI Anti-Detect Browser API", lifespan=lifespan)
 
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    # CRIT-01 FIX: Restrict to localhost only. Wildcard + credentials is a CSRF vulnerability.
+    allow_origins=["http://127.0.0.1:8000", "http://localhost:8000"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -530,7 +557,7 @@ def get_proxies():
         if os.path.exists(pool_file):
             with open(pool_file, "r") as f:
                 return json.load(f)
-    except: pass
+    except Exception: pass
     return proxy_manager._get_active_proxies()
 
 class ScrapeConfigModel(BaseModel):
@@ -546,20 +573,42 @@ async def scrape_free_proxies(config: ScrapeConfigModel):
     proxy_manager._load_proxies()
     return {"status": "success", "message": f"Scraped and validated {added} free proxies"}
 
-from backend.system_monitor import system_monitor
+# H2 FIX: Add missing POST /api/proxies/test endpoint that frontend app.js calls
+@app.post("/api/proxies/test")
+async def test_all_proxies():
+    """Run health checks on all active proxies and return results."""
+    import asyncio
+    proxies = proxy_manager._get_active_proxies()
+    if not proxies:
+        return {"status": "success", "message": "No active proxies to test.", "alive": 0, "total": 0}
 
-@app.on_event("startup")
-async def startup_event():
-    import backend.browser_manager as bm
-    scheduler_manager.browser_manager = bm
-    scheduler_manager.runner.browser_manager = bm
-    await system_monitor.start()
-    scheduler_manager.start()
+    alive = 0
+    dead = 0
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    system_monitor.stop()
-    scheduler_manager.stop()
+    async def check_one(p):
+        nonlocal alive, dead
+        server = p.get("server", "")
+        if not server:
+            return
+        ok = await proxy_manager.check_proxy_health(p)
+        if ok:
+            alive += 1
+        else:
+            dead += 1
+
+    # Run checks concurrently in batches of 20 to avoid overwhelming
+    batch_size = 20
+    for i in range(0, len(proxies), batch_size):
+        batch = proxies[i:i+batch_size]
+        await asyncio.gather(*[check_one(p) for p in batch])
+
+    total = len(proxies)
+    msg = f"Health check complete: {alive}/{total} alive, {dead} dead."
+    return {"status": "success", "message": msg, "alive": alive, "total": total, "dead": dead}
+
+# system_monitor now imported at top of file (H4+H5 FIX)
+
+# LOW-09 FIX: startup/shutdown are now handled by the lifespan context manager above.
 
 @app.get("/api/system/health")
 def get_system_health():
@@ -578,7 +627,7 @@ def get_metrics():
         try:
             with open(quarantine_meta, "r") as f:
                 quarantine_count = len(json.load(f))
-        except:
+        except Exception:
             pass
             
     # Count total anomalies logged
@@ -590,7 +639,7 @@ def get_metrics():
                 for line in f:
                     if "anomaly" in line:
                         anomaly_count += 1
-        except:
+        except Exception:
             pass
 
     return {
@@ -600,6 +649,53 @@ def get_metrics():
         "total_anomalies": anomaly_count,
         "memory_usage_percent": system_monitor.ram_usage
     }
+
+# ---------------------------------------------------------------------------
+# Cookie Robot — smart geo-targeted cookie warming
+# ---------------------------------------------------------------------------
+
+from backend.cookie_robot import cookie_robot
+
+class CookieRobotStartModel(BaseModel):
+    profile_ids: List[str]
+    min_sites: int = 10
+    max_sites: int = 20
+
+@app.post("/api/cookie-robot/start")
+async def cookie_robot_start(data: CookieRobotStartModel):
+    """Start cookie warming for one or more profiles."""
+    result = await cookie_robot.start_warming(data.profile_ids, data.min_sites, data.max_sites)
+    return result
+
+@app.get("/api/cookie-robot/status/{profile_id}")
+def cookie_robot_status(profile_id: str):
+    """Get cookie warming status for a specific profile."""
+    return cookie_robot.get_status(profile_id)
+
+@app.get("/api/cookie-robot/status")
+def cookie_robot_all_status():
+    """Get cookie warming status for all profiles."""
+    return cookie_robot.get_all_status()
+
+@app.post("/api/cookie-robot/stop/{profile_id}")
+async def cookie_robot_stop(profile_id: str):
+    """Stop a running cookie warming task for a profile."""
+    return await cookie_robot.stop_warming(profile_id)
+
+# --- Register new API routers (Agent 1) ---
+app.include_router(api_automation_router)
+app.include_router(synchronizer_router)
+app.include_router(rpa_recorder_router)
+app.include_router(profile_folders_router)
+app.include_router(bulk_operations_router)
+
+# --- Register Agent 4 routers (team, profile transfer, api keys) ---
+from backend.team_manager import router as team_router
+from backend.profile_transfer import router as profile_transfer_router
+from backend.api_keys import router as api_keys_router
+app.include_router(team_router)
+app.include_router(profile_transfer_router)
+app.include_router(api_keys_router)
 
 # Mount frontend
 frontend_dir = get_bundled_dir("frontend")

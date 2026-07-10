@@ -1,6 +1,7 @@
 import os
 import json
 import uuid
+from datetime import datetime
 from backend.config import get_data_dir
 
 MACROS_FILE = os.path.join(get_data_dir("profiles_data"), "macros.json")
@@ -14,7 +15,15 @@ class MacroManager:
             try:
                 with open(MACROS_FILE, "r") as f:
                     self.macros = json.load(f)
-            except:
+            except Exception:
+                # ROBUSTNESS FIX: Backup corrupted file before resetting
+                import shutil
+                backup_path = MACROS_FILE + f".corrupted.{int(datetime.now().timestamp())}.json"
+                try:
+                    shutil.copy2(MACROS_FILE, backup_path)
+                    print(f"[MacroManager] ⚠️ Corrupted macros file backed up to {backup_path}")
+                except Exception:
+                    pass
                 self.macros = []
         else:
             self.macros = []

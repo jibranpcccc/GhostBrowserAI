@@ -29,8 +29,8 @@ async def launch_profile(profile_id: str, force_headless: bool = False):
             '--disable-infobars',
             '--no-sandbox',
             '--disable-setuid-sandbox',
-            '--disable-web-security',
-            '--disable-features=IsolateOrigins,site-per-process'
+            # CRIT-04 FIX: Removed --disable-web-security and --disable-features=IsolateOrigins
+            # These flags are massive fingerprinting signals detected by CreepJS/Pixelscan.
         ]
         
         import os
@@ -142,8 +142,20 @@ async def launch_profile(profile_id: str, force_headless: bool = False):
         await anomaly_detector.attach(profile_id, page)
 
         advanced = profile.get("advanced", {})
+        # FIX: Ensure advanced is a dict (could be encrypted string or None)
+        if not isinstance(advanced, dict):
+            advanced = {}
         cpu_cores = advanced.get("cpu_cores") or 4
         memory_gb = advanced.get("memory_gb") or 8
+        # FIX: Ensure values are proper types for JS injection (never None)
+        try:
+            cpu_cores = int(cpu_cores)
+        except (TypeError, ValueError):
+            cpu_cores = 4
+        try:
+            memory_gb = int(memory_gb)
+        except (TypeError, ValueError):
+            memory_gb = 8
         canvas_noise = advanced.get("canvas_noise", True)
         webgl_noise = advanced.get("webgl_noise", True)
         audio_noise = advanced.get("audio_noise", True)
@@ -169,14 +181,19 @@ async def launch_profile(profile_id: str, force_headless: bool = False):
         # ================================================================
         import re as _re
 
-        # Fix #5: Stable canvas noise seed — deterministic per profile ID
-        # (same output every call = real hardware behaviour; unique per profile)
+        # Fix #5: Canvas noise seed — deterministic per profile but VARIES per session
+        # HIGH-07 FIX: Combining profile seed with a session random value so each
+        # browser launch has slightly different noise (preventing cross-session tracking)
+        # while remaining unique per-profile (preventing cross-profile tracking).
         _pid_raw = profile.get("id", "ffffffff-0000-0000-0000-000000000000")
         _seed = int(_pid_raw.replace("-", "")[:8], 16)
-        # Multiply by prime numbers to drastically shift the RGB values across profiles
-        canvas_r_offset = advanced.get("canvas_r_offset", (_seed % 250)) 
-        canvas_g_offset = advanced.get("canvas_g_offset", ((_seed * 7) % 250))
-        canvas_b_offset = advanced.get("canvas_b_offset", ((_seed * 13) % 250))
+        import random as _random
+        _session_jitter = _random.randint(0, 15)  # Small per-session variation
+        canvas_r_offset = advanced.get("canvas_r_offset", ((_seed + _session_jitter) % 250))
+        canvas_g_offset = advanced.get("canvas_g_offset", (((_seed * 7) + _session_jitter) % 250))
+        canvas_b_offset = advanced.get("canvas_b_offset", (((_seed * 13) + _session_jitter) % 250))
+        # Deterministic DOM noise seed (per-profile, stable within session)
+        _dom_noise = ((_seed % 1000) + 1) / 10_000_000.0  # e.g. 0.0000042
 
         # Fix #7: devicePixelRatio — most 1080p Windows laptops use 1.25
         device_pixel_ratio = advanced.get("device_pixel_ratio", 1.25)
@@ -252,41 +269,53 @@ async def launch_profile(profile_id: str, force_headless: bool = False):
                     window.RTCPeerConnection = window.webkitRTCPeerConnection = window.mozRTCPeerConnection = function(...args) {{
                         const pc = new OrigPeerConn(...args);
                         
-                        // Intercept addEventListener
-                        const origAddEventListener = pc.addEventListener.bind(pc);
-                        pc.addEventListener = function(type, listener, options) {{
-                            if (type === 'icecandidate') {{
-                                const wrappedListener = function(event) {{
-                                    if (event.candidate && event.candidate.candidate) {{
-                                        const c = event.candidate.candidate;
-                                        if (c.includes('.local') || c.includes('192.168.') || c.includes('10.')) return;
-                                    }}
-                                    return listener.call(this, event);
-                                }};
-                                return origAddEventListener(type, wrappedListener, options);
-                            }}
-                            return origAddEventListener(type, listener, options);
-                        }};
+                        // CRIT-02 + CRIT-03 FIX: Block ALL private IP ranges including 172.16-31.x and IPv6 link-local
+                const PRIVATE_PREFIXES = [
+                    '.local', '192.168.', '10.',
+                    '172.16.','172.17.','172.18.','172.19.','172.20.',
+                    '172.21.','172.22.','172.23.','172.24.','172.25.',
+                    '172.26.','172.27.','172.28.','172.29.','172.30.','172.31.',
+                    'fe80:', 'fc00:', 'fd'  // IPv6 link-local and ULA ranges
+                ];
+                const isPrivateIP = (c) => PRIVATE_PREFIXES.some(pfx => c.includes(pfx));
 
-                        // Intercept onicecandidate setter
-                        Object.defineProperty(pc, 'onicecandidate', {{
-                            set: function(handler) {{ this._onicecandidate = handler; }},
-                            get: function() {{ return this._onicecandidate; }}
-                        }});
-                        
-                        // Fire filtered events to the intercepted handler
-                        origAddEventListener('icecandidate', (event) => {{
+                // Intercept addEventListener
+                const origAddEventListener = pc.addEventListener.bind(pc);
+                pc.addEventListener = function(type, listener, options) {{
+                    if (type === 'icecandidate') {{
+                        const wrappedListener = function(event) {{
                             if (event.candidate && event.candidate.candidate) {{
                                 const c = event.candidate.candidate;
-                                if (c.includes('.local') || c.includes('192.168.') || c.includes('10.')) return;
+                                if (isPrivateIP(c)) return;
                             }}
-                            if (pc._onicecandidate) pc._onicecandidate(event);
-                        }});
-                        return pc;
-                    }};
-                    window.RTCPeerConnection.prototype = OrigPeerConn.prototype;
-                    makeNative(window.RTCPeerConnection, 'RTCPeerConnection');
-                }}
+                            return listener.call(this, event);
+                        }};
+                        return origAddEventListener(type, wrappedListener, options);
+                    }}
+                    return origAddEventListener(type, listener, options);
+                }};
+
+                // CRIT-03 FIX: Properly filter onicecandidate handler
+                Object.defineProperty(pc, 'onicecandidate', {{
+                    set: function(handler) {{
+                        this._onicecandidate = handler;
+                    }},
+                    get: function() {{ return this._onicecandidate; }}
+                }});
+
+                // Fire filtered events through the intercepted handler
+                origAddEventListener('icecandidate', (event) => {{
+                    if (event.candidate && event.candidate.candidate) {{
+                        const c = event.candidate.candidate;
+                        if (isPrivateIP(c)) return;
+                    }}
+                    if (pc._onicecandidate) pc._onicecandidate(event);
+                }});
+                return pc;
+            }};
+            window.RTCPeerConnection.prototype = OrigPeerConn.prototype;
+            makeNative(window.RTCPeerConnection, 'RTCPeerConnection');
+        }}
             }}
 
             // 4. Guaranteed Canvas Serialization Noise
@@ -400,7 +429,9 @@ async def launch_profile(profile_id: str, force_headless: bool = False):
             }});
             
             // 8. Advanced Subpixel DOM Rect Noise (Defeats CreepJS Font/Layout fingerprinting)
-            const noise = 0.000001 * Math.random();
+            // MED-01 FIX: Use deterministic per-profile seed so value is consistent within a
+            // session but unique across profiles. Eliminates detectable per-reload variance.
+            const noise = {_dom_noise};
             const originalGetClientRects = Element.prototype.getClientRects;
             Element.prototype.getClientRects = function() {{
                 const rects = originalGetClientRects.apply(this, arguments);
@@ -459,12 +490,14 @@ async def launch_profile(profile_id: str, force_headless: bool = False):
                 }}
             }}
 
-            // 11. Battery Status Spoofing (Passes Playwright checks)
+            // 11. Battery Status Spoofing
+            // MED-10 FIX: Seed battery values from profile seed so they are consistent
+            // across page loads and not re-randomized (detectable signal).
             const fakeBattery = {{
                 charging: false,
                 chargingTime: Infinity,
-                dischargingTime: 86400 * Math.random(),
-                level: 0.85 + (0.10 * Math.random()), // 85-95%
+                dischargingTime: {int((_seed % 12) + 4) * 3600},
+                level: {round(0.75 + ((_seed % 25) / 100.0), 2)},
                 onchargingchange: null,
                 onchargingtimechange: null,
                 ondischargingtimechange: null,
@@ -558,16 +591,18 @@ async def launch_profile(profile_id: str, force_headless: bool = False):
             }})();
 
             // Fix #10: performance.timeOrigin — add session noise to break bot-timing analysis
+            // MED-11 FIX: Use seeded noise so timeOrigin is consistent within a session
+            // and doesn't differ between main frame and iframes (detectable cross-context variance).
             (function() {{
                 try {{
                     const _realTO = performance.timeOrigin;
-                    const _toNoise = (Math.random() * 200) - 100; // +/- 100 ms
+                    const _toNoise = ({(_seed % 200) - 100}); // Seeded +/- 100 ms, consistent per profile
                     Object.defineProperty(performance, 'timeOrigin', {{
                         get: function() {{ return _realTO + _toNoise; }}, configurable: true
                     }});
                 }} catch(e) {{}}
                 const _origNow = performance.now.bind(performance);
-                const _nowNoise = (Math.random() - 0.5) * 10; // +/- 5 ms
+                const _nowNoise = ({((_seed % 10) - 5) / 1.0}); // Seeded +/- 5 ms
                 performance.now = function() {{ return _origNow() + _nowNoise; }};
             }})();
 
@@ -632,13 +667,14 @@ async def close_profile(profile_id: str):
             browser_data = active_browsers[profile_id]
             try:
                 await browser_data["context"].close()
-            except:
+            except Exception:
                 pass
             try:
                 await browser_data["playwright"].stop()
-            except:
+            except Exception:
                 pass
-            del active_browsers[profile_id]
+            # FIX: Use pop() instead of del to avoid KeyError if already removed by close callback
+            active_browsers.pop(profile_id, None)
             from backend.logging_config import logger
             logger.info(f"Browser closed for profile {profile_id}", extra={"profile_id": profile_id})
             return {"status": "success", "message": "Browser closed"}
