@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "AutoFiller Pro",
+  "version": "1.2",
+  "description": "Advanced form auto-filling, reverse extraction, custom bios, and keyboard shortcuts.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "AutoFill Configuration"
+  },
+  "commands": {
+    "quick-autofill": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+F",
+        "mac": "Command+Shift+F"
+      },
+      "description": "Auto-Fill the active page using current Persona"
+    },
+    "quick-extract": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+E",
+        "mac": "Command+Shift+E"
+      },
+      "description": "Extract form data into current Persona"
+    }
+  }
+}
