@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoFiller Pro</title>
+    <style>
+        :root {
+            --bg: #fdfdfd;
+            --bg-card: #ffffff;
+            --bg-hover: #f0f4f8;
+            --bg-bio: #e8f0fe;
+            --text: #202124;
+            --text-muted: #5f6368;
+            --text-label: #3c4043;
+            --border: #dadce0;
+            --accent: #1a73e8;
+            --accent-hover: #1557b0;
+            --green: #188038;
+            --red: #ea4335;
+            --gray: #5f6368;
+            --shadow: rgba(0,0,0,0.04);
+            --input-bg: #fff;
+            --persona-bg: #f8f9fa;
+            --slider-track: #dadce0;
+            --slider-fill: #1a73e8;
+        }
+
+        [data-theme="dark"] {
+            --bg: #1e1e2e;
+            --bg-card: #2a2a3d;
+            --bg-hover: #353548;
+            --bg-bio: #2d3555;
+            --text: #e0e0e0;
+            --text-muted: #a0a0b0;
+            --text-label: #c0c0d0;
+            --border: #3a3a50;
+            --accent: #7aa2f7;
+            --accent-hover: #5d8ae6;
+            --green: #2dd4a8;
+            --red: #f7768e;
+            --gray: #888899;
+            --shadow: rgba(0,0,0,0.2);
+            --input-bg: #33334a;
+            --persona-bg: #2e2e42;
+            --slider-track: #3a3a50;
+            --slider-fill: #7aa2f7;
+        }
+
+        * { transition: background-color 0.2s, color 0.2s, border-color 0.2s; }
+
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; width: 460px; margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+        
+        .header { background: var(--accent); color: #ffffff; padding: 14px 16px; font-weight: 600; font-size: 16px; letter-spacing: 0.5px; display: flex; justify-content: space-between; align-items: center; }
+        .header-title { display: flex; align-items: center; gap: 8px; }
+        .header-actions { display: flex; gap: 6px; align-items: center; }
+        
+        .theme-toggle { background: rgba(255,255,255,0.2); border: none; color: white; cursor: pointer; padding: 4px 8px; border-radius: 4px; font-size: 14px; width: auto; box-shadow: none; }
+        .theme-toggle:hover { background: rgba(255,255,255,0.35); opacity: 1; }
+
+        .container { padding: 14px; display: flex; flex-direction: column; gap: 14px; max-height: 560px; overflow-y: auto; }
+        .container::-webkit-scrollbar { width: 5px; }
+        .container::-webkit-scrollbar-track { background: transparent; }
+        .container::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        
+        .section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; box-shadow: 0 1px 3px var(--shadow); }
+        .section-title { font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px; letter-spacing: 0.5px; display: flex; justify-content: space-between; align-items: center;}
+        
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .grid-full { grid-column: 1 / -1; }
+        .grid-third { grid-template-columns: 1fr 1fr 1fr; }
+        
+        .input-group { display: flex; flex-direction: column; gap: 3px; position: relative;}
+        .input-group label { display: flex; justify-content: space-between; align-items: center; }
+        label { font-size: 11px; font-weight: 600; color: var(--text-label); }
+
+        input[type="text"], input[type="number"], select, textarea { width: 100%; box-sizing: border-box; padding: 7px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; outline: none; transition: border 0.15s, background 0.2s; background: var(--input-bg); color: var(--text); font-family: inherit;}
+        input[type="text"]:focus, input[type="number"]:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(26,115,232,0.15); }
+        
+        .persona-field { background: var(--persona-bg) !important; border: 1px dashed var(--border) !important; }
+        .persona-field:focus { background: var(--input-bg) !important; border: 1px solid var(--accent) !important; }
+
+        .copy-btn { background: transparent; border: none; cursor: pointer; padding: 0 4px; font-size: 12px; color: var(--accent); width: auto; opacity: 0.7; transform: scale(1.2); }
+        .copy-btn:hover { opacity: 1; transform: scale(1.4); }
+
+        button { background: var(--accent); color: #ffffff; border: none; padding: 9px; border-radius: 4px; font-weight: 600; cursor: pointer; transition: opacity 0.2s, transform 0.1s, background 0.2s; font-size: 13px; width: 100%; box-shadow: 0 1px 2px var(--shadow); }
+        button:hover { opacity: 0.9; }
+        button:active { transform: translateY(1px); box-shadow: none; }
+        
+        .btn-green { background: var(--green); }
+        .btn-outline { background: transparent; border: 1px solid var(--accent); color: var(--accent); padding: 5px 10px; font-size: 11px; width: auto; box-shadow: none; }
+        .btn-outline:hover { background: var(--bg-hover); }
+        .btn-red { background: var(--red); }
+        .btn-gray { background: var(--gray); }
+        .btn-amber { background: #f59e0b; }
+
+        .btn-row { display: flex; gap: 8px; }
+        
+        .mapping-box { margin-bottom: 8px; }
+        .mapping-item { display: flex; gap: 6px; margin-bottom: 8px; align-items: center; }
+        .mapping-item input { flex: 2; }
+        .mapping-item select { flex: 1.5; }
+        .del-btn { flex: 0 0 28px; width: 28px; padding: 7px 0; font-size: 11px; }
+        
+        hr { border: 0; height: 1px; background: var(--border); margin: 0; }
+
+        /* Profile Selector */
+        .profile-bar { display: flex; gap: 6px; align-items: center; }
+        .profile-bar select { flex: 1; font-weight: 600; }
+        .profile-bar button { width: auto; padding: 7px 10px; font-size: 11px; }
+
+        /* Slider */
+        .speed-row { display: flex; align-items: center; gap: 10px; }
+        .speed-row input[type="range"] { flex: 1; -webkit-appearance: none; appearance: none; height: 5px; background: var(--slider-track); border-radius: 4px; outline: none; border: none; padding: 0; box-shadow: none; }
+        .speed-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--slider-fill); cursor: pointer; border: 2px solid var(--bg-card); box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+        .speed-label { font-size: 11px; font-weight: 700; color: var(--accent); min-width: 36px; text-align: right; }
+
+        /* Checkbox toggle */
+        .toggle-row { display: flex; align-items: center; gap: 8px; }
+        .toggle-switch { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--slider-track); border-radius: 20px; transition: 0.2s; }
+        .toggle-slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.2s; }
+        .toggle-switch input:checked + .toggle-slider { background: var(--accent); }
+        .toggle-switch input:checked + .toggle-slider:before { transform: translateX(16px); }
+
+        /* Import/Export */
+        .io-row { display: flex; gap: 6px; }
+        .io-row button { flex: 1; font-size: 11px; padding: 7px 4px; }
+
+        /* Toast */
+        .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--accent); color: white; padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; z-index: 9999; opacity: 0; transition: all 0.3s ease; pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .toast.error { background: var(--red); }
+        .toast.success { background: var(--green); }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <span class="header-title">⚡ AutoFiller Pro</span>
+        <div class="header-actions">
+            <button class="theme-toggle" id="themeToggle" title="Toggle Dark Mode">🌙</button>
+        </div>
+    </div>
+    <div class="container">
+        
+        <!-- Action Bar -->
+        <div class="btn-row">
+            <button id="clearFormBtn" class="btn-red" style="flex: 1;" title="Clears page forms">Clear</button>
+            <button id="extractFormBtn" class="btn-gray" style="flex: 1.2;" title="Hotkeyed to: Ctrl+Shift+E">Extract Scan</button>
+            <button id="autoFillBtn" class="btn-green" style="flex: 1.5;" title="Hotkeyed to: Ctrl+Shift+F">⚡ Auto-Fill</button>
+        </div>
+
+        <!-- Slow Type Toggle (prominent) -->
+        <div class="section" style="padding: 10px 14px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <div class="toggle-row">
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="slowType">
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <label for="slowType" style="font-size: 13px; font-weight: 700; cursor: pointer; color: var(--accent);">🐢 Slow Human Typing</label>
+                </div>
+                <span class="speed-label" id="slowStatusLabel" style="font-size: 11px; color: var(--text-muted);">OFF</span>
+            </div>
+            <div id="speedSliderGroup" style="display: none; margin-top: 8px;">
+                <div class="speed-row">
+                    <span style="font-size: 10px; color: var(--text-muted);">Fast</span>
+                    <input type="range" id="typeSpeed" min="10" max="150" value="30">
+                    <span style="font-size: 10px; color: var(--text-muted);">Slow</span>
+                    <span class="speed-label" id="speedValue">30ms</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Saved Profiles -->
+        <div class="section">
+            <div class="section-title">Saved Profiles</div>
+            <div class="profile-bar">
+                <select id="profileSelect">
+                    <option value="">— Select Profile —</option>
+                </select>
+                <button id="loadProfileBtn" class="btn-green" title="Load selected profile">Load</button>
+                <button id="deleteProfileBtn" class="btn-red" title="Delete selected profile">✕</button>
+            </div>
+            <div style="margin-top: 10px; display: flex; gap: 6px; align-items: center;">
+                <input type="text" id="profileNameInput" placeholder="Profile name..." style="flex: 1;">
+                <button id="saveProfileBtn" class="btn-amber" style="width: auto; padding: 7px 14px;">💾 Save</button>
+            </div>
+            <div class="io-row" style="margin-top: 8px;">
+                <button id="exportProfilesBtn" class="btn-outline">📤 Export All</button>
+                <button id="importProfilesBtn" class="btn-outline">📥 Import</button>
+                <input type="file" id="importFileInput" accept=".json" style="display: none;">
+            </div>
+        </div>
+
+        <!-- Persona Editor -->
+        <div class="section">
+            <div class="section-title">
+                Current Persona
+                <button id="generatePersonaBtn" class="btn-outline">🎲 Roll New</button>
+            </div>
+            
+            <div class="grid" id="personaEditor">
+                <div class="input-group"><label>First Name</label><input type="text" id="p_FirstName" class="persona-field" data-key="FirstName"></div>
+                <div class="input-group"><label>Last Name</label><input type="text" id="p_LastName" class="persona-field" data-key="LastName"></div>
+                <div class="input-group"><label>Username</label><input type="text" id="p_Username" class="persona-field" data-key="Username"></div>
+                
+                <div class="input-group">
+                    <label>Password <button class="copy-btn" data-target="p_Password" title="Copy to clipboard">📋</button></label>
+                    <input type="text" id="p_Password" class="persona-field" data-key="Password">
+                </div>
+                <div class="input-group grid-full">
+                    <label>Email <button class="copy-btn" data-target="p_Email" title="Copy to clipboard">📋</button></label>
+                    <input type="text" id="p_Email" class="persona-field" data-key="Email">
+                </div>
+                
+                <div class="input-group"><label>Gender</label><input type="text" id="p_Gender" class="persona-field" data-key="Gender"></div>
+                <div class="input-group"><label>Security Answer</label><input type="text" id="p_SecurityAnswer" class="persona-field" data-key="SecurityAnswer"></div>
+
+                <div class="input-group"><label>Job Title</label><input type="text" id="p_JobTitle" class="persona-field" data-key="JobTitle"></div>
+                <div class="input-group"><label>Website</label><input type="text" id="p_Website" class="persona-field" data-key="Website"></div>
+
+                <!-- NEW SIDE-BY-SIDE BIO ENGINE -->
+                <div class="input-group grid-full" style="background:var(--bg-bio); border-radius:6px; padding:10px; margin: 4px 0;">
+                    <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <div class="input-group">
+                            <label>Bio Spintax Template</label>
+                            <textarea id="bioSpintax" rows="4" placeholder="{Hello|Hi|Hey}, I am a {designer|architect}."></textarea>
+                        </div>
+                        <div class="input-group">
+                            <label style="display:flex; justify-content:space-between;">
+                                <span>Spun Result</span>
+                                <span>
+                                    <button id="spinBioBtn" class="btn-outline" style="padding: 2px 6px; font-size: 10px;">Spin</button>
+                                    <button class="copy-btn" data-target="p_Bio" title="Copy to clipboard" style="padding: 0; margin-left: 4px;">📋</button>
+                                </span>
+                            </label>
+                            <textarea id="p_Bio" class="persona-field" data-key="Bio" rows="4" style="border: 1px solid var(--accent) !important;"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="input-group"><label>Phone</label><input type="text" id="p_Phone" class="persona-field" data-key="Phone"></div>
+                <div class="input-group"><label>Company</label><input type="text" id="p_Company" class="persona-field" data-key="Company"></div>
+                <div class="input-group grid-full"><label>Street</label><input type="text" id="p_Street" class="persona-field" data-key="Street"></div>
+                
+                <div class="input-group"><label>City</label><input type="text" id="p_City" class="persona-field" data-key="City"></div>
+                <div class="input-group"><label>State</label><input type="text" id="p_State" class="persona-field" data-key="State"></div>
+                <div class="input-group"><label>Zip</label><input type="text" id="p_Zip" class="persona-field" data-key="Zip"></div>
+                <div class="input-group"><label>Country</label><input type="text" id="p_Country" class="persona-field" data-key="Country"></div>
+                <div class="input-group grid-full"><label>DOB (YYYY-MM-DD)</label><input type="text" id="p_DOB_Full" class="persona-field" data-key="DOB_Full"></div>
+            </div>
+        </div>
+
+        <!-- Configuration -->
+        <div class="section">
+            <div class="section-title">Settings</div>
+            
+            <div class="grid">
+                <div class="input-group">
+                    <label>Catch-all Domain</label>
+                    <input type="text" id="emailDomain" placeholder="@catchall.com">
+                </div>
+                <div class="input-group">
+                    <label>Password Length</label>
+                    <input type="number" id="passwordLength" value="12" min="6" max="32">
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Mappings -->
+        <div class="section" style="margin-bottom: 20px;">
+            <div class="section-title">Bulk Mappings</div>
+            <div id="mappingsContainer" class="mapping-box"></div>
+            <button id="addMapping" class="btn-outline">+ Add CSS Selector Override</button>
+        </div>
+
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
+    
+    <script src="utils.js"></script>
+    <script src="popup.js"></script>
+</body>
+</html>
