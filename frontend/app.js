@@ -266,6 +266,64 @@ async function renameProfile(id, currentName) {
     }
 }
 
+// --- METADATA (TAGS/PROXY PIN) ---
+let currentMetadataProfileId = null;
+
+async function openMetadataModal(id) {
+    currentMetadataProfileId = id;
+    document.getElementById('metadata-modal').classList.add('show');
+    try {
+        const res = await fetch(`${API}/api/profiles`);
+        const data = await res.json();
+        const p = data.profiles.find(x => x.id === id);
+        if (p) {
+            document.getElementById('profile-tags').value = p.tags || '';
+            document.getElementById('proxy-pin').value = p.proxy_pin || '';
+        }
+    } catch(e) {}
+}
+
+function closeMetadataModal() {
+    document.getElementById('metadata-modal').classList.remove('show');
+    currentMetadataProfileId = null;
+}
+
+async function saveMetadata() {
+    if(!currentMetadataProfileId) return;
+    const tags = document.getElementById('profile-tags').value;
+    const proxy_pin = document.getElementById('proxy-pin').value;
+    
+    try {
+        await fetch(`${API}/api/profiles/${currentMetadataProfileId}/metadata`, {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ tags: tags, proxy_pin: proxy_pin })
+        });
+        showToast('Profile updated', 'success');
+        closeMetadataModal();
+        fetchProfiles();
+    } catch(e) {
+        showToast('Failed to update metadata', 'error');
+    }
+}
+
+// --- CLONE PROFILE ---
+async function cloneProfile(id) {
+    if(!confirm("Are you sure you want to duplicate this profile?")) return;
+    showToast('Cloning profile...', 'info');
+    try {
+        const res = await fetch(`${API}/api/profiles/${id}/clone`, { method: 'POST' });
+        if(res.ok) {
+            showToast('Profile Cloned!', 'success');
+            fetchProfiles();
+        } else {
+            showToast('Failed to clone', 'error');
+        }
+    } catch(e) {
+        showToast('Clone error: ' + e.message, 'error');
+    }
+}
+
 async function scanProfile(id) {
     document.getElementById('scan-modal').classList.add('show');
     document.getElementById('scan-loading').style.display = 'block';
