@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.1.0] - 2026-07-10
 ### Added
+- **Auto-Open Dashboard:** The executable now automatically launches your default web browser and navigates directly to the dashboard when the server starts. You no longer have to manually type `http://127.0.0.1:8000`.
 - **Chrome Autofiller Extension:** Automatically injected `chorme autofiller 1 3` into `backend/extensions/` so it natively loads in every browser profile on startup.
 - **Cache Buster:** Added `?v=1.1` to `index.html` resources to permanently prevent browsers from caching broken/stale `app.js` code.
 
