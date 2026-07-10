@@ -206,8 +206,8 @@ function renderProfiles(profiles) {
                         <div>
                             <div style="display: flex; align-items: center; gap: 4px;">
                                 ${escHtml(p.name)}
-                                <button class="btn-icon" style="padding: 2px; color: var(--text-muted); background: transparent; border: none; cursor: pointer;" onclick="renameProfile('${p.id}', '${escHtml(p.name).replace(/'/g, "\\'")}')" title="Rename Profile">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                                <button class="btn-icon" style="padding: 2px; color: var(--text-muted); background: transparent; border: none; cursor: pointer;" onclick="openEditModal('${p.id}')" title="Edit Settings">
+                                    ⚙️
                                 </button>
                             </div>
                             <div style="display: flex; gap: 4px; margin-top: 4px;">
@@ -245,21 +245,111 @@ function renderProfiles(profiles) {
     }).join('');
 }
 
-async function renameProfile(id, currentName) {
-    const newName = prompt("Enter new profile name:", currentName);
-    if (newName === null || newName.trim() === "" || newName === currentName) return;
+// --- EDIT PROFILE (FULL SETTINGS) ---
+let currentEditProfileId = null;
+
+function switchEditModalTab(tab) {
+    document.getElementById('edit-tab-overview').style.display = 'none';
+    document.getElementById('edit-tab-network').style.display = 'none';
+    document.getElementById('edit-tab-stealth').style.display = 'none';
+    document.getElementById('edit-tab-btn-overview').classList.remove('active');
+    document.getElementById('edit-tab-btn-network').classList.remove('active');
+    document.getElementById('edit-tab-btn-stealth').classList.remove('active');
+    
+    document.getElementById(`edit-tab-${tab}`).style.display = 'block';
+    document.getElementById(`edit-tab-btn-${tab}`).classList.add('active');
+}
+
+function toggleEditChip(chipName) {
+    const el = document.getElementById(`edit-chip-${chipName}`);
+    el.classList.toggle('active');
+}
+
+function closeEditModal() {
+    document.getElementById('edit-modal').classList.remove('show');
+    currentEditProfileId = null;
+}
+
+async function openEditModal(id) {
+    currentEditProfileId = id;
+    switchEditModalTab('overview');
     
     try {
-        const res = await fetch(`${API}/api/profiles/${id}/rename`, {
-            method: 'PATCH',
+        const res = await fetch(`${API}/api/profiles`);
+        const data = await res.json();
+        const p = data.find(x => x.id === id);
+        if (p) {
+            document.getElementById('edit-profile-name').value = p.name || '';
+            document.getElementById('edit-profile-locale').value = p.locale || '';
+            document.getElementById('edit-profile-timezone').value = p.timezone || '';
+            
+            // Proxy
+            let proxyStr = '';
+            if (p.proxy) {
+                proxyStr = p.proxy.server;
+                if (p.proxy.username) proxyStr += `:${p.proxy.username}:${p.proxy.password}`;
+            }
+            document.getElementById('edit-profile-proxy').value = proxyStr;
+            
+            // Advanced
+            const adv = p.advanced || {};
+            document.getElementById('edit-profile-webrtc').value = adv.webrtc_mode || 'altered';
+            
+            if (adv.canvas_noise !== false) document.getElementById('edit-chip-canvas').classList.add('active');
+            else document.getElementById('edit-chip-canvas').classList.remove('active');
+            
+            if (adv.webgl_noise !== false) document.getElementById('edit-chip-webgl').classList.add('active');
+            else document.getElementById('edit-chip-webgl').classList.remove('active');
+            
+            if (adv.audio_noise !== false) document.getElementById('edit-chip-audio').classList.add('active');
+            else document.getElementById('edit-chip-audio').classList.remove('active');
+            
+            if (adv.headless === true) document.getElementById('edit-chip-headless').classList.add('active');
+            else document.getElementById('edit-chip-headless').classList.remove('active');
+            
+            document.getElementById('edit-modal').classList.add('show');
+        }
+    } catch(e) {
+        showToast('Error loading profile: ' + e.message, 'error');
+    }
+}
+
+async function saveProfileEdits() {
+    if (!currentEditProfileId) return;
+    
+    const name = document.getElementById('edit-profile-name').value.trim();
+    if (!name) {
+        showToast('Name is required', 'error');
+        return;
+    }
+    
+    const payload = {
+        name: name,
+        locale: document.getElementById('edit-profile-locale').value.trim() || null,
+        timezone: document.getElementById('edit-profile-timezone').value.trim() || null,
+        proxy_string: document.getElementById('edit-profile-proxy').value.trim() || null,
+        advanced: {
+            webrtc_mode: document.getElementById('edit-profile-webrtc').value,
+            canvas_noise: document.getElementById('edit-chip-canvas').classList.contains('active'),
+            webgl_noise: document.getElementById('edit-chip-webgl').classList.contains('active'),
+            audio_noise: document.getElementById('edit-chip-audio').classList.contains('active'),
+            headless: document.getElementById('edit-chip-headless').classList.contains('active')
+        }
+    };
+    
+    try {
+        const res = await fetch(`${API}/api/profiles/${currentEditProfileId}`, {
+            method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: newName.trim() })
+            body: JSON.stringify(payload)
         });
+        
         if (res.ok) {
-            showToast('Profile renamed', 'success');
+            showToast('Profile Updated Successfully', 'success');
+            closeEditModal();
             fetchProfiles();
         } else {
-            showToast('Failed to rename profile', 'error');
+            showToast('Failed to update profile settings', 'error');
         }
     } catch (e) {
         showToast('Error: ' + e.message, 'error');

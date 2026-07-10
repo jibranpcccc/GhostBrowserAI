@@ -211,6 +211,33 @@ async def update_metadata(profile_id: str, req: UpdateMetadataRequest):
         raise HTTPException(status_code=404, detail="Profile not found")
     return {"status": "success"}
 
+@app.put("/api/profiles/{profile_id}")
+async def edit_profile(profile_id: str, data: CreateProfileModel):
+    """Full update for a profile's settings, proxy, and fingerprint."""
+    profile = profile_manager.get_profile(profile_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+        
+    proxy_dict = data.proxy.model_dump() if data.proxy else parse_proxy_string(data.proxy_string)
+    advanced_dict = data.advanced.model_dump() if data.advanced else {}
+    
+    updates = {
+        "name": data.name,
+        "proxy": proxy_dict,
+        "timezone": data.timezone,
+        "locale": data.locale,
+        "advanced": advanced_dict
+    }
+    
+    # Remove None values so we don't accidentally wipe out stuff
+    updates = {k: v for k, v in updates.items() if v is not None}
+    
+    success = profile_manager.update_profile(profile_id, updates)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to save profile edits")
+        
+    return {"status": "success", "message": "Profile updated successfully"}
+
 @app.get("/api/profiles/{profile_id}/fingerprint")
 async def get_fingerprint(profile_id: str):
     profile = profile_manager.get_profile(profile_id)

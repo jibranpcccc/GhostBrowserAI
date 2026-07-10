@@ -121,7 +121,10 @@ class ProfileManager:
     def update_profile(self, profile_id: str, updates: dict):
         if profile_id in self.profiles:
             for k, v in updates.items():
-                self.profiles[profile_id][k] = v
+                if isinstance(v, dict) and isinstance(self.profiles[profile_id].get(k), dict):
+                    self.profiles[profile_id][k].update(v)
+                else:
+                    self.profiles[profile_id][k] = v
             self._save_metadata()
             return True
         return False
