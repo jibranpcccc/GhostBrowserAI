@@ -1,0 +1,16 @@
+# Cloudflare Workers AI Accounts
+# Format: ACCOUNT_ID:API_TOKEN
+# You can have as many accounts as you want here (500+).
+# If an account gets rate limited (HTTP 429), the system will automatically 
+# ban it for 5 minutes and failover to the next account in the list!
+
+# Examples (replace with your real data):
+cf_account_1:sk-cloudflare-token-1
+cf_account_2:sk-cloudflare-token-2
+cf_account_3:sk-cloudflare-token-3
+
+# Note: If you want to use the same API token for every account,
+# you can just provide the ACCOUNT_ID by itself on the line:
+# cf_account_4
+# cf_account_5
+# (The system will pull the TOKEN from your .env file for those)

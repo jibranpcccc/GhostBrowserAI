@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GhostBrowser — AI Anti-Detect Dashboard</title>
+    <meta name="description" content="AI-powered anti-detect browser management dashboard powered by Kimi AI via Cloudflare.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+        <div class="logo-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2L3 7V12C3 16.55 6.84 20.74 12 22C17.16 20.74 21 16.55 21 12V7L12 2Z" fill="url(#logoGrad)"/>
+                <defs>
+                    <linearGradient id="logoGrad" x1="3" y1="2" x2="21" y2="22" gradientUnits="userSpaceOnUse">
+                        <stop stop-color="#6366f1"/>
+                        <stop offset="1" stop-color="#8b5cf6"/>
+                    </linearGradient>
+                </defs>
+            </svg>
+        </div>
+        <span class="logo-text">GhostBrowser</span>
+    </div>
+
+    <nav class="sidebar-nav">
+        <a class="nav-item active" data-page="dashboard" onclick="navigate('dashboard')">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            <span class="nav-label">Dashboard</span>
+        </a>
+        <a class="nav-item" data-page="profiles" onclick="navigate('profiles')">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4"/><circle cx="17" cy="17" r="4"/><path d="M15 17h4M17 15v4"/></svg>
+            <span class="nav-label">Profiles</span>
+            <span class="nav-badge" id="sidebar-profile-count">0</span>
+        </a>
+        <a class="nav-item" data-page="proxies" onclick="navigate('proxies')">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            <span class="nav-label">Proxies</span>
+        </a>
+        <a class="nav-item" data-page="automation" onclick="navigate('automation')">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+            <span class="nav-label">Automation</span>
+        </a>
+        <a class="nav-item" data-page="ai-status" onclick="navigate('ai-status')">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="M12 8v4l3 3"/></svg>
+            <span class="nav-label">AI Status</span>
+            <span class="nav-badge pulse-green" id="sidebar-cf-count">...</span>
+        </a>
+        <a class="nav-item" data-page="logs" onclick="navigate('logs')">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            <span class="nav-label">Live Logs</span>
+        </a>
+        <a class="nav-item" data-page="settings" onclick="navigate('settings')">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            <span class="nav-label">Settings</span>
+        </a>
+    </nav>
+
+    <div class="sidebar-footer">
+        <div class="ai-mode-badge">
+            <div class="ai-dot"></div>
+            <span>Kimi via Cloudflare</span>
+        </div>
+    </div>
+</aside>
+
+<!-- MAIN CONTENT -->
+<main class="main-content">
+
+    <!-- TOP BAR -->
+    <header class="topbar">
+        <div class="topbar-left">
+            <h1 class="page-title" id="page-title">Dashboard</h1>
+            <div class="system-health" id="system-health">
+                <div class="health-dot healthy"></div>
+                <span>System Healthy</span>
+            </div>
+        </div>
+        <div class="topbar-right">
+            <div class="topbar-stat">
+                <span class="topbar-stat-label">RAM</span>
+                <span class="topbar-stat-value" id="topbar-ram">--</span>
+            </div>
+            <button class="btn-primary" onclick="openCreateModal()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                New AI Profile
+            </button>
+        </div>
+    </header>
+
+    <!-- PAGE: DASHBOARD -->
+    <section class="page active" id="page-dashboard">
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon violet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/></svg></div>
+                <div class="stat-body">
+                    <div class="stat-label">Active Profiles</div>
+                    <div class="stat-value" id="stat-active">0 / 0</div>
+                </div>
+                <div class="stat-trend up">Live</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></div>
+                <div class="stat-body">
+                    <div class="stat-label">Kimi Accounts Healthy</div>
+                    <div class="stat-value" id="stat-cf-healthy">-- / --</div>
+                </div>
+                <div class="stat-trend up" id="stat-cf-trend">OK</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+                <div class="stat-body">
+                    <div class="stat-label">Quarantined</div>
+                    <div class="stat-value" id="stat-quarantine">0</div>
+                </div>
+                <div class="stat-trend neutral">Total</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+                <div class="stat-body">
+                    <div class="stat-label">RAM Usage</div>
+                    <div class="stat-value" id="stat-ram">0%</div>
+                </div>
+                <div class="stat-trend neutral">System</div>
+            </div>
+        </div>
+
+        <div class="dashboard-grid">
+            <div class="glass-card activity-feed-card">
+                <div class="card-header">
+                    <h3>Live Activity</h3>
+                    <div class="live-badge"><div class="live-dot"></div>Live</div>
+                </div>
+                <div class="activity-feed" id="activity-feed">
+                    <div class="activity-empty">Waiting for events...</div>
+                </div>
+            </div>
+
+            <div class="glass-card cf-ring-card">
+                <div class="card-header">
+                    <h3>Cloudflare AI Pool</h3>
+                </div>
+                <div class="ring-chart-container">
+                    <svg class="ring-chart" viewBox="0 0 120 120" id="cf-ring-svg">
+                        <circle cx="60" cy="60" r="48" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="12"/>
+                        <circle cx="60" cy="60" r="48" fill="none" stroke="url(#ringGrad)" stroke-width="12" stroke-linecap="round" stroke-dasharray="301.59" stroke-dashoffset="301.59" id="cf-ring-arc" style="transform: rotate(-90deg); transform-origin: 60px 60px;"/>
+                        <defs>
+                            <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stop-color="#6366f1"/>
+                                <stop offset="100%" stop-color="#8b5cf6"/>
+                            </linearGradient>
+                        </defs>
+                        <text x="60" y="55" text-anchor="middle" fill="#f8fafc" font-size="18" font-weight="700" id="cf-ring-pct">--%</text>
+                        <text x="60" y="70" text-anchor="middle" fill="#94a3b8" font-size="8">Healthy</text>
+                    </svg>
+                </div>
+                <div class="ring-legend">
+                    <div class="legend-item"><div class="legend-dot violet"></div><span id="cf-legend-healthy">-- Healthy</span></div>
+                    <div class="legend-item"><div class="legend-dot amber"></div><span id="cf-legend-cooldown">-- On Cooldown</span></div>
+                </div>
+                <div class="model-info">
+                    <span class="mono">@cf/moonshotai/kimi-k2.7-code</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PAGE: PROFILES -->
+    <section class="page" id="page-profiles">
+        <div class="page-toolbar">
+            <div style="display: flex; gap: 1rem; align-items: center;">
+                <div class="search-box">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    <input type="text" id="profile-search" placeholder="Search profiles..." oninput="filterProfiles()">
+                </div>
+                <span class="profile-count-label" id="profile-count-label">0 profiles</span>
+                <label style="display: flex; align-items: center; gap: 8px; margin-right: 10px; cursor: pointer; color: var(--text-muted); font-size: 0.85rem;">
+                    <input type="checkbox" id="auto-replenish-toggle" onchange="toggleAutoReplenish()">
+                    Auto-Replenish
+                </label>
+            </div>
+            
+            <div style="display: flex; gap: 1rem; align-items: center;">
+                <div id="bulk-actions" style="display: none; gap: 0.5rem;">
+                    <button class="btn-ghost" onclick="bulkLaunch()">▶ Launch Selected</button>
+                    <button class="btn-primary" onclick="openRunMacroModal()">🤖 Run Macro</button>
+                    <button class="btn-ghost stop" onclick="bulkDelete()">❌ Delete Selected</button>
+                </div>
+                <button class="btn-primary" onclick="openCreateModal()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                    New Profile
+                </button>
+            </div>
+        </div>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th style="width: 40px;"><input type="checkbox" id="select-all" onclick="toggleSelectAll()"></th>
+                        <th>Profile Name</th>
+                        <th>Tags</th>
+                        <th>Status</th>
+                        <th>Proxy</th>
+                        <th>Fingerprint OS</th>
+                        <th style="text-align: right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="profiles-grid">
+                    <!-- Rows generated by app.js -->
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="empty-state" id="profiles-empty" style="display: none;">
+            <div class="empty-icon">👻</div>
+            <h3>No Profiles Yet</h3>
+            <p>Create your first AI-powered stealth profile.</p>
+            <button class="btn-primary" onclick="openCreateModal()">Generate with Kimi AI</button>
+        </div>
+    </section>
+
+    <!-- PAGE: MACROS -->
+    <section class="page" id="page-macros" style="display: none;">
+        <div class="page-toolbar">
+            <h2 style="margin:0;font-size:1rem;font-weight:600;">Automation Macros</h2>
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="btn-secondary" onclick="openScheduleModal()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    Schedule Job
+                </button>
+                <button class="btn-primary btn-glow" onclick="openMacroModal()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    New Macro
+                </button>
+            </div>
+        </div>
+        
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Macro Name</th>
+                        <th>Description</th>
+                        <th>Steps Count</th>
+                        <th style="text-align:right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="macros-grid">
+                    <tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--text-muted);">No macros created yet.</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3 style="margin-top: 2rem; margin-bottom: 1rem;">Scheduled Jobs ⏰</h3>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Job ID</th>
+                        <th>Macro Name</th>
+                        <th>Profiles Target</th>
+                        <th>Cron Schedule</th>
+                        <th style="text-align:right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="schedules-grid">
+                    <tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted);">No active scheduled jobs.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- PAGE: PROXIES -->
+    <section class="page" id="page-proxies">
+        <div class="page-toolbar">
+            <h2 style="margin:0;font-size:1rem;font-weight:600;">Proxy Pool</h2>
+            <button class="btn-secondary" onclick="testAllProxies()">Test All Proxies</button>
+        </div>
+        <div class="two-col-grid">
+            <div class="glass-card">
+                <div class="card-header"><h3>Import Proxies</h3></div>
+                <p style="color:var(--text-muted);font-size:0.85rem;margin-top:0;">Format: <span class="mono">ip:port</span> or <span class="mono">ip:port:user:pass</span> (one per line)</p>
+                <textarea id="proxy-import-text" class="proxy-textarea" placeholder="1.2.3.4:8080&#10;5.6.7.8:3128:user:pass&#10;..."></textarea>
+                <button class="btn-primary" style="margin-top:1rem;width:100%;" onclick="importProxies()">Import Proxies</button>
+                
+                <hr style="border:0;border-top:1px solid var(--border-color);margin:1.5rem 0;">
+                
+                <div class="card-header"><h3>Auto-Scrape Free Proxies</h3></div>
+                <p style="color:var(--text-muted);font-size:0.85rem;margin-top:0;">Scrapes and tests thousands of public proxies, saving only the anonymous ones to your pool.</p>
+                <button class="btn-primary btn-glow" style="margin-top:0.5rem;width:100%;background:linear-gradient(135deg, #f59e0b, #d97706);" id="btn-scrape-proxies" onclick="scrapeFreeProxies()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M16.2 7.8l-2 6.3-6.4 2.1 2-6.3z"/></svg>
+                    Start Free Scraper
+                </button>
+            </div>
+            <div class="glass-card">
+                <div class="card-header"><h3>Local Proxy Pool <span class="badge-count" id="proxy-total-badge">0</span></h3></div>
+                <div class="proxy-list" id="proxy-list">
+                    <div class="empty-state-small">No proxies loaded.</div>
+                </div>
+            </div>
+        </div>
+
+        <h3 style="margin-top: 2rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+            Titan Proxies Database
+        </h3>
+        <p style="color:var(--text-muted);font-size:0.85rem;margin-top:-0.5rem;margin-bottom:1rem;">Live feed from your local <span class="mono">proxies.db</span> maintained by the Titan Scraper.</p>
+        
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>IP Address</th>
+                        <th>Port</th>
+                        <th>Protocol</th>
+                        <th>Location</th>
+                        <th>Latency</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="titan-proxies-grid">
+                    <tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-muted);">Loading Titan Proxies...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- PAGE: AUTOMATION -->
+    <section class="page" id="page-automation">
+        <div class="page-toolbar" style="margin-bottom:1.5rem;">
+            <div class="tabs">
+                <button class="modal-tab active" data-tab="macros" onclick="switchAutomationTab('macros')">Macros</button>
+                <button class="modal-tab" data-tab="schedules" onclick="switchAutomationTab('schedules')">Cron Schedules</button>
+            </div>
+            <div id="automation-macros-actions">
+                <button class="btn-primary" onclick="openMacroModal()">+ Create Macro</button>
+            </div>
+            <div id="automation-schedules-actions" style="display:none;">
+                <button class="btn-primary" onclick="openScheduleModal()">+ New Schedule</button>
+            </div>
+        </div>
+
+        <!-- MACROS TAB -->
+        <div id="auto-tab-macros" class="tab-content active">
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Description</th>
+                            <th>Steps Count</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="macros-grid">
+                        <tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--text-muted);">Loading Macros...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- SCHEDULES TAB -->
+        <div id="auto-tab-schedules" class="tab-content">
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Cron Expression</th>
+                            <th>Macro Name</th>
+                            <th>Target Profiles</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="schedules-grid">
+                        <tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted);">Loading Schedules...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- PAGE: AI STATUS -->
+    <section class="page" id="page-ai-status">
+        <div class="page-toolbar">
+            <h2 style="margin:0;font-size:1rem;font-weight:600;">Cloudflare Kimi AI Account Pool</h2>
+            <button class="btn-secondary" onclick="fetchCFStatus()">Refresh</button>
+        </div>
+        <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 1.5rem;">
+            <div class="stat-card">
+                <div class="stat-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div>
+                <div class="stat-body">
+                    <div class="stat-label">Healthy Accounts</div>
+                    <div class="stat-value" id="cf-healthy-count">--</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+                <div class="stat-body">
+                    <div class="stat-label">On Cooldown</div>
+                    <div class="stat-value" id="cf-cooldown-count">--</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon violet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div>
+                <div class="stat-body">
+                    <div class="stat-label">Total Accounts</div>
+                    <div class="stat-value" id="cf-total-count">--</div>
+                </div>
+            </div>
+        </div>
+        <div class="glass-card">
+            <div class="card-header">
+                <h3>Account Details</h3>
+                <div class="mono" style="font-size:0.75rem;color:var(--text-muted);">Model: @cf/moonshotai/kimi-k2.7-code</div>
+            </div>
+            <div id="cf-accounts-list" class="cf-accounts-list">
+                <div class="empty-state-small">Loading account data...</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PAGE: LOGS -->
+    <section class="page" id="page-logs">
+        <div class="page-toolbar">
+            <div class="log-filters">
+                <button class="filter-btn active" data-filter="all" onclick="setLogFilter('all',this)">All</button>
+                <button class="filter-btn" data-filter="info" onclick="setLogFilter('info',this)">Info</button>
+                <button class="filter-btn" data-filter="warning" onclick="setLogFilter('warning',this)">Warnings</button>
+                <button class="filter-btn" data-filter="error" onclick="setLogFilter('error',this)">Errors</button>
+            </div>
+            <div style="display:flex;gap:0.5rem;">
+                <button class="btn-secondary" onclick="clearLogs()">Clear</button>
+                <button class="btn-secondary" onclick="exportLogs()">Export</button>
+            </div>
+        </div>
+        <div class="glass-card" style="padding:0;overflow:hidden;">
+            <div class="log-stream" id="log-stream">
+                <div class="log-entry info"><span class="log-ts">--:--:--</span><span class="log-msg">Log stream ready. Waiting for events...</span></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PAGE: SETTINGS -->
+    <section class="page" id="page-settings">
+        <div class="settings-grid">
+            <div class="glass-card">
+                <div class="card-header"><h3>🤖 Kimi AI Configuration</h3></div>
+                <div class="settings-group">
+                    <label class="settings-label">Model Name</label>
+                    <input type="text" class="settings-input mono" value="@cf/moonshotai/kimi-k2.7-code" id="setting-model" readonly>
+                    <p class="settings-hint">Hosted on Cloudflare Workers AI. Uses your 500+ account pool for failover.</p>
+                </div>
+                <div class="settings-group">
+                    <label class="settings-label">Account Pool File</label>
+                    <input type="text" class="settings-input mono" value="cloudflare_accounts.txt" readonly>
+                </div>
+                <div class="settings-group">
+                    <label class="settings-label">Strict Kimi-Only Mode</label>
+                    <div class="toggle-row">
+                        <div class="toggle active" title="Cannot be disabled — profiles are NEVER created without Kimi AI"></div>
+                        <span style="color:var(--success);font-size:0.85rem;font-weight:600;">ALWAYS ON — No profile without Kimi</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-card">
+                <div class="card-header"><h3>🛡️ Browser Stealth</h3></div>
+                <div class="settings-toggle-list">
+                    <div class="toggle-item"><span>Canvas Noise</span><div class="toggle active"></div></div>
+                    <div class="toggle-item"><span>WebGL readPixels Noise</span><div class="toggle active"></div></div>
+                    <div class="toggle-item"><span>Audio Context Noise</span><div class="toggle active"></div></div>
+                    <div class="toggle-item"><span>DOM Rect Subpixel Noise</span><div class="toggle active"></div></div>
+                    <div class="toggle-item"><span>Battery Spoofing</span><div class="toggle active"></div></div>
+                    <div class="toggle-item"><span>navigator.languages Sync</span><div class="toggle active"></div></div>
+                    <div class="toggle-item"><span>Proxy Timezone Sync</span><div class="toggle active"></div></div>
+                </div>
+            </div>
+
+            <div class="glass-card">
+                <div class="card-header"><h3>⚙️ Rotator Settings</h3></div>
+                <div class="settings-group">
+                    <label class="settings-label">Max Concurrent Profiles</label>
+                    <div style="display:flex;align-items:center;gap:1rem;">
+                        <input type="range" id="setting-max-concurrent" min="1" max="50" value="15" oninput="document.getElementById('concurrent-val').innerText=this.value" style="flex:1;">
+                        <span id="concurrent-val" style="font-weight:700;color:var(--primary);min-width:2rem;text-align:center;">15</span>
+                    </div>
+                </div>
+                <div class="settings-group">
+                    <label class="settings-label">Session Timeout (minutes)</label>
+                    <div style="display:flex;align-items:center;gap:1rem;">
+                        <input type="range" id="setting-session-timeout" min="10" max="120" value="45" oninput="document.getElementById('timeout-val').innerText=this.value" style="flex:1;">
+                        <span id="timeout-val" style="font-weight:700;color:var(--primary);min-width:2rem;text-align:center;">45</span>
+                    </div>
+                </div>
+                <button class="btn-primary" style="width:100%;margin-top:0.5rem;" onclick="saveSettings()">Save Settings</button>
+            </div>
+
+            <div class="glass-card">
+                <div class="card-header"><h3>📊 System Info</h3></div>
+                <div class="info-list">
+                    <div class="info-row"><span>Backend</span><span class="mono">FastAPI + Uvicorn</span></div>
+                    <div class="info-row"><span>Browser Engine</span><span class="mono">Playwright Chromium</span></div>
+                    <div class="info-row"><span>AI Provider</span><span class="mono">Cloudflare Workers AI</span></div>
+                    <div class="info-row"><span>Stealth Library</span><span class="mono">playwright-stealth</span></div>
+                    <div class="info-row"><span>Proxy Geo Sync</span><span class="mono">ip-api.com</span></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+</main>
+
+<!-- CREATE PROFILE MODAL -->
+<div class="modal-overlay" id="create-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <div>
+                <h2 class="modal-title">Generate AI Profile</h2>
+                <p class="modal-subtitle">Powered by Kimi AI via Cloudflare Workers</p>
+            </div>
+            <button class="modal-close" onclick="closeCreateModal()">✕</button>
+        </div>
+
+        <!-- Step 1: Form with Tabs -->
+        <div id="modal-form" class="modal-body">
+            <div class="modal-tabs">
+                <div class="modal-tab active" onclick="switchModalTab('overview')">Overview</div>
+                <div class="modal-tab" onclick="switchModalTab('network')">Network</div>
+                <div class="modal-tab" onclick="switchModalTab('stealth')">Hardware Stealth</div>
+            </div>
+
+            <!-- Tab Content: Overview -->
+            <div id="tab-overview" class="tab-content active">
+                <div class="form-group">
+                    <label class="form-label">Profile Name <span class="required">*</span></label>
+                    <input type="text" id="new-profile-name" class="form-input" placeholder="e.g. Shopping Bot #1">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Quick Start Template</label>
+                    <select id="new-profile-template" class="form-input" onchange="applyProfileTemplate()">
+                        <option value="custom">Custom (Manual)</option>
+                        <option value="ecommerce">🛒 E-Commerce (Strict Stealth)</option>
+                        <option value="social">📱 Social Media (Balanced)</option>
+                        <option value="research">🔍 Research (Fast, Auto-Assign Proxy)</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Target OS</label>
+                        <select id="new-profile-os" class="form-input">
+                            <option value="Windows">🪟 Windows</option>
+                            <option value="Mac">🍎 Mac</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Quantity</label>
+                            <input type="number" class="form-input" id="new-profile-count" value="1" min="1" max="50" style="width: 80px;">
+                    </div>
+                </div>
+                <div class="kimi-notice" style="margin-top: 1rem;">
+                    <div class="kimi-icon">🤖</div>
+                    <div>
+                        <strong>Powered by Kimi AI</strong>
+                        <p>A unique, highly consistent browser fingerprint will be generated.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Content: Network -->
+            <div id="tab-network" class="tab-content" style="display:none;">
+                <div class="form-group">
+                    <label class="form-label">Proxy <span style="color:var(--text-muted);font-weight:400;">(Leave empty for auto-assign)</span></label>
+                    <input type="text" id="new-profile-proxy" class="form-input mono" placeholder="ip:port or ip:port:user:pass">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">WebRTC Behavior</label>
+                    <select id="new-profile-webrtc" class="form-input">
+                        <option value="altered">Altered (Bind to Proxy IP)</option>
+                        <option value="disabled">Disabled (Max Stealth)</option>
+                        <option value="real">Real (No Spoof)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Tab Content: Stealth -->
+            <div id="tab-stealth" class="tab-content" style="display:none;">
+                <div class="stealth-toggles" style="display:flex; flex-direction:column; gap:0.5rem; margin-top:0.5rem;">
+                    <div class="toggle-row" onclick="toggleChip(document.getElementById('chip-canvas'),'canvas')" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02); padding:0.75rem; border-radius:6px;">
+                        <span>🎨 Canvas Noise Injection</span>
+                        <div class="toggle active" id="chip-canvas"></div>
+                    </div>
+                    <div class="toggle-row" onclick="toggleChip(document.getElementById('chip-webgl'),'webgl')" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02); padding:0.75rem; border-radius:6px;">
+                        <span>🧊 WebGL readPixels Anomaly</span>
+                        <div class="toggle active" id="chip-webgl"></div>
+                    </div>
+                    <div class="toggle-row" onclick="toggleChip(document.getElementById('chip-audio'),'audio')" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02); padding:0.75rem; border-radius:6px;">
+                        <span>🔊 Audio Context Offset</span>
+                        <div class="toggle active" id="chip-audio"></div>
+                    </div>
+                    <div class="toggle-row" onclick="toggleChip(document.getElementById('chip-headless'),'headless')" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02); padding:0.75rem; border-radius:6px;">
+                        <span>👁️ Headless Launch</span>
+                        <div class="toggle" id="chip-headless"></div>
+                    </div>
+                    <div class="toggle-row" onclick="toggleChip(document.getElementById('chip-trackers'),'trackers')" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02); padding:0.75rem; border-radius:6px;">
+                        <span>🚫 Block Ads & Trackers (Shields)</span>
+                        <div class="toggle" id="chip-trackers"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer" style="margin-top: 1.5rem;">
+                <button class="btn-ghost" onclick="closeCreateModal()">Cancel</button>
+                <button class="btn-primary btn-glow" onclick="submitCreateProfile()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="m8 12 3 3 5-6"/></svg>
+                    Generate Profile
+                </button>
+            </div>
+        </div>
+
+        <!-- Step 2: Progress -->
+        <div id="modal-progress" class="modal-body" style="display:none;">
+            <div class="progress-steps" id="progress-steps">
+                <div class="progress-step" id="step-1">
+                    <div class="step-icon spinner"></div>
+                    <div class="step-text">
+                        <div class="step-title">Calling Kimi AI</div>
+                        <div class="step-sub">Generating fingerprint via @cf/moonshotai/kimi-k2.7-code...</div>
+                    </div>
+                </div>
+                <div class="progress-step pending" id="step-2">
+                    <div class="step-icon"></div>
+                    <div class="step-text">
+                        <div class="step-title">Coherence Check</div>
+                        <div class="step-sub">Validating hardware consistency...</div>
+                    </div>
+                </div>
+                <div class="progress-step pending" id="step-3">
+                    <div class="step-icon"></div>
+                    <div class="step-text">
+                        <div class="step-title">JS Leak Scan</div>
+                        <div class="step-sub">Checking WebRTC, Canvas, WebGL leaks...</div>
+                    </div>
+                </div>
+                <div class="progress-step pending" id="step-4">
+                    <div class="step-icon"></div>
+                    <div class="step-text">
+                        <div class="step-title">AI Validation</div>
+                        <div class="step-sub">Final Kimi AI profile audit...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="progress-log" id="progress-log"></div>
+        </div>
+
+        <!-- Step 3: Success -->
+        <div id="modal-success" class="modal-body" style="display:none;text-align:center;padding:2rem;">
+            <div class="success-icon">✅</div>
+            <h2 style="margin:1rem 0 0.5rem;">Profile Ready!</h2>
+            <p style="color:var(--text-muted);">Your zero-leak AI profile has been created successfully.</p>
+            <div class="profile-preview" id="success-profile-preview"></div>
+            <div class="modal-footer" style="justify-content:center;margin-top:1.5rem;">
+                <button class="btn-ghost" onclick="closeCreateModal()">Close</button>
+                <button class="btn-primary" onclick="launchNewProfile()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    Launch Now
+                </button>
+            </div>
+        </div>
+
+        <!-- Step 4: Error -->
+        <div id="modal-error" class="modal-body" style="display:none;text-align:center;padding:2rem;">
+            <div class="error-icon">❌</div>
+            <h2 style="margin:1rem 0 0.5rem;">Creation Failed</h2>
+            <p class="error-message" id="modal-error-msg" style="color:var(--danger);"></p>
+            <div class="modal-footer" style="justify-content:center;margin-top:1.5rem;">
+                <button class="btn-ghost" onclick="closeCreateModal()">Close</button>
+                <button class="btn-primary" onclick="backToForm()">Try Again</button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- CREATE MACRO MODAL -->
+<div class="modal-overlay" id="macro-modal">
+    <div class="modal" style="max-width: 700px;">
+        <div class="modal-header">
+            <h2>Build Macro 🤖</h2>
+            <button class="btn-icon" onclick="closeMacroModal()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body" style="padding: 1.5rem; max-height: 70vh; overflow-y: auto;">
+            <div class="form-group">
+                <label>Macro Name</label>
+                <input type="text" id="macro-name" placeholder="e.g. Amazon Farmer">
+            </div>
+            <div class="form-group">
+                <label>Description (Optional)</label>
+                <input type="text" id="macro-desc" placeholder="e.g. Navigates to Amazon and clicks products">
+            </div>
+            
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top: 1.5rem; margin-bottom: 0.5rem;">
+                <label style="margin:0;">Automation Steps</label>
+                <select id="add-step-select" class="input-base" style="width: auto; padding: 0.25rem 0.5rem;" onchange="addMacroStep()">
+                    <option value="">+ Add Action...</option>
+                    <option value="goto">Navigate to URL</option>
+                    <option value="wait">Wait (Delay)</option>
+                    <option value="type">Type Text</option>
+                    <option value="click">Click Element</option>
+                    <option value="scroll">Scroll Page</option>
+                </select>
+            </div>
+            
+            <div id="macro-steps-container" style="display: flex; flex-direction: column; gap: 0.75rem; min-height: 100px; background: rgba(0,0,0,0.1); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 1rem;">
+                <div id="empty-steps-msg" style="text-align:center; color:var(--text-muted); margin: auto;">No steps added yet. Select an action above.</div>
+            </div>
+            
+            <div class="modal-footer" style="margin-top: 2rem;">
+                <button class="btn-ghost" onclick="closeMacroModal()">Cancel</button>
+                <button class="btn-primary btn-glow" onclick="saveMacro()">Save Macro</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- RUN BULK MACRO MODAL -->
+<div class="modal-overlay" id="run-macro-modal">
+    <div class="modal" style="max-width: 400px;">
+        <div class="modal-header">
+            <h2>Run Macro</h2>
+            <button class="btn-icon" onclick="closeRunMacroModal()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body" style="padding: 1.5rem;">
+            <p style="margin-bottom: 1rem; color: var(--text-muted);" id="run-macro-text">Select a macro to run on X profiles.</p>
+            <div class="form-group">
+                <select id="run-macro-select" class="input-base" style="width: 100%;">
+                    <!-- Options injected via JS -->
+                </select>
+            </div>
+            <div class="modal-footer" style="margin-top: 1.5rem;">
+                <button class="btn-ghost" onclick="closeRunMacroModal()">Cancel</button>
+                <button class="btn-primary btn-glow" onclick="executeBulkMacro()">▶ Run Now</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- COOKIE MODAL -->
+<div class="modal-overlay" id="cookie-modal">
+    <div class="modal" style="max-width: 600px;">
+        <div class="modal-header">
+            <h2>Cookies Manager 🍪</h2>
+            <button class="btn-icon" onclick="closeCookieModal()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body" style="padding: 1.5rem;">
+            <p style="color: var(--text-muted); margin-bottom: 1rem; font-size: 0.9rem;">
+                View, export, or import cookies for this profile in raw JSON format.
+            </p>
+            <input type="hidden" id="cookie-profile-id">
+            <textarea id="cookie-textarea" style="width: 100%; height: 250px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #a5b4fc; font-family: monospace; padding: 1rem; resize: vertical;" placeholder="Loading cookies..."></textarea>
+            
+            <div class="modal-footer" style="margin-top: 1.5rem; justify-content: space-between;">
+                <div>
+                    <button class="btn-ghost" onclick="copyCookies()">Copy to Clipboard</button>
+                </div>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="btn-ghost" onclick="closeCookieModal()">Cancel</button>
+                    <button class="btn-primary" onclick="saveCookies()">Save & Import</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- TAGS AND NOTES MODAL -->
+<div class="modal-overlay" id="metadata-modal">
+    <div class="modal" style="max-width: 500px;">
+        <div class="modal-header">
+            <h2>Profile Metadata 🏷️</h2>
+            <button class="btn-icon" onclick="closeMetadataModal()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body" style="padding: 1.5rem;">
+            <input type="hidden" id="meta-profile-id">
+            <div class="form-group">
+                <label>Tags (Comma separated)</label>
+                <input type="text" id="meta-tags" placeholder="e.g. Farming, Banned, Ready">
+            </div>
+            <div class="form-group">
+                <label>Notes</label>
+                <textarea id="meta-notes" class="input-base" style="width: 100%; height: 100px; resize: vertical;" placeholder="Add custom notes here..."></textarea>
+            </div>
+            <div class="form-group">
+                <label>Pin Proxy (Optional)</label>
+                <input type="text" id="meta-proxy-pin" placeholder="http://ip:port:user:pass (Overrides Auto-Rotator)">
+            </div>
+            <div class="modal-footer" style="margin-top: 1.5rem;">
+                <button class="btn-ghost" onclick="closeMetadataModal()">Cancel</button>
+                <button class="btn-primary btn-glow" onclick="saveMetadata()">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- FINGERPRINT EDITOR MODAL -->
+<div class="modal-overlay" id="fingerprint-modal">
+    <div class="modal" style="max-width: 600px;">
+        <div class="modal-header">
+            <h2>Advanced Fingerprint 🧬</h2>
+            <button class="btn-icon" onclick="closeFingerprintModal()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body" style="padding: 1.5rem; max-height: 70vh; overflow-y: auto;">
+            <p style="margin-bottom: 1rem; color: var(--warning); font-size: 0.9rem;">⚠️ WARNING: Editing these raw values may cause the browser signature to fail bot detectors if they are mismatched. Only edit if you know what you are doing.</p>
+            <input type="hidden" id="fingerprint-profile-id">
+            
+            <div class="form-group">
+                <label>WebGL Vendor</label>
+                <input type="text" id="fp-webgl-vendor" class="input-base" style="width: 100%;">
+            </div>
+            <div class="form-group">
+                <label>WebGL Renderer</label>
+                <input type="text" id="fp-webgl-renderer" class="input-base" style="width: 100%;">
+            </div>
+            <div class="form-group">
+                <label>Canvas Seed (Hash)</label>
+                <input type="text" id="fp-canvas-seed" class="input-base" style="width: 100%;">
+            </div>
+            <div class="form-group">
+                <label>Audio Noise (Hash)</label>
+                <input type="text" id="fp-audio-noise" class="input-base" style="width: 100%;">
+            </div>
+            <div class="form-group" style="display:flex; gap:1rem;">
+                <div style="flex:1;">
+                    <label>Hardware Concurrency</label>
+                    <input type="number" id="fp-hardware-concurrency" class="input-base" style="width: 100%;">
+                </div>
+                <div style="flex:1;">
+                    <label>Device Memory (GB)</label>
+                    <input type="number" id="fp-device-memory" class="input-base" style="width: 100%;">
+                </div>
+            </div>
+            
+            <div class="modal-footer" style="margin-top: 1.5rem;">
+                <button class="btn-ghost" onclick="closeFingerprintModal()">Cancel</button>
+                <button class="btn-primary btn-glow" onclick="saveFingerprint()">Save Fingerprint</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- SCAN RESULTS MODAL -->
+<div class="modal-overlay" id="scan-modal">
+    <div class="modal" style="max-width: 400px; text-align: center;">
+        <div class="modal-header">
+            <h2>Fingerprint Tester 🛡️</h2>
+            <button class="btn-icon" onclick="closeScanModal()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body" style="padding: 2rem;">
+            <div id="scan-loading" style="display: none;">
+                <div class="spinner" style="width: 40px; height: 40px; margin: 0 auto 1rem auto; border-color: var(--primary); border-top-color: transparent;"></div>
+                <p style="color: var(--text-muted);">Running deep heuristic scan...</p>
+            </div>
+            <div id="scan-results" style="display: none;">
+                <div style="position: relative; width: 120px; height: 120px; margin: 0 auto 1.5rem auto;">
+                    <svg viewBox="0 0 36 36" style="width: 100%; height: 100%;">
+                        <path stroke="rgba(255,255,255,0.1)" stroke-width="3" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                        <path id="scan-circle" stroke="var(--primary)" stroke-width="3" stroke-dasharray="0, 100" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                    </svg>
+                    <div id="scan-score" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 2rem; font-weight: 700; color: #fff;">0</div>
+                </div>
+                <h3 id="scan-verdict" style="margin-bottom: 0.5rem;">Evaluating...</h3>
+                <p id="scan-reason" style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.4;"></p>
+                
+                <div style="margin-top: 1.5rem; text-align: left; background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px;">
+                    <div style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.5rem; text-transform: uppercase;">Technical Breakdown</div>
+                    <div id="scan-breakdown" style="font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.25rem;"></div>
+                </div>
+            </div>
+            
+            <div class="modal-footer" style="justify-content: center; margin-top: 2rem;">
+                <button class="btn-ghost" onclick="closeScanModal()">Dismiss</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: CREATE MACRO -->
+<div class="modal-overlay" id="macro-modal">
+    <div class="modal glass-card" style="max-width:600px;">
+        <div class="modal-header">
+            <h2>Create Automation Macro</h2>
+            <button class="btn-icon" onclick="closeMacroModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label">Macro Name</label>
+                <input type="text" class="form-input" id="new-macro-name" placeholder="e.g. Daily Amazon Scrape">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Description (Optional)</label>
+                <input type="text" class="form-input" id="new-macro-desc" placeholder="What does this macro do?">
+            </div>
+            
+            <h4 style="margin-bottom:0.5rem;color:var(--text);font-weight:600;">Macro Steps</h4>
+            <div id="macro-steps-container" style="display:flex;flex-direction:column;gap:0.75rem;margin-bottom:1rem;max-height:300px;overflow-y:auto;padding-right:0.5rem;">
+                <!-- Steps injected here -->
+            </div>
+            <button class="btn-secondary" style="width:100%;justify-content:center;" onclick="addMacroStep()">+ Add Step</button>
+
+        </div>
+        <div class="modal-footer">
+            <button class="btn-secondary" onclick="closeMacroModal()">Cancel</button>
+            <button class="btn-primary" onclick="submitCreateMacro()">Save Macro</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: CREATE SCHEDULE -->
+<div class="modal-overlay" id="schedule-modal">
+    <div class="modal glass-card" style="max-width:500px;">
+        <div class="modal-header">
+            <h2>Schedule Cron Job</h2>
+            <button class="btn-icon" onclick="closeScheduleModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label">Select Macro</label>
+                <select class="form-input" id="schedule-macro-select">
+                    <!-- Populated dynamically -->
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Cron Expression</label>
+                <input type="text" class="form-input mono" id="schedule-cron" placeholder="0 3 * * *" value="* * * * *">
+                <p class="settings-hint">Standard cron format. (e.g. '0 3 * * *' for 3:00 AM daily, '* * * * *' for every minute)</p>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Target Profiles</label>
+                <div id="schedule-profiles-list" class="settings-group" style="max-height:150px;overflow-y:auto;background:rgba(0,0,0,0.1);padding:0.5rem;border-radius:var(--radius-sm);">
+                    <!-- Checkboxes injected here -->
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-secondary" onclick="closeScheduleModal()">Cancel</button>
+            <button class="btn-primary" onclick="submitCreateSchedule()">Start Schedule</button>
+        </div>
+    </div>
+</div>
+
+<!-- TEMPLATE: MACRO STEP -->
+<template id="tpl-macro-step">
+    <div class="macro-step" style="background:rgba(0,0,0,0.2);padding:0.75rem;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,0.05);display:flex;gap:0.5rem;align-items:flex-start;">
+        <select class="form-input step-action" style="width:120px;" onchange="updateMacroStepFields(this)">
+            <option value="goto">Navigate To</option>
+            <option value="click">Click</option>
+            <option value="type">Type Text</option>
+            <option value="wait">Wait (ms)</option>
+            <option value="wait_for_selector">Wait Selector</option>
+        </select>
+        <div class="step-fields" style="flex:1;display:flex;flex-direction:column;gap:0.5rem;">
+            <input type="text" class="form-input step-selector" placeholder="URL or CSS Selector">
+            <input type="text" class="form-input step-value" placeholder="Value (if typing/waiting)" style="display:none;">
+        </div>
+        <button class="btn-secondary" style="padding:0.5rem;" onclick="this.closest('.macro-step').remove()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+</template>
+
+<script src="app.js"></script>
+</body>
+</html>
