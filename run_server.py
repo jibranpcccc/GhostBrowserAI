@@ -26,6 +26,15 @@ if __name__ == "__main__":
     print("\nStarting server... Keep this window open!")
     print("Once started, you can navigate to http://127.0.0.1:8000\n")
     
+    # Auto-install Playwright browsers for end-users so they don't have to install anything
+    print("[System] Checking/Installing necessary browser binaries... (This may take a minute on first run)")
+    import subprocess
+    try:
+        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
+        print("[System] Browser binaries are ready.")
+    except Exception as e:
+        print(f"[System] Warning: Could not auto-install browser binaries: {e}")
+    
     def open_browser():
         time.sleep(1.5)
         webbrowser.open("http://127.0.0.1:8000")
