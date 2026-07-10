@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+logs/
+profiles_data/
+quarantined_profiles/
+.env
+dist/
+build/
+*.spec
+GhostBrowser.zip
