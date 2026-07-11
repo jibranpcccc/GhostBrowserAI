@@ -8,7 +8,7 @@ import functools
 import json
 import os
 import secrets
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -67,7 +67,7 @@ class APIKeyManager:
         raw_key = secrets.token_urlsafe(32)
         metadata = {
             "name": name,
-            "created_at": datetime.utcnow().isoformat() + "Z",
+            "created_at": datetime.now(timezone.utc).isoformat() + "Z",
             "last_used": None,
             "request_count": 0,
             "active": True,
@@ -103,7 +103,7 @@ class APIKeyManager:
         meta = self._keys.get(key)
         if not meta or not meta.get("active", True):
             return False
-        meta["last_used"] = datetime.utcnow().isoformat() + "Z"
+        meta["last_used"] = datetime.now(timezone.utc).isoformat() + "Z"
         meta["request_count"] = meta.get("request_count", 0) + 1
         self._save()
         return True
@@ -165,16 +165,39 @@ api_key_manager = APIKeyManager()
 router = APIRouter(prefix="/api/api-keys", tags=["api-keys"])
 
 
+# ---------------------------------------------------------------------------
+# Admin token for key management endpoints
+# SECURITY FIX: API key endpoints require admin token to prevent unauthorized access
+# ---------------------------------------------------------------------------
+ADMIN_TOKEN = os.environ.get("GHOSTBROWSER_ADMIN_TOKEN", "")
+
+def _check_admin(request: Request):
+    """Check admin token. If no admin token is configured, allow localhost-only access."""
+    if ADMIN_TOKEN:
+        token = request.headers.get("X-Admin-Token", "")
+        if token != ADMIN_TOKEN:
+            raise HTTPException(status_code=403, detail="Admin token required")
+    # If no admin token configured, allow (localhost-only binding provides protection)
+    return True
+
+
 @router.get("")
-def list_keys():
-    """List all API keys (masked)."""
+def list_keys(request: Request):
+    """List all API keys (masked). Requires admin token if configured."""
+    _check_admin(request)
     return api_key_manager.list_keys()
 
 
 @router.post("")
-def create_key(payload: CreateKeyModel):
-    """Create a new API key."""
-    return api_key_manager.create_key(payload.name)
+def create_key(payload: CreateKeyModel, request: Request):
+    """Create a new API key. Requires admin token if configured."""
+    _check_admin(request)
+    # SECURITY: Sanitize key name
+    import html
+    safe_name = html.escape(payload.name.strip(), quote=True)[:100]
+    if not safe_name:
+        raise HTTPException(status_code=400, detail="Key name is required")
+    return api_key_manager.create_key(safe_name)
 
 
 @router.delete("/{key}")

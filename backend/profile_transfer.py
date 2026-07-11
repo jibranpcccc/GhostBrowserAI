@@ -8,7 +8,7 @@ import csv
 import io
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
@@ -60,7 +60,7 @@ class ProfileTransfer:
     # ------------------------------------------------------------------
     # Export
     # ------------------------------------------------------------------
-    def export_profiles(self, profile_ids: List[str],
+    async def export_profiles(self, profile_ids: List[str],
                         encrypt: bool = True,
                         safe_mode: bool = False) -> Dict[str, Any]:
         """
@@ -79,12 +79,12 @@ class ProfileTransfer:
                 logger.warning(f"Export: profile {pid} not found, skipping")
                 continue
 
-            entry = self._extract_profile(pid, pdata, safe_mode)
+            entry = await self._extract_profile(pid, pdata, safe_mode)
             exported.append(entry)
 
         payload = {
             "format_version": "1.0",
-            "exported_at": datetime.utcnow().isoformat() + "Z",
+            "exported_at": datetime.now(timezone.utc).isoformat() + "Z",
             "safe_mode": safe_mode,
             "profile_count": len(exported),
             "profiles": exported,
@@ -100,7 +100,7 @@ class ProfileTransfer:
 
         return {"encrypted": False, "data": payload}
 
-    def _extract_profile(self, pid: str, pdata: Dict[str, Any],
+    async def _extract_profile(self, pid: str, pdata: Dict[str, Any],
                          safe_mode: bool) -> Dict[str, Any]:
         """Build a clean export dict for a single profile."""
         proxy = pdata.get("proxy")
@@ -127,24 +127,26 @@ class ProfileTransfer:
             "advanced": advanced if isinstance(advanced, dict) else {},
             "fingerprint": pdata.get("fingerprint", {}),
             "created_at": pdata.get("created_at"),
-            "cookies": self._get_cookies(pid),
+            "cookies": await self._get_cookies(pid),
         }
 
-    def _get_cookies(self, profile_id: str) -> List[Dict[str, Any]]:
+    async def _get_cookies(self, profile_id: str) -> List[Dict[str, Any]]:
         """Attempt to retrieve cookies for a profile. Best-effort."""
         try:
-            from backend.browser_manager import get_profile_cookies
-            cookies = get_profile_cookies(profile_id)
+            from backend.browser_manager import get_profile_cookies, is_profile_running
+            if not is_profile_running(profile_id):
+                return []
+            cookies = await get_profile_cookies(profile_id)
             return cookies if cookies else []
         except Exception:
             return []
 
-    def export_to_file(self, profile_ids: List[str],
+    async def export_to_file(self, profile_ids: List[str],
                        encrypt: bool = True,
                        safe_mode: bool = False) -> str:
         """Export to a file in EXPORT_DIR and return the file path."""
-        payload = self.export_profiles(profile_ids, encrypt, safe_mode)
-        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        payload = await self.export_profiles(profile_ids, encrypt, safe_mode)
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         ext = "enc" if payload.get("encrypted") else "json"
         filename = f"profiles_export_{ts}.{ext}"
         filepath = os.path.join(EXPORT_DIR, filename)
@@ -301,9 +303,9 @@ router = APIRouter(prefix="/api/profiles", tags=["transfer"])
 
 
 @router.post("/export")
-def export_profiles_endpoint(payload: ExportRequest):
+async def export_profiles_endpoint(payload: ExportRequest):
     """Export profiles as JSON (optionally encrypted)."""
-    result = profile_transfer.export_profiles(
+    result = await profile_transfer.export_profiles(
         profile_ids=payload.profile_ids,
         encrypt=payload.encrypt,
         safe_mode=payload.safe_mode,
@@ -339,9 +341,9 @@ async def import_csv_endpoint(file: UploadFile = File(...), overwrite: bool = Fa
 
 
 @router.get("/export/file")
-def export_to_file_endpoint(encrypt: bool = True, safe_mode: bool = False):
+async def export_to_file_endpoint(encrypt: bool = True, safe_mode: bool = False):
     """Export all profiles to a file and return the file path."""
-    filepath = profile_transfer.export_to_file(
+    filepath = await profile_transfer.export_to_file(
         profile_ids=[], encrypt=encrypt, safe_mode=safe_mode
     )
     return {"file": filepath}

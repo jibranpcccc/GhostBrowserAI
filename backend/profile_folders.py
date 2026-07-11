@@ -87,9 +87,18 @@ def create_folder(req: CreateFolderRequest):
     if not req.name or not req.name.strip():
         raise HTTPException(status_code=400, detail="Folder name is required")
 
+    # SECURITY FIX: Sanitize folder name to prevent stored XSS
+    import html
+    import re
+    safe_name = html.escape(req.name.strip(), quote=True)
+    # Also strip any remaining HTML tags
+    safe_name = re.sub(r'<[^>]+>', '', safe_name)
+    # Limit length
+    safe_name = safe_name[:100]
+
     folder = {
         "id": "fld_" + uuid.uuid4().hex[:12],
-        "name": req.name.strip(),
+        "name": safe_name,
         "color": req.color or "#4A90D9",
         "tags": req.tags or [],
         "created_at": datetime.now(timezone.utc).isoformat(),

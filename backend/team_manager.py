@@ -164,7 +164,14 @@ class TeamManager:
     def add_member(self, name: str, email: str, role: str = "viewer") -> TeamMember:
         if role not in [r.value for r in Role]:
             raise ValueError(f"Invalid role: {role}")
-        member = TeamMember(name=name, email=email, role=role)
+        # SECURITY FIX: Sanitize name and email to prevent stored XSS
+        import html, re
+        safe_name = html.escape(str(name).strip(), quote=True)[:100]
+        safe_email = html.escape(str(email).strip(), quote=True)[:200]
+        # Validate email format
+        if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', safe_email):
+            raise ValueError(f"Invalid email format: {safe_email}")
+        member = TeamMember(name=safe_name, email=safe_email, role=role)
         self._members[member.id] = member
         self._save_members()
         logger.info(f"Team member added: {member.email} ({role})")
