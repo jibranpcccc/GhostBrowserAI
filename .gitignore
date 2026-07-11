@@ -4,8 +4,10 @@ __pycache__/
 logs/
 profiles_data/
 quarantined_profiles/
+api_data/
 .env
 dist/
 build/
 *.spec
 GhostBrowser.zip
+*.corrupted.*.json

@@ -337,12 +337,21 @@
             <div class="tabs">
                 <button class="modal-tab active" data-tab="macros" onclick="switchAutomationTab('macros')">Macros</button>
                 <button class="modal-tab" data-tab="schedules" onclick="switchAutomationTab('schedules')">Cron Schedules</button>
+                <button class="modal-tab" data-tab="cookie-robot" onclick="switchAutomationTab('cookie-robot')">Cookie Robot</button>
+                <button class="modal-tab" data-tab="sync" onclick="switchAutomationTab('sync')">Synchronizer</button>
             </div>
             <div id="automation-macros-actions">
                 <button class="btn-primary" onclick="openMacroModal()">+ Create Macro</button>
             </div>
             <div id="automation-schedules-actions" style="display:none;">
                 <button class="btn-primary" onclick="openScheduleModal()">+ New Schedule</button>
+            </div>
+            <div id="automation-cookie-robot-actions" style="display:none;">
+                <button class="btn-primary" onclick="startCookieRobotWarming()">▶ Start Warming</button>
+            </div>
+            <div id="automation-sync-actions" style="display:none;">
+                <button class="btn-primary" onclick="startSyncSessionWrapper()">▶ Start Sync</button>
+                <button class="btn-secondary" onclick="stopSyncSession()">⏹ Stop Sync</button>
             </div>
         </div>
 
@@ -384,6 +393,64 @@
                 </table>
             </div>
         </div>
+
+        <!-- COOKIE ROBOT TAB -->
+        <div id="auto-tab-cookie-robot" class="tab-content">
+            <div class="glass-card" style="margin-bottom:1.5rem;">
+                <div class="card-header">
+                    <h3>🍪 Cookie Robot — Auto Warming</h3>
+                    <div class="badge-count" id="cookie-robot-profile-count">0 selected</div>
+                </div>
+                <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:1rem;">
+                    Automatically visits trusted sites to build real cookie history, making profiles appear more human-like and reducing detection risk. Select profiles on the Profiles page to warm them.
+                </p>
+                <div style="display:flex;gap:0.75rem;margin-bottom:1rem;">
+                    <button class="btn-primary" onclick="startCookieRobotWarming()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="m8 12 3 3 5-6"/></svg>
+                        Start Warming Selected Profiles
+                    </button>
+                    <button class="btn-secondary" onclick="fetchCookieRobotStatus()">↻ Refresh Status</button>
+                </div>
+            </div>
+
+            <div class="glass-card">
+                <div class="card-header">
+                    <h3>Warming Progress</h3>
+                    <div class="live-badge"><div class="live-dot"></div>Live</div>
+                </div>
+                <div id="cookie-robot-widget" style="display:flex;flex-direction:column;gap:0.75rem;">
+                    <div class="empty-state-small">No warming in progress. Click "Start Warming" to begin.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SYNCHRONIZER TAB -->
+        <div id="auto-tab-sync" class="tab-content">
+            <div class="glass-card" style="margin-bottom:1.5rem;">
+                <div class="card-header">
+                    <h3>🔄 Synchronizer</h3>
+                </div>
+                <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:1rem;">
+                    Synchronize profile states across all running instances. Keeps cookies, localStorage, and session data consistent.
+                </p>
+                <div class="sync-control-panel">
+                    <div class="sync-indicator" id="sync-indicator"></div>
+                    <span style="font-weight:600;font-size:0.875rem;" id="sync-status-text">Sync Inactive</span>
+                    <span style="color:var(--text-muted);font-size:0.8rem;margin-left:auto;" id="sync-profile-count">0 profiles in sync</span>
+                </div>
+                <div style="display:flex;gap:0.75rem;">
+                    <button class="btn-primary" onclick="startSyncSessionWrapper()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        Start Sync
+                    </button>
+                    <button class="btn-secondary" onclick="stopSyncSession()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                        Stop Sync
+                    </button>
+                </div>
+            </div>
+        </div>
+
     </section>
 
     <!-- PAGE: AI STATUS -->
