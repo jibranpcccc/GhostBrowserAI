@@ -7,7 +7,7 @@ API endpoints for team member CRUD operations.
 import json
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 from enum import Enum
 
@@ -83,7 +83,7 @@ class TeamMember:
         self.name = name
         self.email = email
         self.role = role
-        self.created_at = created_at or datetime.utcnow().isoformat() + "Z"
+        self.created_at = created_at or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
     @property
     def role_enum(self) -> Optional[Role]:

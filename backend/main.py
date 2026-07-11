@@ -8,6 +8,7 @@ import uvicorn
 import os
 import sys
 import asyncio
+import logging
 
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
@@ -50,7 +51,31 @@ async def lifespan(app: FastAPI):
     from backend.ai_generator import _shared_client
     await _shared_client.aclose()
 
-app = FastAPI(title="AI Anti-Detect Browser API", lifespan=lifespan)
+# --- Rate limiter for profile creation (max 5 concurrent) ---
+_profile_create_sem = asyncio.Semaphore(5)
+
+_is_production = os.environ.get("GHOSTBROWSER_PROD") == "1"
+app = FastAPI(
+    title="AI Anti-Detect Browser API",
+    lifespan=lifespan,
+    docs_url=None if _is_production else "/docs",
+    redoc_url=None if _is_production else "/redoc",
+    openapi_url=None if _is_production else "/openapi.json",
+)
+
+# --- 500-error logging middleware (no request body logged — may contain secrets) ---
+_ghost_logger = logging.getLogger("ghostbrowser")
+
+@app.middleware("http")
+async def log_500_errors(request, call_next):
+    response = await call_next(request)
+    if response.status_code >= 500:
+        _ghost_logger.error(
+            "500-error | path=%s | method=%s",
+            request.url.path,
+            request.method,
+        )
+    return response
 
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
@@ -107,7 +132,8 @@ async def create_profile(data: CreateProfileModel):
     Creates a Zero-Leak profile using the full Kimi AI → Coherence → LeakScan pipeline.
     NO profile is ever created without Kimi AI successfully generating the fingerprint.
     """
-    proxy_dict = data.proxy.model_dump() if data.proxy else parse_proxy_string(data.proxy_string)
+    async with _profile_create_sem:
+        proxy_dict = data.proxy.model_dump() if data.proxy else parse_proxy_string(data.proxy_string)
     
     # Run the full Zero-Leak Orchestrator
     advanced_dict = data.advanced.model_dump() if data.advanced else None

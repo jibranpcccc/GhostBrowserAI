@@ -226,7 +226,7 @@ class ProfileTransfer:
             "locale": prof.get("locale"),
             "advanced": prof.get("advanced", {}),
             "fingerprint": prof.get("fingerprint", {}),
-            "created_at": prof.get("created_at") or datetime.utcnow().isoformat() + "Z",
+            "created_at": prof.get("created_at") or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
 
         all_profiles[pid] = entry
