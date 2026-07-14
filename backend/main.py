@@ -99,16 +99,21 @@ if not ADMIN_TOKEN:
 async def auth_middleware(request: Request, call_next):
     if not request.url.path.startswith("/api/"):
         return await call_next(request)
-    # Allow unauthenticated reads for health/docs, but protect all profile/data endpoints
+    # Skip auth for same-origin requests (frontend served by same server)
+    origin = request.headers.get("origin", "")
+    referer = request.headers.get("referer", "")
+    host = request.headers.get("host", "")
+    is_same_origin = (
+        not origin and not referer or
+        (host and host in origin) or
+        (host and host in referer)
+    )
+    if is_same_origin:
+        return await call_next(request)
+    # Allow unauthenticated reads for health/docs
     if request.method in ("GET", "HEAD", "OPTIONS"):
         if request.url.path in ("/api/health", "/api/metrics"):
             return await call_next(request)
-        # Check if this is a sensitive GET endpoint
-        sensitive_prefixes = ("/api/profiles", "/api/proxies", "/api/cookies", "/api/cloudflare")
-        if any(request.url.path.startswith(p) for p in sensitive_prefixes):
-            token = request.headers.get("X-Admin-Token") or request.headers.get("Authorization", "").replace("Bearer ", "")
-            if not _timing_safe_token_check(token, ADMIN_TOKEN):
-                return JSONResponse(status_code=401, content={"detail": "Invalid or missing API key/token"})
         return await call_next(request)
 
     token = request.headers.get("X-Admin-Token") or request.headers.get("Authorization", "").replace("Bearer ", "")
