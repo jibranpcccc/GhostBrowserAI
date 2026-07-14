@@ -35,7 +35,7 @@ def _generate_spoofing_js(profile_config: dict) -> str:
     canvas_g_offset = advanced.get('canvas_g_offset', ((_seed * 7) % 250))
     canvas_b_offset = advanced.get('canvas_b_offset', ((_seed * 13) % 250))
     _dom_noise = ((_seed % 1000) + 1) / 10_000_000.0
-    device_pixel_ratio = advanced.get('device_pixel_ratio', 1.25)
+    device_pixel_ratio = advanced.get('device_pixel_ratio', 1.0)
     connection_downlink = advanced.get('connection_downlink', round((_seed % 30) + 15 + ((_seed % 7) / 10.0), 1))
     connection_rtt = advanced.get('connection_rtt', round(((_seed % 50) + 25) / 25) * 25)
     ua_os_val = advanced.get('os', 'Windows')
@@ -228,13 +228,12 @@ def _generate_spoofing_js(profile_config: dict) -> str:
                     if (ctx) {{
                         const oldStyle = ctx.fillStyle;
                         const oldAlpha = ctx.globalAlpha;
-                        
-                        // Force a 1x1 solid pixel in the top left.
-                        // SwiftShader cannot ignore an opaque pixel.
                         ctx.globalAlpha = 1.0;
                         ctx.fillStyle = "rgb({canvas_r_offset}, {canvas_g_offset}, {canvas_b_offset})";
                         ctx.fillRect(0, 0, 1, 1);
-                        
+                        // Scatter additional noise pixels to avoid single-pixel detection
+                        ctx.fillStyle = "rgb({(canvas_r_offset + 37) % 256}, {(canvas_g_offset + 53) % 256}, {(canvas_b_offset + 71) % 256})";
+                        ctx.fillRect(({_seed} % 3) + 1, ({_seed} % 3) + 1, 1, 1);
                         ctx.fillStyle = oldStyle;
                         ctx.globalAlpha = oldAlpha;
                     }}
@@ -252,6 +251,8 @@ def _generate_spoofing_js(profile_config: dict) -> str:
                         ctx.globalAlpha = 1.0;
                         ctx.fillStyle = "rgb({canvas_r_offset}, {canvas_g_offset}, {canvas_b_offset})";
                         ctx.fillRect(0, 0, 1, 1);
+                        ctx.fillStyle = "rgb({(canvas_r_offset + 37) % 256}, {(canvas_g_offset + 53) % 256}, {(canvas_b_offset + 71) % 256})";
+                        ctx.fillRect(({_seed} % 3) + 1, ({_seed} % 3) + 1, 1, 1);
                         ctx.fillStyle = oldStyle;
                         ctx.globalAlpha = oldAlpha;
                     }}
@@ -446,8 +447,8 @@ def _generate_spoofing_js(profile_config: dict) -> str:
 
         // 7. Plugin and MimeType spoofing (proper prototypes)
         (function() {{
-            var _pluginNames = {str(advanced.get('plugins', ['Chrome PDF Viewer']))};
-            var _pluginData = _pluginNames.map(function(name) {{
+            var _pluginNames = ['Chrome PDF Viewer', 'Chrome PDF Plugin', 'Chrome Client Side Rendering Model', 'Chromium PDF Viewer', 'Native Client'];
+            var _pluginData = _pluginNames.map(function(name, idx) {{
                 return {{ name: name, description: name, filename: name + '.dll', length: 1,
                     item: function(i) {{ return i === 0 ? this : null; }},
                     namedItem: function(n) {{ return n === this.name ? this : null; }},
@@ -715,10 +716,8 @@ def _generate_spoofing_js(profile_config: dict) -> str:
             }} catch(e) {{}}
             const _origNow = performance.now.bind(performance);
             const _nowNoise = ({((_seed % 10) - 5) / 1.0});
-            const _jitterState = {{ v: 0 }};
             performance.now = function() {{
-                _jitterState.v += ({_seed} % 3) * 0.00001;
-                return _origNow() + _nowNoise + _jitterState.v;
+                return _origNow() + _nowNoise;
             }};
         }})();
 
@@ -740,12 +739,12 @@ def _generate_spoofing_js(profile_config: dict) -> str:
             }};
         }})();
 
-        try {{ Object.defineProperty(navigator, 'webdriver', {{ get: () => undefined, configurable: false, enumerable: false }}); }} catch(e) {{}}
+        try {{ Object.defineProperty(navigator, 'webdriver', {{ get: () => false, configurable: false, enumerable: false }}); }} catch(e) {{}}
         try {{ delete Object.getPrototypeOf(navigator).webdriver; }} catch(e) {{}}
         Object.defineProperty(navigator, 'platform', {{ get: () => '{_navigator_platform}' }});
-        try {{ Object.defineProperty(navigator, 'oscpu', {{ get: () => '{_navigator_oscpu}' }}); }} catch(e) {{}}
+        // Do NOT define navigator.oscpu — it's Firefox-only and its presence in Chrome is a detection signal
 
-        Object.defineProperty(navigator, 'product', {{ get: () => 'Gecko' }});
+        Object.defineProperty(navigator, 'product', {{ get: () => 'Chrome' }});
         Object.defineProperty(navigator, 'vendor', {{ get: () => 'Google Inc.' }});
         // Headless Chrome detection bypass: window.chrome object
         if (!window.chrome) {{
@@ -763,13 +762,15 @@ def _generate_spoofing_js(profile_config: dict) -> str:
         // Headless Chrome detection bypass: chrome.loadTimes and chrome.csi
         if (!window.chrome.loadTimes) {{
             window.chrome.loadTimes = function() {{
+                var _navStart = performance.timing.navigationStart / 1000;
+                var _now = Date.now() / 1000;
                 return {{
-                    requestTime: performance.timing.navigationStart / 1000,
-                    startLoadTime: performance.timing.navigationStart / 1000,
-                    commitLoadTime: performance.timing.responseStart / 1000,
-                    finishDocumentLoadTime: performance.timing.domContentLoadedEventEnd / 1000,
-                    finishLoadTime: performance.timing.loadEventEnd / 1000,
-                    firstPaintTime: performance.timing.domContentLoadedEventEnd / 1000
+                    requestTime: _navStart,
+                    startLoadTime: _navStart + 0.01,
+                    commitLoadTime: _navStart + 0.05,
+                    finishDocumentLoadTime: _navStart + 0.3,
+                    finishLoadTime: _navStart + 0.5,
+                    firstPaintTime: _navStart + 0.2
                 }};
             }};
         }}
@@ -815,9 +816,7 @@ def _generate_spoofing_js(profile_config: dict) -> str:
         Object.defineProperty(document, 'visibilityState', {{ get: () => 'visible' }});
         Object.defineProperty(document, 'hidden', {{ get: () => false }});
         // Headless Chrome detection bypass: Notification.permission
-        if (Notification && Notification.permission !== 'granted') {{
-            Object.defineProperty(Notification, 'permission', {{ get: () => 'granted' }});
-        }}
+        try {{ Object.defineProperty(Notification, 'permission', {{ get: () => 'default' }}); }} catch(e) {{}}
         // Headless Chrome detection bypass: navigator.maxTouchPoints (0 on desktop)
         Object.defineProperty(navigator, 'maxTouchPoints', {{ get: () => 0 }});
         // navigator.cookieEnabled
@@ -959,7 +958,7 @@ def _generate_spoofing_js(profile_config: dict) -> str:
             document.fonts[Symbol.iterator] = document.fonts.values;
         }}
 
-﻿        // A. WebGL Extended Parameters (GPU fingerprint normalization)
+        // A. WebGL Extended Parameters (GPU fingerprint normalization)
         if ({str(webgl_noise).lower()}) {{
             const _wp = {{
                 3379: {16384 + (_seed % 4096)}, 34076: {16384 + (_seed % 4096)},
@@ -1231,8 +1230,8 @@ def _generate_spoofing_js(profile_config: dict) -> str:
                                 architecture: '',
                                 device: '{ai_webgl_renderer.split(",")[0]}',
                                 description: '',
-                                vendorId: {_seed % 65535},
-                                deviceId: {(_seed * 7) % 65535},
+                                vendorId: {_seed % 2 == 0 and 4318 or 4098},
+                                deviceId: {(_seed % 200) + 1},
                                 driverInfo: ''
                             }};
                         }}, 'requestAdapterInfo');

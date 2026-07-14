@@ -174,7 +174,8 @@ class ProfileCreationOrchestrator:
                         profile_manager.delete_profile(final_profile["id"])
                     except Exception:
                         pass
-                return {"status": "error", "message": f"Creation failed: {e}", "code": "EXCEPTION"}
+                # Continue to next attempt instead of returning immediately
+                continue
 
         return {"status": "error", "message": "Failed to create a coherent, leak-free profile after maximum attempts."}
 

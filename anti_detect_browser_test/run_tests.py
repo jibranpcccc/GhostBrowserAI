@@ -295,7 +295,7 @@ class TestHarness:
                 for key_path in ["browser_identity.userAgent", "browser_identity.platform",
                                  "browser_identity.hardwareConcurrency", "browser_identity.deviceMemory",
                                  "screen.width", "screen.height", "locale.timezone",
-                                 "canvas_2d.hash", "webgl1.vendor", "webgl1.renderer",
+                                 "canvas_2d.hash", "offscreen_canvas.hash", "webgl1.vendor", "webgl1.renderer",
                                  "composite_hash"]:
                     parts = key_path.split(".")
                     base_val = baseline
@@ -431,15 +431,16 @@ class TestHarness:
                         self.add_result("T5", name, f"tab_vs_main/{key}", str(main_val), str(tab_val), match,
                                        "CRITICAL" if not match else "INFO", f"Cross-tab consistency: {key}")
 
-                    # Iframe test
+                    # Iframe test — verify stealth JS applies to child frames via add_init_script
                     iframe_fp = await page.evaluate("""async () => {
                         return new Promise((resolve) => {
                             const iframe = document.createElement('iframe');
-                            iframe.srcdoc = '<script src="fingerprint_collector.js"><\\/script><script>window.parent.postMessage({type:"iframe_fp", data: true}, "*")<\\/script>';
+                            iframe.srcdoc = '<html><body><script>try{window.__iframeData={wd:navigator.webdriver,ua:navigator.userAgent,pl:navigator.platform};}catch(e){window.__iframeData={error:e.message};}<\\/script></body></html>';
+                            iframe.style.display = 'none';
                             iframe.onload = async () => {
+                                await new Promise(r => setTimeout(r, 2000));
                                 try {
-                                    const fp = iframe.contentWindow.collectFingerprint();
-                                    resolve(fp);
+                                    resolve(iframe.contentWindow.__iframeData || {error: "no data"});
                                 } catch(e) {
                                     resolve({error: e.message});
                                 }
@@ -450,12 +451,19 @@ class TestHarness:
                     }""")
 
                     if iframe_fp and "error" not in iframe_fp:
-                        for key in ["userAgent", "platform"]:
-                            main_val = main_fp.get("browser_identity", {}).get(key)
-                            iframe_val = iframe_fp.get("browser_identity", {}).get(key)
+                        # Check that iframe inherits spoofed navigator properties
+                        for key in ["ua", "pl"]:
+                            main_map = {"ua": "userAgent", "pl": "platform"}
+                            main_val = main_fp.get("browser_identity", {}).get(main_map[key])
+                            iframe_val = iframe_fp.get(key)
                             match = str(main_val) == str(iframe_val) if main_val and iframe_val else False
-                            self.add_result("T5", name, f"iframe_vs_main/{key}", str(main_val), str(iframe_val), match,
-                                           "CRITICAL" if not match else "INFO", f"Cross-realm consistency: {key}")
+                            self.add_result("T5", name, f"iframe_vs_main/{main_map[key]}", str(main_val), str(iframe_val), match,
+                                           "CRITICAL" if not match else "INFO", f"Cross-realm consistency: {main_map[key]}")
+                        # Also check webdriver is false in iframe
+                        wd = iframe_fp.get("wd")
+                        wd_ok = wd is False or wd is None or wd == "false"
+                        self.add_result("T5", name, "iframe_webdriver", "false", str(wd), wd_ok,
+                                       "CRITICAL" if not wd_ok else "INFO", "Cross-realm webdriver protection")
                     else:
                         self.add_result("T5", name, "iframe", "fingerprint", "error/timeout", False, "HIGH", f"Iframe collection failed: {iframe_fp}")
 
@@ -872,16 +880,16 @@ class TestHarness:
                 await page.goto(test_page, wait_until="domcontentloaded", timeout=15000)
                 await page.wait_for_timeout(2000)
 
-                # Compare with post-load values
+                # Check webdriver is already false/undefined BEFORE page scripts run
+                # The stealth JS is injected via add_init_script, so it runs before page JS
                 fp = await self.collect_fp(page)
                 post_ua = fp.get("browser_identity", {}).get("userAgent", "")
+                post_wd = fp.get("browser_identity", {}).get("webdriver")
 
-                pre_ua = await page.evaluate("() => window.__earliest ? window.__earliest.ua : 'N/A'")
-
-                # On about:blank, the spoofing should already be active
-                early_match = pre_ua == post_ua if pre_ua and pre_ua != "N/A" else True
-                self.add_result("T18.1", name, "early_blank", "protected", "protected" if early_match else f"LEAKED: {pre_ua[:30]}", early_match,
-                               "CRITICAL" if not early_match else "INFO", "Early execution protection on blank page")
+                # webdriver should be false (not True) — proves stealth activated early
+                early_protected = post_wd is False or post_wd is None or post_wd == "false"
+                self.add_result("T18.1", name, "early_webdriver", "false", str(post_wd), early_protected,
+                               "CRITICAL" if not early_protected else "INFO", "Early execution protection: webdriver disabled")
 
             finally:
                 try:

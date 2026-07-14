@@ -165,7 +165,7 @@ async function fetchProfiles() {
     } catch (e) { /* backend offline */ }
 }
 
-﻿function renderProfiles(profiles) {
+function renderProfiles(profiles) {
     const grid = document.getElementById('profiles-grid');
     if (!grid) return;
 
@@ -252,7 +252,7 @@ async function fetchProfiles() {
         `;
     }).join('');
 }
-﻿
+
 async function togglePin(id) {
     try {
         const res = await fetch(`${API}/api/profiles`);
@@ -306,7 +306,7 @@ function closeEditModal() {
     currentEditProfileId = null;
 }
 
-﻿async function openEditModal(id) {
+async function openEditModal(id) {
     currentEditProfileId = id;
     switchEditModalTab('overview');
     
@@ -496,10 +496,21 @@ async function scanProfile(id) {
             
             // Breakdown
             const issues = scan.detected_issues || [];
-            const breakdownHtml = issues.length > 0 
-                ? issues.map(i => `<div style="color:var(--danger);">- ${i}</div>`).join('') 
-                : '<div style="color:var(--primary);">No major issues detected.</div>';
-            document.getElementById('scan-breakdown').innerHTML = breakdownHtml;
+            const breakdown = document.getElementById('scan-breakdown');
+            breakdown.textContent = '';
+            if (issues.length > 0) {
+                issues.forEach(i => {
+                    const div = document.createElement('div');
+                    div.style.color = 'var(--danger)';
+                    div.textContent = '- ' + i;
+                    breakdown.appendChild(div);
+                });
+            } else {
+                const div = document.createElement('div');
+                div.style.color = 'var(--primary)';
+                div.textContent = 'No major issues detected.';
+                breakdown.appendChild(div);
+            }
             
         } else {
             closeScanModal();
@@ -935,18 +946,22 @@ async function submitCreateProfile() {
     const preview = document.getElementById('success-profile-preview');
     if (count > 1) {
         if (preview) {
-            preview.innerHTML = `
-                <b>Bulk Creation Complete</b><br>
-                ${profile.message || 'Multiple profiles created successfully.'}<br>
-                Check the Profiles list to view them.
-            `;
+            preview.textContent = '';
+            const b = document.createElement('b'); b.textContent = 'Bulk Creation Complete';
+            preview.appendChild(b); preview.appendChild(document.createElement('br'));
+            preview.appendChild(document.createTextNode(profile.message || 'Multiple profiles created successfully.'));
+            preview.appendChild(document.createElement('br'));
+            preview.appendChild(document.createTextNode('Check the Profiles list to view them.'));
+        }
         }
         addActivity(`Bulk created ${count} profiles`, 'success');
         addLogEntry('info', `Bulk profile creation finished.`);
     } else {
         if (preview) {
-            preview.innerHTML = `
-                Profile ID: ${profile.id}<br>
+            preview.textContent = '';
+            const b2 = document.createElement('b'); b2.textContent = 'Profile ID: '; preview.appendChild(b2);
+            preview.appendChild(document.createTextNode(profile.id));
+            preview.appendChild(document.createElement('br'));
                 OS: ${profile.advanced?.os || profile.os || 'AI Generated'}<br>
                 GPU: ${(profile.advanced?.webgl_renderer || profile.webgl_renderer || 'AI Generated').slice(0,50)}<br>
                 Timezone: ${profile.timezone || 'AI Generated'}<br>
@@ -1759,7 +1774,7 @@ function filterByFolder(folderId) {
     if (!folderId) {
         renderProfiles(allProfiles);
     } else {
-        const filtered = allProfiles.filter(p => p.folder === folderId);
+        const filtered = allProfiles.filter(p => p.folder_id === folderId);
         renderProfiles(filtered);
     }
 }

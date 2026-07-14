@@ -11,6 +11,7 @@ import sys
 import asyncio
 import logging
 import secrets
+import hashlib as _hashlib
 
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
@@ -79,7 +80,6 @@ async def log_500_errors(request, call_next):
         )
     return response
 
-from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
     CORSMiddleware,
     # CRIT-01 FIX: Restrict to localhost only. Wildcard + credentials is a CSRF vulnerability.
@@ -92,19 +92,28 @@ app.add_middleware(
 ADMIN_TOKEN = os.environ.get("GHOSTBROWSER_ADMIN_TOKEN")
 if not ADMIN_TOKEN:
     ADMIN_TOKEN = "bootstrap_" + secrets.token_urlsafe(16)
-    print(f"[SECURITY] GHOSTBROWSER_ADMIN_TOKEN not set. Bootstrap token: {ADMIN_TOKEN}")
+    import logging as _log
+    _log.getLogger("ghostbrowser").warning("GHOSTBROWSER_ADMIN_TOKEN not set — using bootstrap token (set env var for production)")
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
-    if request.method in ("GET", "HEAD", "OPTIONS"):
-        return await call_next(request)
-
     if not request.url.path.startswith("/api/"):
+        return await call_next(request)
+    # Allow unauthenticated reads for health/docs, but protect all profile/data endpoints
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        if request.url.path in ("/api/health", "/api/metrics"):
+            return await call_next(request)
+        # Check if this is a sensitive GET endpoint
+        sensitive_prefixes = ("/api/profiles", "/api/proxies", "/api/cookies", "/api/cloudflare")
+        if any(request.url.path.startswith(p) for p in sensitive_prefixes):
+            token = request.headers.get("X-Admin-Token") or request.headers.get("Authorization", "").replace("Bearer ", "")
+            if not _timing_safe_token_check(token, ADMIN_TOKEN):
+                return JSONResponse(status_code=401, content={"detail": "Invalid or missing API key/token"})
         return await call_next(request)
 
     token = request.headers.get("X-Admin-Token") or request.headers.get("Authorization", "").replace("Bearer ", "")
 
-    if token != ADMIN_TOKEN:
+    if not _timing_safe_token_check(token, ADMIN_TOKEN):
         from backend.api_automation import _API_KEYS_FILE
         import json
         api_key_valid = False
@@ -112,8 +121,7 @@ async def auth_middleware(request: Request, call_next):
             try:
                 with open(_API_KEYS_FILE, "r") as f:
                     keys_data = json.load(f)
-                import hashlib
-                key_hash = hashlib.sha256(token.encode()).hexdigest()
+                key_hash = _hashlib.sha256(token.encode()).hexdigest()
                 api_key_valid = key_hash in [k.get("key_hash") for k in keys_data.values()]
             except Exception:
                 pass
@@ -122,6 +130,12 @@ async def auth_middleware(request: Request, call_next):
             return JSONResponse(status_code=401, content={"detail": "Invalid or missing API key/token"})
 
     return await call_next(request)
+
+
+def _timing_safe_token_check(provided: str, expected: str) -> bool:
+    if not provided or not expected:
+        return False
+    return _hashlib.sha256(provided.encode()).digest() == _hashlib.sha256(expected.encode()).digest()
 
 
 
@@ -182,20 +196,20 @@ async def create_profile(data: CreateProfileModel):
     """
     async with _profile_create_sem:
         proxy_dict = data.proxy.model_dump() if data.proxy else parse_proxy_string(data.proxy_string)
-    
-    # Run the full Zero-Leak Orchestrator
-    advanced_dict = data.advanced.model_dump() if data.advanced else None
-    result = await profile_creator.create_zero_leak_profile(
-        name=data.name,
-        proxy=proxy_dict,
-        advanced_ui=advanced_dict
-    )
-    
-    if result["status"] == "error":
-        code = result.get("code", "CREATION_FAILED")
-        raise HTTPException(status_code=503 if code == "KIMI_UNAVAILABLE" else 400, detail=result["message"])
-    
-    return result["profile"]
+
+        # Run the full Zero-Leak Orchestrator
+        advanced_dict = data.advanced.model_dump() if data.advanced else None
+        result = await profile_creator.create_zero_leak_profile(
+            name=data.name,
+            proxy=proxy_dict,
+            advanced_ui=advanced_dict
+        )
+
+        if result["status"] == "error":
+            code = result.get("code", "CREATION_FAILED")
+            raise HTTPException(status_code=503 if code == "KIMI_UNAVAILABLE" else 400, detail=result["message"])
+
+        return result["profile"]
 
 @app.post("/api/profiles/generate")
 async def generate_profile(data: CreateProfileModel):

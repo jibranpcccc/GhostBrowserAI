@@ -4,9 +4,9 @@
     "appVersion": "5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
     "platform": "Win32",
     "vendor": "Google Inc.",
-    "product": "Gecko",
+    "product": "Chrome",
     "productSub": "20030107",
-    "webdriver": null,
+    "webdriver": false,
     "appName": "Netscape",
     "appCodeName": "Mozilla",
     "cookieEnabled": true,
@@ -83,7 +83,7 @@
     "screenY": 0,
     "screenLeft": 0,
     "screenTop": 0,
-    "devicePixelRatio": 1.25,
+    "devicePixelRatio": 1,
     "chrome": true,
     "chromeRuntime": true,
     "chromeApp": true
@@ -108,10 +108,10 @@
     "calendar": "gregory",
     "numberingSystem": "latn",
     "dateFormat": "Tuesday, July 14, 2026",
-    "timeFormat": "2:41:24 AM Eastern Daylight Time"
+    "timeFormat": "3:23:31 AM Eastern Daylight Time"
   },
   "canvas_2d": {
-    "dataURL": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAARgAAAA8CAYAAAC9xKUYAAAQAElEQVR4AexZC1xVVdb/n3vhAoKAyE",
+    "dataURL": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAARgAAAA8CAYAAAC9xKUYAAAQAElEQVR4AexZCVxVVf7/3vfgAYKAyK",
     "hash": "a862ac9f826f5b01cabf7b5f43ab0507c70070c3406051d935878041502b9844",
     "width": 280,
     "height": 60
@@ -451,9 +451,9 @@
     "constructorName": "RTCPeerConnection",
     "exists": true
   },
-  "composite_hash": "a9b4b162b2ceebababe71f9b2c32bceac05257f86a7a0ed661417583925589a4",
-  "timestamp": 1784011284913,
-  "iso_time": "2026-07-14T06:41:24.913Z",
+  "composite_hash": "f7908313fc52f55f3ac5cf8af9fab7160a20718a3be041cd76cb9526882641f9",
+  "timestamp": 1784013811497,
+  "iso_time": "2026-07-14T07:23:31.497Z",
   "profile_name": "TestProfile03",
   "profile_id": "bb27ec81-53d7-4bcf-b8be-800633521080"
 }

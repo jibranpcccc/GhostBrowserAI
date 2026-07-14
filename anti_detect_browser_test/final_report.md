@@ -1,6 +1,6 @@
 # GHOSTBROWSER ANTI-DETECT TEST — FINAL REPORT
 
-Generated: 2026-07-14T11:48:33.259785
+Generated: 2026-07-14T12:31:08.301444
 Test Directory: C:\Users\jibra\Desktop\NEW DETECTOR\anti_detect_browser_test
 
 ## Final Verdict
@@ -12,9 +12,9 @@ Test Directory: C:\Users\jibra\Desktop\NEW DETECTOR\anti_detect_browser_test
 | Category | Passed | Score |
 |----------|--------|-------|
 | HTTP/JS Consistency | 12/12 | 10.0/10 |
-| Same-Profile Stability | 1584/1584 | 15.0/15 |
+| Same-Profile Stability | 1728/1728 | 15.0/15 |
 | Cross-Profile Isolation | 57/57 | 15.0/15 |
-| Cross-Realm Consistency | 18/18 | 15.0/15 |
+| Cross-Realm Consistency | 21/21 | 15.0/15 |
 | Canvas/WebGL/Audio/Fonts | 54/54 | 20.0/20 |
 | Native JS Integrity | 18/18 | 10.0/10 |
 | Device/Locale Coherence | 36/36 | 5.0/5 |
@@ -25,8 +25,8 @@ Test Directory: C:\Users\jibra\Desktop\NEW DETECTOR\anti_detect_browser_test
 
 | Metric | Value |
 |--------|-------|
-| Total Tests | 1867 |
-| Passed | 1865 |
+| Total Tests | 2014 |
+| Passed | 2012 |
 | Failed | 2 |
 | Critical Failures | 0 |
 | Profiles Tested | 5 |
@@ -37,12 +37,12 @@ No critical failures detected.
 
 ## Score Breakdown by Profile
 
-- **TestProfile01**: 305/305 checks passed
-- **TestProfile03**: 304/304 checks passed
-- **TestProfile05**: 304/304 checks passed
-- **TestProfile07**: 296/296 checks passed
-- **TestProfile09**: 296/296 checks passed
-- **TestProfile10_Canary**: 312/313 checks passed
+- **TestProfile01**: 330/330 checks passed
+- **TestProfile03**: 329/329 checks passed
+- **TestProfile05**: 329/329 checks passed
+- **TestProfile07**: 320/320 checks passed
+- **TestProfile09**: 320/320 checks passed
+- **TestProfile10_Canary**: 336/337 checks passed
 
 ## Files Generated
 

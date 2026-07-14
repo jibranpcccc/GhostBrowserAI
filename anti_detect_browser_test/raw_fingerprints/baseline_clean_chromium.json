@@ -106,7 +106,7 @@
     "calendar": "gregory",
     "numberingSystem": "latn",
     "dateFormat": "Tuesday, 14 July 2026",
-    "timeFormat": "11:40:21 am Pakistan Standard Time"
+    "timeFormat": "12:22:24 pm Pakistan Standard Time"
   },
   "canvas_2d": {
     "dataURL": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAARgAAAA8CAYAAAC9xKUYAAAQAElEQVR4AexZCVxVVf7/3vfgAYKAyK",
@@ -315,7 +315,7 @@
     "sessionStorage": true,
     "indexedDB": true,
     "serviceWorker": true,
-    "quota": 2148281647,
+    "quota": 1777196252,
     "usage": 0
   },
   "property_descriptors": {
@@ -424,7 +424,7 @@
   },
   "js_errors": [],
   "connection": {
-    "downlink": 9.7,
+    "downlink": 10,
     "effectiveType": "4g",
     "rtt": 0,
     "saveData": false,
@@ -452,7 +452,7 @@
     "constructorName": "RTCPeerConnection",
     "exists": true
   },
-  "composite_hash": "5a0c3694576573dea1de2b81cd610939a08dbcf7590ffd448dcefa79d62d4fcf",
-  "timestamp": 1784011221879,
-  "iso_time": "2026-07-14T06:40:21.879Z"
+  "composite_hash": "982f8404622bef32e0784f0a6ae0a350e4f431f772f0361bfcd20f3925b96430",
+  "timestamp": 1784013744734,
+  "iso_time": "2026-07-14T07:22:24.734Z"
 }
