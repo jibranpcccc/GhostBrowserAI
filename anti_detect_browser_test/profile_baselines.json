@@ -107,7 +107,7 @@
       "calendar": "gregory",
       "numberingSystem": "latn",
       "dateFormat": "Tuesday, 14 July 2026",
-      "timeFormat": "1:08:26 pm Pakistan Standard Time"
+      "timeFormat": "2:45:11 pm Pakistan Standard Time"
     },
     "canvas_2d": {
       "dataURL": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAARgAAAA8CAYAAAC9xKUYAAAQAElEQVR4AexZCVxVVf7/3vfgAYKAyK",
@@ -316,7 +316,7 @@
       "sessionStorage": true,
       "indexedDB": true,
       "serviceWorker": true,
-      "quota": 2134637643,
+      "quota": 1868548554,
       "usage": 0
     },
     "property_descriptors": {
@@ -425,7 +425,7 @@
     },
     "js_errors": [],
     "connection": {
-      "downlink": 9,
+      "downlink": 9.8,
       "effectiveType": "4g",
       "rtt": 0,
       "saveData": false,
@@ -453,9 +453,9 @@
       "constructorName": "RTCPeerConnection",
       "exists": true
     },
-    "composite_hash": "f72aebca8d7cd0e140094122e959114bcd5df3d4e7d41aefe48e2e55d499dd98",
-    "timestamp": 1784016506502,
-    "iso_time": "2026-07-14T08:08:26.502Z"
+    "composite_hash": "5e4eeb17685e0f2846e5225b2176cb73c066ca3d7102a14840309f97db54b886",
+    "timestamp": 1784022311600,
+    "iso_time": "2026-07-14T09:45:11.600Z"
   },
   "TestProfile01": {
     "browser_identity": {
@@ -567,7 +567,7 @@
       "calendar": "gregory",
       "numberingSystem": "latn",
       "dateFormat": "Tuesday, July 14, 2026",
-      "timeFormat": "4:08:31 AM Eastern Daylight Time"
+      "timeFormat": "5:45:15 AM Eastern Daylight Time"
     },
     "canvas_2d": {
       "dataURL": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAARgAAAA8CAYAAAC9xKUYAAAQAElEQVR4AexZC1xVVfb+zr1wAUFA5K",
@@ -911,8 +911,8 @@
       "exists": true
     },
     "composite_hash": "f4ab47e176bd71bc1414f22e43c5bb884a546ca650d76919d11888e8838e371f",
-    "timestamp": 1784016511120,
-    "iso_time": "2026-07-14T08:08:31.120Z",
+    "timestamp": 1784022315702,
+    "iso_time": "2026-07-14T09:45:15.702Z",
     "profile_name": "TestProfile01",
     "profile_id": "5723f7ba-8308-4c8d-a4b9-0f7433d7a1d5"
   },
@@ -1026,7 +1026,7 @@
       "calendar": "gregory",
       "numberingSystem": "latn",
       "dateFormat": "Tuesday, July 14, 2026",
-      "timeFormat": "4:08:35 AM Eastern Daylight Time"
+      "timeFormat": "5:45:19 AM Eastern Daylight Time"
     },
     "canvas_2d": {
       "dataURL": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAARgAAAA8CAYAAAC9xKUYAAAQAElEQVR4AexZCVxVVf7/3vfgAYKAyK",
@@ -1370,8 +1370,8 @@
       "exists": true
     },
     "composite_hash": "1404b91d00311d795a7492ef66edbf0db6864e10fc526638e384e839caaff546",
-    "timestamp": 1784016515541,
-    "iso_time": "2026-07-14T08:08:35.541Z",
+    "timestamp": 1784022319592,
+    "iso_time": "2026-07-14T09:45:19.592Z",
     "profile_name": "TestProfile03",
     "profile_id": "bb27ec81-53d7-4bcf-b8be-800633521080"
   },
@@ -1485,7 +1485,7 @@
       "calendar": "gregory",
       "numberingSystem": "latn",
       "dateFormat": "Tuesday, July 14, 2026",
-      "timeFormat": "4:08:39 AM Eastern Daylight Time"
+      "timeFormat": "5:45:23 AM Eastern Daylight Time"
     },
     "canvas_2d": {
       "dataURL": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAARgAAAA8CAYAAAC9xKUYAAAQAElEQVR4AexZC1xVVfb+zr1wAUFA5K",
@@ -1829,8 +1829,8 @@
       "exists": true
     },
     "composite_hash": "821bc970e2df9b1e229b2be0e6a038ebf84fbb8be4679bab060ddb6350b27814",
-    "timestamp": 1784016520081,
-    "iso_time": "2026-07-14T08:08:40.081Z",
+    "timestamp": 1784022323356,
+    "iso_time": "2026-07-14T09:45:23.356Z",
     "profile_name": "TestProfile05",
     "profile_id": "8ede4cd3-45c4-45d2-94d9-c788cab9a003"
   },
@@ -1944,7 +1944,7 @@
       "calendar": "gregory",
       "numberingSystem": "latn",
       "dateFormat": "Tuesday, July 14, 2026",
-      "timeFormat": "4:08:43 AM Eastern Daylight Time"
+      "timeFormat": "5:45:27 AM Eastern Daylight Time"
     },
     "canvas_2d": {
       "dataURL": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAARgAAAA8CAYAAAC9xKUYAAAQAElEQVR4AexZCVxVVf7/3vfgAYKAyK",
@@ -2288,8 +2288,8 @@
       "exists": true
     },
     "composite_hash": "455e7ac5c0445764c44a210ab902f98a81574d96ac54496b69e1764a3342d686",
-    "timestamp": 1784016523874,
-    "iso_time": "2026-07-14T08:08:43.874Z",
+    "timestamp": 1784022327215,
+    "iso_time": "2026-07-14T09:45:27.215Z",
     "profile_name": "TestProfile07",
     "profile_id": "1d698622-b616-41a3-8215-b5dd92ee2a67"
   },
@@ -2403,7 +2403,7 @@
       "calendar": "gregory",
       "numberingSystem": "latn",
       "dateFormat": "Tuesday, July 14, 2026",
-      "timeFormat": "4:08:48 AM Eastern Daylight Time"
+      "timeFormat": "5:45:31 AM Eastern Daylight Time"
     },
     "canvas_2d": {
       "dataURL": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAARgAAAA8CAYAAAC9xKUYAAAQAElEQVR4Aexde1xVVfb/nnvhAvIUeS",
@@ -2747,8 +2747,8 @@
       "exists": true
     },
     "composite_hash": "676ea1c284f0965fd4d235201a59b28725b89d6d3b31e696a7813706442afeb3",
-    "timestamp": 1784016528414,
-    "iso_time": "2026-07-14T08:08:48.414Z",
+    "timestamp": 1784022331268,
+    "iso_time": "2026-07-14T09:45:31.268Z",
     "profile_name": "TestProfile09",
     "profile_id": "1ac12dc9-fe09-4ece-a02c-3d4dc35a931b"
   },
@@ -2862,7 +2862,7 @@
       "calendar": "gregory",
       "numberingSystem": "latn",
       "dateFormat": "Tuesday, July 14, 2026",
-      "timeFormat": "4:08:52 AM Eastern Daylight Time"
+      "timeFormat": "5:45:35 AM Eastern Daylight Time"
     },
     "canvas_2d": {
       "dataURL": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAARgAAAA8CAYAAAC9xKUYAAAQAElEQVR4AexZC1xVVdb/n3vhAoKAyE",
@@ -3206,8 +3206,8 @@
       "exists": true
     },
     "composite_hash": "d5bcd54244404bd7743676b156eae4bc366d0bbb56cb8bc14fd5591e6e22377d",
-    "timestamp": 1784016532386,
-    "iso_time": "2026-07-14T08:08:52.386Z",
+    "timestamp": 1784022335893,
+    "iso_time": "2026-07-14T09:45:35.893Z",
     "profile_name": "TestProfile10_Canary",
     "profile_id": "8b30f3a7-dec4-4f6b-aae3-e9a68b9e69a6"
   }

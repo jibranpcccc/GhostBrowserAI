@@ -2,7 +2,7 @@
   "browser_identity": {
     "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
     "appVersion": "5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
-    "platform": "Win32",
+    "platform": "MacIntel",
     "vendor": "Google Inc.",
     "product": "Gecko",
     "productSub": "20030107",
@@ -38,8 +38,8 @@
       }
     ],
     "mobile": false,
-    "platform": "Windows",
-    "platformVersion": "10.0.19041",
+    "platform": "macOS",
+    "platformVersion": "14.0.0",
     "architecture": "x86",
     "bitness": "64",
     "model": "",
@@ -64,8 +64,8 @@
     "width": 1920,
     "height": 1080,
     "availWidth": 1920,
-    "availHeight": 1040,
-    "availTop": 0,
+    "availHeight": 1080,
+    "availTop": 25,
     "availLeft": 0,
     "colorDepth": 24,
     "pixelDepth": 24,
@@ -108,7 +108,7 @@
     "calendar": "gregory",
     "numberingSystem": "latn",
     "dateFormat": "Tuesday, July 14, 2026",
-    "timeFormat": "4:17:18 AM Eastern Daylight Time"
+    "timeFormat": "5:54:20 AM Eastern Daylight Time"
   },
   "canvas_2d": {
     "dataURL": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAARgAAAA8CAYAAAC9xKUYAAAQAElEQVR4AexZC1xVVdb/n3vhAoKAyE",
@@ -451,9 +451,9 @@
     "constructorName": "RTCPeerConnection",
     "exists": true
   },
-  "composite_hash": "d5bcd54244404bd7743676b156eae4bc366d0bbb56cb8bc14fd5591e6e22377d",
-  "timestamp": 1784017038256,
-  "iso_time": "2026-07-14T08:17:18.256Z",
+  "composite_hash": "4b3fcc4527b9621a976d38c1d7e81436b7d63448f99dfc36ac65fa7e61f5b858",
+  "timestamp": 1784022860340,
+  "iso_time": "2026-07-14T09:54:20.340Z",
   "profile_name": "TestProfile10_Canary",
   "profile_id": "8b30f3a7-dec4-4f6b-aae3-e9a68b9e69a6"
 }

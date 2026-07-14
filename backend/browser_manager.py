@@ -138,6 +138,9 @@ def _generate_spoofing_js(profile_config: dict) -> str:
             return func;
         }};
 
+        const _nativeGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+        const _nativeToDataURL = HTMLCanvasElement.prototype.toDataURL;
+
         // 1. Hardware Concurrency & Memory & User Agent
         Object.defineProperty(navigator, 'hardwareConcurrency', {{ get: () => {cpu_cores} }});
         Object.defineProperty(navigator, 'deviceMemory', {{ get: () => {memory_gb_pow2} }});
@@ -226,23 +229,20 @@ def _generate_spoofing_js(profile_config: dict) -> str:
                 try {{
                     const ctx = this.getContext('2d');
                     if (ctx) {{
-                        const oldStyle = ctx.fillStyle;
-                        const oldAlpha = ctx.globalAlpha;
-                        // Save original pixel data before modification
-                        const w = Math.min(this.width, 3);
-                        const h = Math.min(this.height, 3);
-                        const savedData = ctx.getImageData(0, 0, w, h);
-                        ctx.globalAlpha = 1.0;
-                        ctx.fillStyle = "rgb({canvas_r_offset}, {canvas_g_offset}, {canvas_b_offset})";
-                        ctx.fillRect(0, 0, 1, 1);
-                        ctx.fillStyle = "rgb({(canvas_r_offset + 37) % 256}, {(canvas_g_offset + 53) % 256}, {(canvas_b_offset + 71) % 256})";
-                        ctx.fillRect(({_seed} % 3) + 1, ({_seed} % 3) + 1, 1, 1);
-                        ctx.fillStyle = oldStyle;
-                        ctx.globalAlpha = oldAlpha;
-                        const result = originalToDataURL.apply(this, arguments);
-                        // Restore original pixels
-                        ctx.putImageData(savedData, 0, 0);
-                        return result;
+                        const w = this.width, h = this.height;
+                        if (w > 0 && h > 0) {{
+                            const tc = document.createElement('canvas');
+                            tc.width = w; tc.height = h;
+                            const tctx = tc.getContext('2d');
+                            tctx.drawImage(this, 0, 0);
+                            const tctx2 = tc.getContext('2d');
+                            tctx2.globalAlpha = 1.0;
+                            tctx2.fillStyle = "rgb({canvas_r_offset}, {canvas_g_offset}, {canvas_b_offset})";
+                            tctx2.fillRect(0, 0, 1, 1);
+                            tctx2.fillStyle = "rgb({(canvas_r_offset + 37) % 256}, {(canvas_g_offset + 53) % 256}, {(canvas_b_offset + 71) % 256})";
+                            tctx2.fillRect(({_seed} % 3) + 1, ({_seed} % 3) + 1, 1, 1);
+                            return _nativeToDataURL.apply(tc, arguments);
+                        }}
                     }}
                 }} catch (e) {{}}
                 return originalToDataURL.apply(this, arguments);
@@ -253,21 +253,20 @@ def _generate_spoofing_js(profile_config: dict) -> str:
                 try {{
                     const ctx = this.getContext('2d');
                     if (ctx) {{
-                        const oldStyle = ctx.fillStyle;
-                        const oldAlpha = ctx.globalAlpha;
-                        const w = Math.min(this.width, 3);
-                        const h = Math.min(this.height, 3);
-                        const savedData = ctx.getImageData(0, 0, w, h);
-                        ctx.globalAlpha = 1.0;
-                        ctx.fillStyle = "rgb({canvas_r_offset}, {canvas_g_offset}, {canvas_b_offset})";
-                        ctx.fillRect(0, 0, 1, 1);
-                        ctx.fillStyle = "rgb({(canvas_r_offset + 37) % 256}, {(canvas_g_offset + 53) % 256}, {(canvas_b_offset + 71) % 256})";
-                        ctx.fillRect(({_seed} % 3) + 1, ({_seed} % 3) + 1, 1, 1);
-                        ctx.fillStyle = oldStyle;
-                        ctx.globalAlpha = oldAlpha;
-                        const result = originalToBlob.apply(this, arguments);
-                        ctx.putImageData(savedData, 0, 0);
-                        return result;
+                        const w = this.width, h = this.height;
+                        if (w > 0 && h > 0) {{
+                            const tc = document.createElement('canvas');
+                            tc.width = w; tc.height = h;
+                            const tctx = tc.getContext('2d');
+                            tctx.drawImage(this, 0, 0);
+                            const tctx2 = tc.getContext('2d');
+                            tctx2.globalAlpha = 1.0;
+                            tctx2.fillStyle = "rgb({canvas_r_offset}, {canvas_g_offset}, {canvas_b_offset})";
+                            tctx2.fillRect(0, 0, 1, 1);
+                            tctx2.fillStyle = "rgb({(canvas_r_offset + 37) % 256}, {(canvas_g_offset + 53) % 256}, {(canvas_b_offset + 71) % 256})";
+                            tctx2.fillRect(({_seed} % 3) + 1, ({_seed} % 3) + 1, 1, 1);
+                            return HTMLCanvasElement.prototype.toBlob.apply(tc, arguments);
+                        }}
                     }}
                 }} catch (e) {{}}
                 return originalToBlob.apply(this, arguments);
@@ -509,16 +508,16 @@ def _generate_spoofing_js(profile_config: dict) -> str:
             for (let i = 0; i < rects.length; i++) {{
                 const r = rects[i];
                 const _rx = r.x, _ry = r.y, _rw = r.width, _rh = r.height;
-                const _rt = r.top, _rr = r.right, _rb = r.bottom, _rl = r.left;
+                const mx = _rx + noise, my = _ry + noise;
                 Object.defineProperties(r, {{
-                    x: {{ get: () => _rx + noise }},
-                    y: {{ get: () => _ry + noise }},
-                    width: {{ get: () => _rw + noise }},
-                    height: {{ get: () => _rh + noise }},
-                    top: {{ get: () => _rt + noise }},
-                    right: {{ get: () => _rr + noise }},
-                    bottom: {{ get: () => _rb + noise }},
-                    left: {{ get: () => _rl + noise }}
+                    x: {{ get: () => mx }},
+                    y: {{ get: () => my }},
+                    width: {{ get: () => _rw }},
+                    height: {{ get: () => _rh }},
+                    top: {{ get: () => my }},
+                    right: {{ get: () => mx + _rw }},
+                    bottom: {{ get: () => my + _rh }},
+                    left: {{ get: () => mx }}
                 }});
             }}
             return rects;
@@ -528,25 +527,24 @@ def _generate_spoofing_js(profile_config: dict) -> str:
         Element.prototype.getBoundingClientRect = function() {{
             const r = originalGetBoundingClientRect.apply(this, arguments);
             const _rx = r.x, _ry = r.y, _rw = r.width, _rh = r.height;
-            const _rt = r.top, _rr = r.right, _rb = r.bottom, _rl = r.left;
+            const mx = _rx + noise, my = _ry + noise;
             Object.defineProperties(r, {{
-                x: {{ get: () => _rx + noise }},
-                y: {{ get: () => _ry + noise }},
-                width: {{ get: () => _rw + noise }},
-                height: {{ get: () => _rh + noise }},
-                top: {{ get: () => _rt + noise }},
-                right: {{ get: () => _rr + noise }},
-                bottom: {{ get: () => _rb + noise }},
-                left: {{ get: () => _rl + noise }}
+                x: {{ get: () => mx }},
+                y: {{ get: () => my }},
+                width: {{ get: () => _rw }},
+                height: {{ get: () => _rh }},
+                top: {{ get: () => my }},
+                right: {{ get: () => mx + _rw }},
+                bottom: {{ get: () => my + _rh }},
+                left: {{ get: () => mx }}
             }});
             return r;
         }};
 
         // 8b. Canvas getImageData + OffscreenCanvas Noise
         if ({str(canvas_noise).lower()}) {{
-            const _origGetImageData = CanvasRenderingContext2D.prototype.getImageData;
             CanvasRenderingContext2D.prototype.getImageData = makeNative(function() {{
-                const result = _origGetImageData.apply(this, arguments);
+                const result = _nativeGetImageData.apply(this, arguments);
                 if (result && result.data && result.data.length > 0) {{
                     const data = result.data;
                     const idx = ({_seed}) % Math.max(1, data.length - 3);

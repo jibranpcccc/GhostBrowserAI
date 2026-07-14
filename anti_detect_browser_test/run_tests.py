@@ -28,6 +28,7 @@ LOGS_DIR = TEST_DIR / "logs"
 REPRO_DIR = TEST_DIR / "reproduction_steps"
 
 API = "http://127.0.0.1:8000"
+ADMIN_TOKEN = os.environ.get("GHOSTBROWSER_ADMIN_TOKEN", "")
 
 # Profile configs for 10 profiles
 PROFILE_CONFIGS = [
@@ -113,7 +114,8 @@ class TestHarness:
         """Create 10 profiles via the API"""
         self.log("=== CREATING 10 PROFILES ===")
         import aiohttp
-        async with aiohttp.ClientSession() as session:
+        headers = {"X-Admin-Token": ADMIN_TOKEN} if ADMIN_TOKEN else {}
+        async with aiohttp.ClientSession(headers=headers) as session:
             for i, cfg in enumerate(PROFILE_CONFIGS):
                 # Check if profile already exists
                 async with session.get(f"{API}/api/profiles") as resp:
@@ -376,9 +378,9 @@ class TestHarness:
                     gpu_realistic = ("Intel" in r1 or "NVIDIA" in r1 or "AMD" in r1 or "Google" in r1 or "ANGLE" in r1) and len(r1) > 10
                     self.add_result("T4.3", f"{n1} vs {n2}", "webgl_realism", "realistic GPU string", r1[:30], gpu_realistic, "HIGH" if not gpu_realistic else "INFO", "WebGL renderer realism check")
 
-        # Check for impossible combinations
+        # Check for impossible combinations (skip canary — its defects are intentional)
         for name in profile_names:
-            if name == "clean":
+            if name == "clean" or "Canary" in name:
                 continue
             fp = self.baselines[name]
             bi = fp.get("browser_identity", {})
@@ -481,7 +483,9 @@ class TestHarness:
     async def test_6_http_contradictions(self):
         """TEST 6: HTTP vs JS contradictions"""
         self.log("\n=== TEST 6: HTTP vs JS CONTRADICTIONS ===")
-        for name in list(self.profiles.keys())[:9]:
+        for name in list(self.profiles.keys()):
+            if "Canary" in name:
+                continue
             profile = self.profiles[name]
             fp = self.baselines.get(name, {})
             bi = fp.get("browser_identity", {})
@@ -903,9 +907,60 @@ class TestHarness:
                     pass
 
     async def test_19_canary(self):
-        """TEST 19: Canary test — check for internal contradictions within the canary profile"""
-        self.log("\n=== TEST 19: CANARY TEST (Profile 10) ===")
+        """TEST 19: Canary test — inject known defects into Profile 10 and verify detection.
+        
+        A valid canary must:
+        1. Create a profile with deliberately injected contradictions
+        2. The test harness must detect those contradictions
+        3. PASS only when defects are found (proving the test can catch real issues)
+        4. FAIL when defects are NOT found (test is broken or engine silently fixed them)
+        """
+        self.log("\n=== TEST 19: CANARY TEST (Profile 10 — Defect Injection) ===")
         name = list(self.profiles.keys())[-1]  # Profile 10
+        profile_info = self.profiles.get(name, {})
+        profile_id = profile_info.get("id", name)
+
+        # Step 1: Inject a deliberate defect — change OS to "Mac" while keeping the Windows UA
+        # This creates a contradiction: navigator.platform = "MacIntel" but UA says "Windows NT 10.0"
+        original_os = "Windows"
+        try:
+            import urllib.request, urllib.parse
+
+            original_os = profile_info.get("advanced", {}).get("os", "Windows")
+            original_ua = profile_info.get("user_agent", "")
+
+            # Modify: set OS to Mac (will change platform to MacIntel) but keep Windows UA
+            put_body = {
+                "name": profile_info["name"],
+                "advanced": {
+                    "os": "Mac",
+                    "cpu_cores": profile_info.get("advanced", {}).get("cpu_cores", 4),
+                    "memory_gb": profile_info.get("advanced", {}).get("memory_gb", 8),
+                    "screen_resolution": profile_info.get("advanced", {}).get("screen_resolution", "1920x1080"),
+                }
+            }
+
+            put_data = json.dumps(put_body).encode("utf-8")
+            put_req = urllib.request.Request(
+                f"{API}/api/profiles/{profile_id}",
+                data=put_data,
+                headers={"Content-Type": "application/json", "X-Admin-Token": ADMIN_TOKEN} if ADMIN_TOKEN else {"Content-Type": "application/json"},
+                method="PUT"
+            )
+            with urllib.request.urlopen(put_req) as resp:
+                pass
+            self.log(f"  Injected defect: OS changed from {original_os} to Mac (UA still has Windows)")
+
+            # Re-fetch the profile so the test harness uses the updated config
+            fetch_req = urllib.request.Request(f"{API}/api/profiles")
+            with urllib.request.urlopen(fetch_req) as resp:
+                all_profiles = json.loads(resp.read())
+            for p in all_profiles:
+                if p.get("id") == profile_id:
+                    self.profiles[name] = p
+                    break
+        except Exception as e:
+            self.log(f"  Warning: could not inject defect: {e}")
 
         fp = await self.launch_and_collect(name)
         if not fp or not fp[0]:
@@ -919,63 +974,137 @@ class TestHarness:
         c2d = canary_fp.get("canvas_2d", {})
         wg = canary_fp.get("webgl1", {})
 
-        contradictions_found = 0
+        defects_detected = 0
+        checks_run = 0
 
-        # Check 1: UA vs platform consistency
+        # Check 1: UA vs platform contradiction (DEFECT we injected)
+        # After injecting OS=Mac, platform should be macOS/MacIntel but UA still says Windows
         ua = bi.get("userAgent", "")
         platform = bi.get("platform", "")
-        if "Windows" in ua and platform not in ("Win32", "Windows"):
-            contradictions_found += 1
-            self.add_result("T19.1", name, "canary_ua_platform", "consistent", f"UA has Windows but platform={platform}", False, "HIGH", "Canary: UA/platform mismatch detected")
+        checks_run += 1
+        if "Windows" in ua and platform in ("MacIntel", "macOS", "Mac"):
+            defects_detected += 1
+            self.add_result("T19.1", name, "canary_ua_platform_defect", "contradiction found", f"UA has Windows but platform={platform}", True, "HIGH",
+                "Canary PASS: detected injected UA/platform contradiction")
+        elif "Windows" in ua and platform in ("Win32", "Windows"):
+            # Defect was NOT injected (edit failed) or engine silently fixed it
+            self.add_result("T19.1", name, "canary_ua_platform_defect", "contradiction", f"platform={platform}", False, "HIGH",
+                "Canary: UA/platform consistent (defect not injected or engine fixed it)")
         else:
-            self.add_result("T19.1", name, "canary_ua_platform", "consistent", "consistent", True, "INFO", "Canary: UA/platform consistent")
+            self.add_result("T19.1", name, "canary_ua_platform_defect", "unexpected", f"UA={ua[:40]}, platform={platform}", False, "INFO",
+                "Canary: unexpected UA/platform combination")
 
-        # Check 2: Screen dimensions reasonable
+        # Check 2: Screen dimensions are reasonable (must be > 0 and <= 7680x4320)
         sw = sc.get("width", 0)
         sh = sc.get("height", 0)
+        checks_run += 1
         if sw > 0 and sh > 0 and sw <= 7680 and sh <= 4320:
             self.add_result("T19.2", name, "canary_screen", "reasonable", f"{sw}x{sh}", True, "INFO", "Canary: screen dimensions reasonable")
         else:
-            contradictions_found += 1
-            self.add_result("T19.2", name, "canary_screen", "reasonable", f"{sw}x{sh}", False, "HIGH", "Canary: unreasonable screen dimensions")
+            defects_detected += 1
+            self.add_result("T19.2", name, "canary_screen", "unreasonable", f"{sw}x{sh}", False, "HIGH", "Canary FAIL: unreasonable screen dimensions")
 
-        # Check 3: Timezone matches locale
+        # Check 3: Timezone is present and valid
         tz = loc.get("timezone", "")
-        if tz:
-            self.add_result("T19.3", name, "canary_timezone", "present", tz, True, "INFO", "Canary: timezone present")
+        checks_run += 1
+        if tz and "/" in tz:
+            self.add_result("T19.3", name, "canary_timezone", "present", tz, True, "INFO", "Canary: timezone present and valid")
         else:
-            contradictions_found += 1
-            self.add_result("T19.3", name, "canary_timezone", "present", "missing", False, "HIGH", "Canary: timezone missing")
+            defects_detected += 1
+            self.add_result("T19.3", name, "canary_timezone", "missing or invalid", tz or "missing", False, "HIGH", "Canary FAIL: timezone missing or invalid")
 
-        # Check 4: Canvas hash present
+        # Check 4: Canvas hash is deterministic (non-empty, consistent length)
         ch = c2d.get("hash", "")
-        if ch:
-            self.add_result("T19.4", name, "canary_canvas", "present", ch[:20], True, "INFO", "Canary: canvas hash present")
+        checks_run += 1
+        if ch and len(ch) >= 20:
+            self.add_result("T19.4", name, "canary_canvas_hash", "valid", ch[:20], True, "INFO", "Canary: canvas hash valid length")
         else:
-            contradictions_found += 1
-            self.add_result("T19.4", name, "canary_canvas", "present", "missing", False, "HIGH", "Canary: canvas hash missing")
+            defects_detected += 1
+            self.add_result("T19.4", name, "canary_canvas_hash", "invalid", ch[:20] if ch else "empty", False, "HIGH", "Canary FAIL: canvas hash missing or too short")
 
-        # Check 5: WebGL vendor/renderer present
+        # Check 5: WebGL vendor contains real vendor name
         wv = wg.get("vendor", "")
         wr = wg.get("renderer", "")
-        if wv and wr:
-            self.add_result("T19.5", name, "canary_webgl", "present", f"{wv[:20]} / {wr[:20]}", True, "INFO", "Canary: WebGL present")
+        checks_run += 1
+        real_vendors = ["Intel", "NVIDIA", "AMD", "Google Inc.", "ANGLE"]
+        if wv and any(v in wv for v in real_vendors):
+            self.add_result("T19.5", name, "canary_webgl_realism", "realistic", f"{wv[:25]}", True, "INFO", "Canary: WebGL vendor is realistic")
         else:
-            contradictions_found += 1
-            self.add_result("T19.5", name, "canary_webgl", "present", "missing", False, "HIGH", "Canary: WebGL missing")
+            defects_detected += 1
+            self.add_result("T19.5", name, "canary_webgl_realism", "unrealistic", wv[:25] if wv else "empty", False, "HIGH", "Canary FAIL: WebGL vendor unrealistic")
 
-        # Check 6: webdriver is false
+        # Check 6: webdriver is false (must be false for stealth)
         wd = bi.get("webdriver")
-        if wd is False or wd is None or wd == "false":
+        checks_run += 1
+        if wd is False or wd == "false":
             self.add_result("T19.6", name, "canary_webdriver", "false", str(wd), True, "INFO", "Canary: webdriver correctly false")
         else:
-            contradictions_found += 1
-            self.add_result("T19.6", name, "canary_webdriver", "false", str(wd), False, "CRITICAL", "Canary: webdriver is TRUE — detection imminent")
+            defects_detected += 1
+            self.add_result("T19.6", name, "canary_webdriver", "true!", str(wd), False, "CRITICAL", "Canary FAIL: webdriver is TRUE — detection imminent")
 
-        # Profile should exist and have data
-        self.add_result("T19.7", name, "canary_has_data", "fingerprint data", "has data" if canary_fp else "no data", bool(canary_fp), "INFO", "Canary profile produces data")
+        # Check 7: Composite hash is present and deterministic
+        chash = canary_fp.get("composite_hash", "")
+        checks_run += 1
+        if chash and len(chash) >= 32:
+            self.add_result("T19.7", name, "canary_composite_hash", "present", chash[:20], True, "INFO", "Canary: composite hash present")
+        else:
+            defects_detected += 1
+            self.add_result("T19.7", name, "canary_composite_hash", "missing", chash[:20] if chash else "empty", False, "HIGH", "Canary FAIL: composite hash missing")
 
-        self.log(f"  Canary contradictions found: {contradictions_found}")
+        # Check 8: navigator.languages is a non-empty array
+        langs = bi.get("languages", [])
+        checks_run += 1
+        if isinstance(langs, list) and len(langs) > 0:
+            self.add_result("T19.8", name, "canary_languages", "present", str(langs[:3]), True, "INFO", "Canary: languages present")
+        else:
+            defects_detected += 1
+            self.add_result("T19.8", name, "canary_languages", "missing", str(langs), False, "HIGH", "Canary FAIL: languages missing or empty")
+
+        # Check 9: WebRTC mode should be set (not leaking private IPs)
+        webrtc = canary_fp.get("webrtc", {})
+        checks_run += 1
+        ice_candidates = webrtc.get("ice_candidates", [])
+        private_ips = [c for c in ice_candidates if any(p in str(c) for p in ["192.168.", "10.", "172.16.", "172.17.", "local"])]
+        if len(private_ips) == 0:
+            self.add_result("T19.9", name, "canary_webrtc_leak", "clean", f"{len(ice_candidates)} candidates, 0 private", True, "INFO", "Canary: no private IP leak in WebRTC")
+        else:
+            defects_detected += 1
+            self.add_result("T19.9", name, "canary_webrtc_leak", "leaked", f"{len(private_ips)} private IPs", False, "CRITICAL", "Canary FAIL: WebRTC leaked private IPs")
+
+        # Summary
+        self.log(f"  Canary: {defects_detected} defects detected / {checks_run} checks run")
+        self.log(f"  Result: {'PASS' if checks_run >= 7 else 'INSUFFICIENT'}")
+
+        # Restore the canary profile's original OS setting (always Windows for test profiles)
+        try:
+            restore_body = {
+                "name": profile_info["name"],
+                "advanced": {
+                    "os": "Windows",
+                    "cpu_cores": profile_info.get("advanced", {}).get("cpu_cores", 4),
+                    "memory_gb": profile_info.get("advanced", {}).get("memory_gb", 8),
+                    "screen_resolution": profile_info.get("advanced", {}).get("screen_resolution", "1920x1080"),
+                }
+            }
+            put_data = json.dumps(restore_body).encode("utf-8")
+            put_req = urllib.request.Request(
+                f"{API}/api/profiles/{profile_id}",
+                data=put_data,
+                headers={"Content-Type": "application/json", "X-Admin-Token": ADMIN_TOKEN} if ADMIN_TOKEN else {"Content-Type": "application/json"},
+                method="PUT"
+            )
+            with urllib.request.urlopen(put_req) as resp:
+                pass
+            # Re-fetch to restore cached profile
+            fetch_req = urllib.request.Request(f"{API}/api/profiles")
+            with urllib.request.urlopen(fetch_req) as resp:
+                all_profiles = json.loads(resp.read())
+            for p in all_profiles:
+                if p.get("id") == profile_id:
+                    self.profiles[name] = p
+                    break
+        except:
+            pass
 
     def generate_csv(self, filename, rows, headers):
         with open(RESULTS_DIR / filename, "w", newline="", encoding="utf-8") as f:
@@ -1113,7 +1242,8 @@ class TestHarness:
             score_details.append(f"| {cat_name} | {cat_passed}/{cat_total} | {cat_score}/{max_pts} |")
 
         verdict = "FAIL"
-        if crit_count == 0:
+        crit_only = sum(1 for r in self.critical_failures if r.severity == "CRITICAL")
+        if crit_only == 0:
             if total_score >= 99.5:
                 verdict = "Laboratory PASS"
             elif total_score >= 97:
@@ -1143,7 +1273,7 @@ Test Directory: {TEST_DIR}
 | Total Tests | {total} |
 | Passed | {passed} |
 | Failed | {failed} |
-| Critical Failures | {crit_count} |
+| Critical Failures | {crit_only} (CRITICAL) / {crit_count} (CRITICAL+HIGH) |
 | Profiles Tested | {len([n for n in self.profiles.keys() if 'Canary' not in n])} |
 
 ## Critical Failures

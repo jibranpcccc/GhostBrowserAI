@@ -108,7 +108,7 @@
     "calendar": "gregory",
     "numberingSystem": "latn",
     "dateFormat": "Tuesday, July 14, 2026",
-    "timeFormat": "4:10:10 AM Eastern Daylight Time"
+    "timeFormat": "5:46:59 AM Eastern Daylight Time"
   },
   "canvas_2d": {
     "dataURL": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAARgAAAA8CAYAAAC9xKUYAAAQAElEQVR4AexZC1xVVfb+zr1wAUFA5K",
@@ -452,8 +452,8 @@
     "exists": true
   },
   "composite_hash": "821bc970e2df9b1e229b2be0e6a038ebf84fbb8be4679bab060ddb6350b27814",
-  "timestamp": 1784016610862,
-  "iso_time": "2026-07-14T08:10:10.862Z",
+  "timestamp": 1784022419875,
+  "iso_time": "2026-07-14T09:46:59.875Z",
   "profile_name": "TestProfile05",
   "profile_id": "8ede4cd3-45c4-45d2-94d9-c788cab9a003"
 }
