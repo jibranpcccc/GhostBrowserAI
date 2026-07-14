@@ -174,86 +174,67 @@ def _generate_spoofing_js(profile_config: dict) -> str:
         Object.defineProperty(window.screen, 'availLeft', {{ get: () => 0 }});
         Object.defineProperty(window.screen, 'availTop', {{ get: () => {_screen_avail_top} }});
 
-        // 3. WebRTC Spoofing / Blocking
-        // When NO proxy: completely block WebRTC to prevent real IP leaks
-        // When proxy IS configured: allow WebRTC but filter ICE candidates
+        // 3. WebRTC — Real IP is fine, just spoof the local candidate to hide system info
         const _hasProxy = {"true" if _has_proxy else "false"};
         const _proxyIP = {"'" + _proxy_ip + "'" if _proxy_ip else "null"};
-        if (!_hasProxy || "{webrtc_mode}" === "disabled") {{
-            // COMPLETE WebRTC block — no proxy means no WebRTC at all
-            const _noopRTC = function() {{ throw new DOMException('WebRTC is not supported', 'NotSupportedError'); }};
-            const _origRTC = window.RTCPeerConnection;
-            Object.defineProperty(window, 'RTCPeerConnection', {{ get: _noopRTC, configurable: false }});
-            Object.defineProperty(window, 'webkitRTCPeerConnection', {{ get: _noopRTC, configurable: false }});
-            Object.defineProperty(window, 'mozRTCPeerConnection', {{ get: _noopRTC, configurable: false }});
-            if (navigator.mediaDevices) {{
-                const _origGetUserMedia = navigator.mediaDevices.getUserMedia;
-                navigator.mediaDevices.getUserMedia = function() {{ return Promise.reject(new DOMException('getUserMedia is not supported', 'NotSupportedError')); }};
-            }}
-            navigator.getUserMedia = navigator.webkitGetUserMedia = navigator.mozGetUserMedia = function() {{ throw new DOMException('getUserMedia is not supported', 'NotSupportedError'); }};
-            if (window.MediaStreamTrack) {{
-                Object.defineProperty(window, 'MediaStreamTrack', {{ get: function() {{ throw new DOMException('MediaStreamTrack is not supported', 'NotSupportedError'); }}, configurable: false }});
-            }}
-        }} else {{
-            // Proxy configured: allow WebRTC but spoof local IP to match proxy
+        (function() {{
             const OrigPeerConn = window.RTCPeerConnection || window.webkitRTCPeerConnection || window.mozRTCPeerConnection;
-            if (OrigPeerConn) {{
-                const _spoofedIP = _proxyIP;
-                window.RTCPeerConnection = window.webkitRTCPeerConnection = window.mozRTCPeerConnection = function(...args) {{
-                    const pc = new OrigPeerConn(...args);
-                    const PRIVATE_PREFIXES = [
-                        '.local', '192.168.', '10.',
-                        '172.16.','172.17.','172.18.','172.19.','172.20.',
-                        '172.21.','172.22.','172.23.','172.24.','172.25.',
-                        '172.26.','172.27.','172.28.','172.29.','172.30.','172.31.',
-                        'fe80:', 'fc00:', 'fd'
-                    ];
-                    const isPrivateIP = (c) => PRIVATE_PREFIXES.some(pfx => c.includes(pfx));
-                    const isRealPublicIP = (c) => {{
-                        if (!c || !_spoofedIP) return false;
-                        const ipParts = c.split(' ');
-                        for (let i = 0; i < ipParts.length; i++) {{
-                            const part = ipParts[i];
-                            if (/^\d{{1,3}}\.\d{{1,3}}\.\d{{1,3}}\.\d{{1,3}}$/.test(part) && part !== _spoofedIP) {{
-                                return true;
+            if (!OrigPeerConn) return;
+            const PRIVATE_PREFIXES = [
+                '.local', '192.168.', '10.',
+                '172.16.','172.17.','172.18.','172.19.','172.20.',
+                '172.21.','172.22.','172.23.','172.24.','172.25.',
+                '172.26.','172.27.','172.28.','172.29.','172.30.','172.31.',
+                'fe80:', 'fc00:', 'fd'
+            ];
+            const isPrivateIP = (c) => PRIVATE_PREFIXES.some(pfx => c.includes(pfx));
+            const isSpoofedOrPublic = (c) => {{
+                if (!c) return false;
+                if (_hasProxy && _proxyIP) {{
+                    const parts = c.split(' ');
+                    for (let i = 0; i < parts.length; i++) {{
+                        if (/^\\d{{1,3}}\\.\\d{{1,3}}\\.\\d{{1,3}}\\.\\d{{1,3}}$/.test(parts[i]) && parts[i] !== _proxyIP) {{
+                            return true;
+                        }}
+                    }}
+                }}
+                return false;
+            }};
+            window.RTCPeerConnection = window.webkitRTCPeerConnection = window.mozRTCPeerConnection = function(...args) {{
+                const pc = new OrigPeerConn(...args);
+                const origAddEventListener = pc.addEventListener.bind(pc);
+                pc.addEventListener = function(type, listener, options) {{
+                    if (type === 'icecandidate') {{
+                        const wrappedListener = function(event) {{
+                            if (event.candidate && event.candidate.candidate) {{
+                                const c = event.candidate.candidate;
+                                if (isPrivateIP(c)) return;
+                                if (isSpoofedOrPublic(c)) return;
                             }}
-                        }}
-                        return false;
-                    }};
-                    const origAddEventListener = pc.addEventListener.bind(pc);
-                    pc.addEventListener = function(type, listener, options) {{
-                        if (type === 'icecandidate') {{
-                            const wrappedListener = function(event) {{
-                                if (event.candidate && event.candidate.candidate) {{
-                                    const c = event.candidate.candidate;
-                                    if (isPrivateIP(c)) return;
-                                    if (isRealPublicIP(c)) return;
-                                }}
-                                return listener.call(this, event);
-                            }};
-                            return origAddEventListener(type, wrappedListener, options);
-                        }}
-                        return origAddEventListener(type, listener, options);
-                    }};
-                    Object.defineProperty(pc, 'onicecandidate', {{
-                        set: function(handler) {{ this._onicecandidate = handler; }},
-                        get: function() {{ return this._onicecandidate; }}
-                    }});
-                    origAddEventListener('icecandidate', (event) => {{
-                        if (event.candidate && event.candidate.candidate) {{
-                            const c = event.candidate.candidate;
-                            if (isPrivateIP(c)) return;
-                            if (isRealPublicIP(c)) return;
-                        }}
-                        if (pc._onicecandidate) pc._onicecandidate(event);
-                    }});
-                    return pc;
+                            return listener.call(this, event);
+                        }};
+                        return origAddEventListener(type, wrappedListener, options);
+                    }}
+                    return origAddEventListener(type, listener, options);
                 }};
-                window.RTCPeerConnection.prototype = OrigPeerConn.prototype;
-                OrigPeerConn.prototype.constructor = window.RTCPeerConnection;
-                makeNative(window.RTCPeerConnection, 'RTCPeerConnection');
-            }}
-        }}
+                Object.defineProperty(pc, 'onicecandidate', {{
+                    set: function(handler) {{ this._onicecandidate = handler; }},
+                    get: function() {{ return this._onicecandidate; }}
+                }});
+                origAddEventListener('icecandidate', (event) => {{
+                    if (event.candidate && event.candidate.candidate) {{
+                        const c = event.candidate.candidate;
+                        if (isPrivateIP(c)) return;
+                        if (isSpoofedOrPublic(c)) return;
+                    }}
+                    if (pc._onicecandidate) pc._onicecandidate(event);
+                }});
+                return pc;
+            }};
+            window.RTCPeerConnection.prototype = OrigPeerConn.prototype;
+            OrigPeerConn.prototype.constructor = window.RTCPeerConnection;
+            makeNative(window.RTCPeerConnection, 'RTCPeerConnection');
+        }})();
 
         // 4. Guaranteed Canvas Serialization Noise
         if ({str(canvas_noise).lower()}) {{
@@ -1673,14 +1654,19 @@ async def launch_profile(profile_id: str, force_headless: bool = False):
                 else:
                     return {"status": "error", "message": "FAIL-CLOSED: All proxies are dead. Aborting browser launch to prevent IP leak."}
         if not original_proxy and not assigned_proxy:
-            # Profile doesn't use proxies — completely disable WebRTC at Chrome level
-            args.append('--disable-webrtc')
+            # No proxy: allow WebRTC with real local IP (user wants real IP)
+            pass
             
-        # 2. Network Leak Prevention Arguments (Always active)
-        args.extend([
-            '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
-            '--enforce-webrtc-ip-permission-check'
-        ])
+        # 2. Network Leak Prevention Arguments
+        if assigned_proxy:
+            # Proxy mode: block non-proxied UDP to prevent real IP leak
+            args.extend([
+                '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
+                '--enforce-webrtc-ip-permission-check'
+            ])
+        else:
+            # No proxy mode: allow normal UDP (real IP is intended)
+            pass
 
         if assigned_proxy:
             proxy = {"server": assigned_proxy["server"]}
