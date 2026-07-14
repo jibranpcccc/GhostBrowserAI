@@ -228,14 +228,21 @@ def _generate_spoofing_js(profile_config: dict) -> str:
                     if (ctx) {{
                         const oldStyle = ctx.fillStyle;
                         const oldAlpha = ctx.globalAlpha;
+                        // Save original pixel data before modification
+                        const w = Math.min(this.width, 3);
+                        const h = Math.min(this.height, 3);
+                        const savedData = ctx.getImageData(0, 0, w, h);
                         ctx.globalAlpha = 1.0;
                         ctx.fillStyle = "rgb({canvas_r_offset}, {canvas_g_offset}, {canvas_b_offset})";
                         ctx.fillRect(0, 0, 1, 1);
-                        // Scatter additional noise pixels to avoid single-pixel detection
                         ctx.fillStyle = "rgb({(canvas_r_offset + 37) % 256}, {(canvas_g_offset + 53) % 256}, {(canvas_b_offset + 71) % 256})";
                         ctx.fillRect(({_seed} % 3) + 1, ({_seed} % 3) + 1, 1, 1);
                         ctx.fillStyle = oldStyle;
                         ctx.globalAlpha = oldAlpha;
+                        const result = originalToDataURL.apply(this, arguments);
+                        // Restore original pixels
+                        ctx.putImageData(savedData, 0, 0);
+                        return result;
                     }}
                 }} catch (e) {{}}
                 return originalToDataURL.apply(this, arguments);
@@ -248,6 +255,9 @@ def _generate_spoofing_js(profile_config: dict) -> str:
                     if (ctx) {{
                         const oldStyle = ctx.fillStyle;
                         const oldAlpha = ctx.globalAlpha;
+                        const w = Math.min(this.width, 3);
+                        const h = Math.min(this.height, 3);
+                        const savedData = ctx.getImageData(0, 0, w, h);
                         ctx.globalAlpha = 1.0;
                         ctx.fillStyle = "rgb({canvas_r_offset}, {canvas_g_offset}, {canvas_b_offset})";
                         ctx.fillRect(0, 0, 1, 1);
@@ -255,6 +265,9 @@ def _generate_spoofing_js(profile_config: dict) -> str:
                         ctx.fillRect(({_seed} % 3) + 1, ({_seed} % 3) + 1, 1, 1);
                         ctx.fillStyle = oldStyle;
                         ctx.globalAlpha = oldAlpha;
+                        const result = originalToBlob.apply(this, arguments);
+                        ctx.putImageData(savedData, 0, 0);
+                        return result;
                     }}
                 }} catch (e) {{}}
                 return originalToBlob.apply(this, arguments);
@@ -447,7 +460,7 @@ def _generate_spoofing_js(profile_config: dict) -> str:
 
         // 7. Plugin and MimeType spoofing (proper prototypes)
         (function() {{
-            var _pluginNames = ['Chrome PDF Viewer', 'Chrome PDF Plugin', 'Chrome Client Side Rendering Model', 'Chromium PDF Viewer', 'Native Client'];
+            var _pluginNames = ['Chrome PDF Plugin', 'Chrome PDF Viewer', 'Chromium PDF Viewer'];
             var _pluginData = _pluginNames.map(function(name, idx) {{
                 return {{ name: name, description: name, filename: name + '.dll', length: 1,
                     item: function(i) {{ return i === 0 ? this : null; }},
@@ -495,15 +508,17 @@ def _generate_spoofing_js(profile_config: dict) -> str:
             const rects = originalGetClientRects.apply(this, arguments);
             for (let i = 0; i < rects.length; i++) {{
                 const r = rects[i];
+                const _rx = r.x, _ry = r.y, _rw = r.width, _rh = r.height;
+                const _rt = r.top, _rr = r.right, _rb = r.bottom, _rl = r.left;
                 Object.defineProperties(r, {{
-                    x: {{ get: () => r.x + noise }},
-                    y: {{ get: () => r.y + noise }},
-                    width: {{ get: () => r.width + noise }},
-                    height: {{ get: () => r.height + noise }},
-                    top: {{ get: () => r.top + noise }},
-                    right: {{ get: () => r.right + noise }},
-                    bottom: {{ get: () => r.bottom + noise }},
-                    left: {{ get: () => r.left + noise }}
+                    x: {{ get: () => _rx + noise }},
+                    y: {{ get: () => _ry + noise }},
+                    width: {{ get: () => _rw + noise }},
+                    height: {{ get: () => _rh + noise }},
+                    top: {{ get: () => _rt + noise }},
+                    right: {{ get: () => _rr + noise }},
+                    bottom: {{ get: () => _rb + noise }},
+                    left: {{ get: () => _rl + noise }}
                 }});
             }}
             return rects;
@@ -512,15 +527,17 @@ def _generate_spoofing_js(profile_config: dict) -> str:
         const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
         Element.prototype.getBoundingClientRect = function() {{
             const r = originalGetBoundingClientRect.apply(this, arguments);
+            const _rx = r.x, _ry = r.y, _rw = r.width, _rh = r.height;
+            const _rt = r.top, _rr = r.right, _rb = r.bottom, _rl = r.left;
             Object.defineProperties(r, {{
-                x: {{ get: () => r.x + noise }},
-                y: {{ get: () => r.y + noise }},
-                width: {{ get: () => r.width + noise }},
-                height: {{ get: () => r.height + noise }},
-                top: {{ get: () => r.top + noise }},
-                right: {{ get: () => r.right + noise }},
-                bottom: {{ get: () => r.bottom + noise }},
-                left: {{ get: () => r.left + noise }}
+                x: {{ get: () => _rx + noise }},
+                y: {{ get: () => _ry + noise }},
+                width: {{ get: () => _rw + noise }},
+                height: {{ get: () => _rh + noise }},
+                top: {{ get: () => _rt + noise }},
+                right: {{ get: () => _rr + noise }},
+                bottom: {{ get: () => _rb + noise }},
+                left: {{ get: () => _rl + noise }}
             }});
             return r;
         }};
@@ -744,7 +761,7 @@ def _generate_spoofing_js(profile_config: dict) -> str:
         Object.defineProperty(navigator, 'platform', {{ get: () => '{_navigator_platform}' }});
         // Do NOT define navigator.oscpu — it's Firefox-only and its presence in Chrome is a detection signal
 
-        Object.defineProperty(navigator, 'product', {{ get: () => 'Chrome' }});
+        Object.defineProperty(navigator, 'product', {{ get: () => 'Gecko' }});
         Object.defineProperty(navigator, 'vendor', {{ get: () => 'Google Inc.' }});
         // Headless Chrome detection bypass: window.chrome object
         if (!window.chrome) {{
@@ -985,18 +1002,19 @@ def _generate_spoofing_js(profile_config: dict) -> str:
         (function() {{
             if (typeof SVGElement !== 'undefined') {{
                 var _origGetBBox = SVGElement.prototype.getBBox;
-                SVGElement.prototype.getBBox = function() {{
-                    var bbox = _origGetBBox.apply(this, arguments);
-                    try {{
-                        Object.defineProperties(bbox, {{
-                            x: {{ get: function() {{ return bbox.x + noise; }} }},
-                            y: {{ get: function() {{ return bbox.y + noise; }} }},
-                            width: {{ get: function() {{ return bbox.width + noise; }} }},
-                            height: {{ get: function() {{ return bbox.height + noise; }} }}
-                        }});
-                    }} catch(e) {{}}
-                    return bbox;
-                }};
+            SVGElement.prototype.getBBox = function() {{
+                var bbox = _origGetBBox.apply(this, arguments);
+                try {{
+                    var _bx = bbox.x, _by = bbox.y, _bw = bbox.width, _bh = bbox.height;
+                    Object.defineProperties(bbox, {{
+                        x: {{ get: function() {{ return _bx + noise; }} }},
+                        y: {{ get: function() {{ return _by + noise; }} }},
+                        width: {{ get: function() {{ return _bw + noise; }} }},
+                        height: {{ get: function() {{ return _bh + noise; }} }}
+                    }});
+                }} catch(e) {{}}
+                return bbox;
+            }};
             }}
             if (typeof SVGSVGElement !== 'undefined' && SVGSVGElement.prototype.createSVGPoint) {{
                 var _origCreatePoint = SVGSVGElement.prototype.createSVGPoint;
@@ -1006,8 +1024,9 @@ def _generate_spoofing_js(profile_config: dict) -> str:
                     pt.matrixTransform = function(m) {{
                         var result = _origMatrixTransform.apply(this, arguments);
                         try {{
-                            Object.defineProperty(result, 'x', {{ get: function() {{ return result.x + noise; }} }});
-                            Object.defineProperty(result, 'y', {{ get: function() {{ return result.y + noise; }} }});
+                            var _mx = result.x, _my = result.y;
+                            Object.defineProperty(result, 'x', {{ get: function() {{ return _mx + noise; }} }});
+                            Object.defineProperty(result, 'y', {{ get: function() {{ return _my + noise; }} }});
                         }} catch(e) {{}}
                         return result;
                     }};
@@ -1343,6 +1362,11 @@ async def launch_profile(profile_id: str, force_headless: bool = False):
         # P2G: Language and window size flags
         _lang_tag = profile.get('locale', 'en-US').replace('_', '-')
         args.append(f'--lang={_lang_tag}')
+        # Calculate viewport BEFORE constructing args
+        _early_adv_for_args = profile.get("advanced", {}) or {}
+        _scr_parts_args = _early_adv_for_args.get("screen_resolution", "1920x1080").split("x")
+        _vp_w = int(_scr_parts_args[0]) if len(_scr_parts_args) == 2 and _scr_parts_args[0].isdigit() else 1920
+        _vp_h = int(_scr_parts_args[1]) if len(_scr_parts_args) == 2 and _scr_parts_args[1].isdigit() else 1080
         args.append(f'--window-size={_vp_w},{_vp_h}')
         args.append('--disable-background-timer-throttling')
         args.append('--disable-backgrounding-occluded-windows')
@@ -1412,13 +1436,7 @@ async def launch_profile(profile_id: str, force_headless: bool = False):
                 
             args.append(f'--host-resolver-rules="MAP * ~NOTFOUND , EXCLUDE {assigned_proxy["server"].replace("http://", "").split(":")[0]}"')
 
-        # Fix #3: Viewport MUST match screen_resolution from the AI-generated fingerprint
-        _early_adv = profile.get("advanced", {})
-        _scr_parts = _early_adv.get("screen_resolution", "1920x1080").split("x")
-        _vp_w = int(_scr_parts[0]) if len(_scr_parts) == 2 and _scr_parts[0].isdigit() else 1920
-        _vp_h = int(_scr_parts[1]) if len(_scr_parts) == 2 and _scr_parts[1].isdigit() else 1080
-        
-        is_headless = force_headless or _early_adv.get("headless", False)
+        is_headless = force_headless or _early_adv_for_args.get("headless", False)
 
         context = await playwright.chromium.launch_persistent_context(
             user_data_dir=profile["path"],
@@ -1431,7 +1449,7 @@ async def launch_profile(profile_id: str, force_headless: bool = False):
             viewport={"width": _vp_w, "height": _vp_h}  # Now matches AI-generated screen_resolution
         )
         
-        if _early_adv.get("block_trackers", False):
+        if _early_adv_for_args.get("block_trackers", False):
             async def block_tracker_route(route, request):
                 url = request.url.lower()
                 trackers = ["google-analytics.com", "doubleclick.net", "facebook.com/tr", "hotjar.com", "pixel.facebook.com", "analytics", "tracker"]

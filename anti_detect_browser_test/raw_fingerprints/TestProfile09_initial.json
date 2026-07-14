@@ -4,7 +4,7 @@
     "appVersion": "5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
     "platform": "Win32",
     "vendor": "Google Inc.",
-    "product": "Chrome",
+    "product": "Gecko",
     "productSub": "20030107",
     "webdriver": false,
     "appName": "Netscape",
@@ -108,7 +108,7 @@
     "calendar": "gregory",
     "numberingSystem": "latn",
     "dateFormat": "Tuesday, July 14, 2026",
-    "timeFormat": "3:25:26 AM Eastern Daylight Time"
+    "timeFormat": "4:11:26 AM Eastern Daylight Time"
   },
   "canvas_2d": {
     "dataURL": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAARgAAAA8CAYAAAC9xKUYAAAQAElEQVR4Aexde1xVVfb/nnvhAvIUeS",
@@ -451,9 +451,9 @@
     "constructorName": "RTCPeerConnection",
     "exists": true
   },
-  "composite_hash": "9272d7f9d3fdd912ba4d2e3c08a5204843daf2ed0ae13018275cb0aaa3cd3169",
-  "timestamp": 1784013926573,
-  "iso_time": "2026-07-14T07:25:26.573Z",
+  "composite_hash": "676ea1c284f0965fd4d235201a59b28725b89d6d3b31e696a7813706442afeb3",
+  "timestamp": 1784016686567,
+  "iso_time": "2026-07-14T08:11:26.567Z",
   "profile_name": "TestProfile09",
   "profile_id": "1ac12dc9-fe09-4ece-a02c-3d4dc35a931b"
 }

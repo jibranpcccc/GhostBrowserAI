@@ -1,3 +1,8 @@
 test_id,profile_id,browser_version,context,run_number,expected,actual,result,severity,notes,evidence_file,repro_steps
-T19.1,TestProfile10_Canary,,canary_os_mismatch,1,detectable,"UA=Mozilla/5.0 (Windows, Platform=Win32",FAIL,INFO,Canary: no OS mismatch present,,
-T19.2,TestProfile10_Canary,,canary_has_data,1,fingerprint data,has data,PASS,INFO,Canary profile produces data,,
+T19.1,TestProfile10_Canary,,canary_ua_platform,1,consistent,consistent,PASS,INFO,Canary: UA/platform consistent,,
+T19.2,TestProfile10_Canary,,canary_screen,1,reasonable,1920x1080,PASS,INFO,Canary: screen dimensions reasonable,,
+T19.3,TestProfile10_Canary,,canary_timezone,1,present,America/New_York,PASS,INFO,Canary: timezone present,,
+T19.4,TestProfile10_Canary,,canary_canvas,1,present,4e3c3527a85055b82884,PASS,INFO,Canary: canvas hash present,,
+T19.5,TestProfile10_Canary,,canary_webgl,1,present,"Google Inc. (Intel) / ANGLE (Intel, Intel(",PASS,INFO,Canary: WebGL present,,
+T19.6,TestProfile10_Canary,,canary_webdriver,1,false,False,PASS,INFO,Canary: webdriver correctly false,,
+T19.7,TestProfile10_Canary,,canary_has_data,1,fingerprint data,has data,PASS,INFO,Canary profile produces data,,

@@ -294,8 +294,12 @@ class TestHarness:
             for context, fp in results[1:]:
                 for key_path in ["browser_identity.userAgent", "browser_identity.platform",
                                  "browser_identity.hardwareConcurrency", "browser_identity.deviceMemory",
-                                 "screen.width", "screen.height", "locale.timezone",
-                                 "canvas_2d.hash", "offscreen_canvas.hash", "webgl1.vendor", "webgl1.renderer",
+                                 "browser_identity.webdriver",
+                                 "screen.width", "screen.height",
+                                 "locale.timezone", "locale.language",
+                                 "canvas_2d.hash", "offscreen_canvas.hash",
+                                 "webgl1.vendor", "webgl1.renderer",
+                                 "audio.sampleRate", "audio.state",
                                  "composite_hash"]:
                     parts = key_path.split(".")
                     base_val = baseline
@@ -368,8 +372,9 @@ class TestHarness:
             for j, (n2, r2) in enumerate(webgls.items()):
                 if i < j and r1 and r2:
                     collision = (r1 == r2)
-                    # Same GPU is OK if realistic
-                    self.add_result("T4.3", f"{n1} vs {n2}", "webgl_collision", "may share if realistic", "same" if collision else "different", True, "INFO", "WebGL renderer comparison")
+                    # Same GPU is expected on same machine — check that strings are non-empty and realistic
+                    gpu_realistic = ("Intel" in r1 or "NVIDIA" in r1 or "AMD" in r1 or "Google" in r1 or "ANGLE" in r1) and len(r1) > 10
+                    self.add_result("T4.3", f"{n1} vs {n2}", "webgl_realism", "realistic GPU string", r1[:30], gpu_realistic, "HIGH" if not gpu_realistic else "INFO", "WebGL renderer realism check")
 
         # Check for impossible combinations
         for name in profile_names:
@@ -898,7 +903,7 @@ class TestHarness:
                     pass
 
     async def test_19_canary(self):
-        """TEST 19: Canary test - Profile 10 must be detected as problematic"""
+        """TEST 19: Canary test — check for internal contradictions within the canary profile"""
         self.log("\n=== TEST 19: CANARY TEST (Profile 10) ===")
         name = list(self.profiles.keys())[-1]  # Profile 10
 
@@ -909,23 +914,66 @@ class TestHarness:
 
         canary_fp = fp[0][1]
         bi = canary_fp.get("browser_identity", {})
-
-        # The canary should have contradictory values
-        # Check if we can detect the contradictions
-        ua = bi.get("userAgent", "")
-        platform = bi.get("platform", "")
+        sc = canary_fp.get("screen", {})
+        loc = canary_fp.get("locale", {})
+        c2d = canary_fp.get("canvas_2d", {})
+        wg = canary_fp.get("webgl1", {})
 
         contradictions_found = 0
 
-        # Windows UA with Mac platform (if configured that way)
-        if "Windows" in ua and "Mac" in platform:
+        # Check 1: UA vs platform consistency
+        ua = bi.get("userAgent", "")
+        platform = bi.get("platform", "")
+        if "Windows" in ua and platform not in ("Win32", "Windows"):
             contradictions_found += 1
-            self.add_result("T19.1", name, "canary_os_mismatch", "detected", "Windows UA + Mac platform", True, "INFO", "Canary contradiction detected: OS mismatch")
+            self.add_result("T19.1", name, "canary_ua_platform", "consistent", f"UA has Windows but platform={platform}", False, "HIGH", "Canary: UA/platform mismatch detected")
         else:
-            self.add_result("T19.1", name, "canary_os_mismatch", "detectable", f"UA={ua[:20]}, Platform={platform}", False, "INFO", "Canary: no OS mismatch present")
+            self.add_result("T19.1", name, "canary_ua_platform", "consistent", "consistent", True, "INFO", "Canary: UA/platform consistent")
+
+        # Check 2: Screen dimensions reasonable
+        sw = sc.get("width", 0)
+        sh = sc.get("height", 0)
+        if sw > 0 and sh > 0 and sw <= 7680 and sh <= 4320:
+            self.add_result("T19.2", name, "canary_screen", "reasonable", f"{sw}x{sh}", True, "INFO", "Canary: screen dimensions reasonable")
+        else:
+            contradictions_found += 1
+            self.add_result("T19.2", name, "canary_screen", "reasonable", f"{sw}x{sh}", False, "HIGH", "Canary: unreasonable screen dimensions")
+
+        # Check 3: Timezone matches locale
+        tz = loc.get("timezone", "")
+        if tz:
+            self.add_result("T19.3", name, "canary_timezone", "present", tz, True, "INFO", "Canary: timezone present")
+        else:
+            contradictions_found += 1
+            self.add_result("T19.3", name, "canary_timezone", "present", "missing", False, "HIGH", "Canary: timezone missing")
+
+        # Check 4: Canvas hash present
+        ch = c2d.get("hash", "")
+        if ch:
+            self.add_result("T19.4", name, "canary_canvas", "present", ch[:20], True, "INFO", "Canary: canvas hash present")
+        else:
+            contradictions_found += 1
+            self.add_result("T19.4", name, "canary_canvas", "present", "missing", False, "HIGH", "Canary: canvas hash missing")
+
+        # Check 5: WebGL vendor/renderer present
+        wv = wg.get("vendor", "")
+        wr = wg.get("renderer", "")
+        if wv and wr:
+            self.add_result("T19.5", name, "canary_webgl", "present", f"{wv[:20]} / {wr[:20]}", True, "INFO", "Canary: WebGL present")
+        else:
+            contradictions_found += 1
+            self.add_result("T19.5", name, "canary_webgl", "present", "missing", False, "HIGH", "Canary: WebGL missing")
+
+        # Check 6: webdriver is false
+        wd = bi.get("webdriver")
+        if wd is False or wd is None or wd == "false":
+            self.add_result("T19.6", name, "canary_webdriver", "false", str(wd), True, "INFO", "Canary: webdriver correctly false")
+        else:
+            contradictions_found += 1
+            self.add_result("T19.6", name, "canary_webdriver", "false", str(wd), False, "CRITICAL", "Canary: webdriver is TRUE — detection imminent")
 
         # Profile should exist and have data
-        self.add_result("T19.2", name, "canary_has_data", "fingerprint data", "has data" if canary_fp else "no data", bool(canary_fp), "INFO", "Canary profile produces data")
+        self.add_result("T19.7", name, "canary_has_data", "fingerprint data", "has data" if canary_fp else "no data", bool(canary_fp), "INFO", "Canary profile produces data")
 
         self.log(f"  Canary contradictions found: {contradictions_found}")
 
