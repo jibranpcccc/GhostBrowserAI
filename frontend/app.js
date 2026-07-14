@@ -953,7 +953,6 @@ async function submitCreateProfile() {
             preview.appendChild(document.createElement('br'));
             preview.appendChild(document.createTextNode('Check the Profiles list to view them.'));
         }
-        }
         addActivity(`Bulk created ${count} profiles`, 'success');
         addLogEntry('info', `Bulk profile creation finished.`);
     } else {
@@ -962,6 +961,7 @@ async function submitCreateProfile() {
             const b2 = document.createElement('b'); b2.textContent = 'Profile ID: '; preview.appendChild(b2);
             preview.appendChild(document.createTextNode(profile.id));
             preview.appendChild(document.createElement('br'));
+            preview.innerHTML += `
                 OS: ${profile.advanced?.os || profile.os || 'AI Generated'}<br>
                 GPU: ${(profile.advanced?.webgl_renderer || profile.webgl_renderer || 'AI Generated').slice(0,50)}<br>
                 Timezone: ${profile.timezone || 'AI Generated'}<br>
