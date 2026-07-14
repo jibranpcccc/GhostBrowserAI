@@ -191,13 +191,24 @@
                     <button class="btn-ghost" onclick="bulkLaunch()">▶ Launch Selected</button>
                     <button class="btn-primary" onclick="openRunMacroModal()">🤖 Run Macro</button>
                     <button class="btn-ghost stop" onclick="bulkDelete()">❌ Delete Selected</button>
+                    <button class="btn-secondary btn-sm" onclick="bulkAssignTag()">&#127991; Tag</button><button class="btn-secondary btn-sm" onclick="bulkMoveToFolder()">&#128193; Move</button>
                 </div>
+                <input type="file" id="import-file-input" accept=".json" style="display:none;" onchange="importProfiles()"><button class="btn-secondary" onclick="document.getElementById('import-file-input').click()" style="font-size:0.8rem;padding:0.4rem 0.75rem;">&#128229; Import</button>
                 <button class="btn-primary" onclick="openCreateModal()">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
                     New Profile
                 </button>
             </div>
         </div>
+        <div style="display:flex;gap:1rem;">
+            <div style="min-width:180px;max-width:200px;">
+                <h4 style="margin:0 0 0.5rem;font-size:0.85rem;color:var(--text-muted);">Folders</h4>
+                <div id="folder-list">
+                    <div class="folder-item active" onclick="filterByFolder(null)">📁 All Profiles</div>
+                </div>
+                <button class="btn-secondary" onclick="createFolder()" style="margin-top:0.5rem;font-size:0.8rem;width:100%;padding:0.4rem;">+ New Folder</button>
+            </div>
+            <div style="flex:1;min-width:0;">
         <div class="table-container">
             <table class="data-table">
                 <thead>
@@ -223,56 +234,7 @@
             <p>Create your first AI-powered stealth profile.</p>
             <button class="btn-primary" onclick="openCreateModal()">Generate with Kimi AI</button>
         </div>
-    </section>
-
-    <!-- PAGE: MACROS -->
-    <section class="page" id="page-macros" style="display: none;">
-        <div class="page-toolbar">
-            <h2 style="margin:0;font-size:1rem;font-weight:600;">Automation Macros</h2>
-            <div style="display: flex; gap: 0.5rem;">
-                <button class="btn-secondary" onclick="openScheduleModal()">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                    Schedule Job
-                </button>
-                <button class="btn-primary btn-glow" onclick="openMacroModal()">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    New Macro
-                </button>
             </div>
-        </div>
-        
-        <div class="table-container">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Macro Name</th>
-                        <th>Description</th>
-                        <th>Steps Count</th>
-                        <th style="text-align:right">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="macros-grid-old">
-                    <tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--text-muted);">No macros created yet.</td></tr>
-                </tbody>
-            </table>
-        </div>
-
-        <h3 style="margin-top: 2rem; margin-bottom: 1rem;">Scheduled Jobs ⏰</h3>
-        <div class="table-container">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Job ID</th>
-                        <th>Macro Name</th>
-                        <th>Profiles Target</th>
-                        <th>Cron Schedule</th>
-                        <th style="text-align:right">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="schedules-grid-old">
-                    <tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted);">No active scheduled jobs.</td></tr>
-                </tbody>
-            </table>
         </div>
     </section>
 
@@ -778,6 +740,9 @@
                     <label class="form-label">Profile Name <span class="required">*</span></label>
                     <input type="text" id="edit-profile-name" class="form-input">
                 </div>
+                <input type="hidden" id="edit-selected-color" value="">
+                <label style="display:block;font-size:0.8rem;color:var(--text-muted);margin:0.5rem 0 0.25rem;">Profile Color</label>
+                <div id="edit-color-picker" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:0.5rem;"></div>
                 <div class="form-group">
                     <label class="form-label">Locale (Optional)</label>
                     <input type="text" id="edit-profile-locale" class="form-input" placeholder="e.g. en-US">

@@ -1,0 +1,13 @@
+test_id,profile_id,browser_version,context,run_number,expected,actual,result,severity,notes,evidence_file,repro_steps
+T8.1,TestProfile01,,canvas_100_reads,1,1 unique hash,1 unique,PASS,INFO,100 repeated canvas reads,,
+T8.2,TestProfile01,,offscreen_match,1,match canvas2d,match,PASS,HIGH,OffscreenCanvas vs Canvas2D consistency,,
+T8.1,TestProfile03,,canvas_100_reads,1,1 unique hash,1 unique,PASS,INFO,100 repeated canvas reads,,
+T8.2,TestProfile03,,offscreen_match,1,match canvas2d,match,PASS,HIGH,OffscreenCanvas vs Canvas2D consistency,,
+T8.1,TestProfile05,,canvas_100_reads,1,1 unique hash,1 unique,PASS,INFO,100 repeated canvas reads,,
+T8.2,TestProfile05,,offscreen_match,1,match canvas2d,match,PASS,HIGH,OffscreenCanvas vs Canvas2D consistency,,
+T8.1,TestProfile07,,canvas_100_reads,1,1 unique hash,1 unique,PASS,INFO,100 repeated canvas reads,,
+T8.2,TestProfile07,,offscreen_match,1,match canvas2d,match,PASS,HIGH,OffscreenCanvas vs Canvas2D consistency,,
+T8.1,TestProfile09,,canvas_100_reads,1,1 unique hash,1 unique,PASS,INFO,100 repeated canvas reads,,
+T8.2,TestProfile09,,offscreen_match,1,match canvas2d,match,PASS,HIGH,OffscreenCanvas vs Canvas2D consistency,,
+T8.1,TestProfile10_Canary,,canvas_100_reads,1,1 unique hash,1 unique,PASS,INFO,100 repeated canvas reads,,
+T8.2,TestProfile10_Canary,,offscreen_match,1,match canvas2d,match,PASS,HIGH,OffscreenCanvas vs Canvas2D consistency,,

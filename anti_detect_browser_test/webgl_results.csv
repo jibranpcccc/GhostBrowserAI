@@ -1,0 +1,13 @@
+test_id,profile_id,browser_version,context,run_number,expected,actual,result,severity,notes,evidence_file,repro_steps
+T9.1,TestProfile01,,webgl1_vs_webgl2,1,same GPU,"w1=ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11), w2=ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)",PASS,INFO,WebGL1 vs WebGL2 GPU match,,
+T9.2,TestProfile01,,max_texture_size,1,4096-32768,18362,PASS,MEDIUM,Max texture size realistic,,
+T9.1,TestProfile03,,webgl1_vs_webgl2,1,same GPU,"w1=ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11), w2=ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)",PASS,INFO,WebGL1 vs WebGL2 GPU match,,
+T9.2,TestProfile03,,max_texture_size,1,4096-32768,19585,PASS,MEDIUM,Max texture size realistic,,
+T9.1,TestProfile05,,webgl1_vs_webgl2,1,same GPU,"w1=ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11), w2=ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)",PASS,INFO,WebGL1 vs WebGL2 GPU match,,
+T9.2,TestProfile05,,max_texture_size,1,4096-32768,19667,PASS,MEDIUM,Max texture size realistic,,
+T9.1,TestProfile07,,webgl1_vs_webgl2,1,same GPU,"w1=ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11), w2=ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)",PASS,INFO,WebGL1 vs WebGL2 GPU match,,
+T9.2,TestProfile07,,max_texture_size,1,4096-32768,17954,PASS,MEDIUM,Max texture size realistic,,
+T9.1,TestProfile09,,webgl1_vs_webgl2,1,same GPU,"w1=ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11), w2=ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)",PASS,INFO,WebGL1 vs WebGL2 GPU match,,
+T9.2,TestProfile09,,max_texture_size,1,4096-32768,19913,PASS,MEDIUM,Max texture size realistic,,
+T9.1,TestProfile10_Canary,,webgl1_vs_webgl2,1,same GPU,"w1=ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11), w2=ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)",PASS,INFO,WebGL1 vs WebGL2 GPU match,,
+T9.2,TestProfile10_Canary,,max_texture_size,1,4096-32768,17319,PASS,MEDIUM,Max texture size realistic,,

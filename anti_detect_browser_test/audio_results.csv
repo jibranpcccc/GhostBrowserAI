@@ -1,0 +1,13 @@
+test_id,profile_id,browser_version,context,run_number,expected,actual,result,severity,notes,evidence_file,repro_steps
+T10.1,TestProfile01,,audio_100_reads,1,1 unique hash,1 unique,PASS,INFO,100 repeated audio reads,,
+T10.2,TestProfile01,,audio_no_nan,1,0 NaN,0,PASS,CRITICAL,Audio NaN check,,
+T10.1,TestProfile03,,audio_100_reads,1,1 unique hash,1 unique,PASS,INFO,100 repeated audio reads,,
+T10.2,TestProfile03,,audio_no_nan,1,0 NaN,0,PASS,CRITICAL,Audio NaN check,,
+T10.1,TestProfile05,,audio_100_reads,1,1 unique hash,1 unique,PASS,INFO,100 repeated audio reads,,
+T10.2,TestProfile05,,audio_no_nan,1,0 NaN,0,PASS,CRITICAL,Audio NaN check,,
+T10.1,TestProfile07,,audio_100_reads,1,1 unique hash,1 unique,PASS,INFO,100 repeated audio reads,,
+T10.2,TestProfile07,,audio_no_nan,1,0 NaN,0,PASS,CRITICAL,Audio NaN check,,
+T10.1,TestProfile09,,audio_100_reads,1,1 unique hash,1 unique,PASS,INFO,100 repeated audio reads,,
+T10.2,TestProfile09,,audio_no_nan,1,0 NaN,0,PASS,CRITICAL,Audio NaN check,,
+T10.1,TestProfile10_Canary,,audio_100_reads,1,1 unique hash,1 unique,PASS,INFO,100 repeated audio reads,,
+T10.2,TestProfile10_Canary,,audio_no_nan,1,0 NaN,0,PASS,CRITICAL,Audio NaN check,,

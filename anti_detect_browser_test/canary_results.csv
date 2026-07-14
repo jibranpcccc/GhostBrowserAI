@@ -1,0 +1,3 @@
+test_id,profile_id,browser_version,context,run_number,expected,actual,result,severity,notes,evidence_file,repro_steps
+T19.1,TestProfile10_Canary,,canary_os_mismatch,1,detectable,"UA=Mozilla/5.0 (Windows, Platform=Win32",FAIL,INFO,Canary: no OS mismatch present,,
+T19.2,TestProfile10_Canary,,canary_has_data,1,fingerprint data,has data,PASS,INFO,Canary profile produces data,,

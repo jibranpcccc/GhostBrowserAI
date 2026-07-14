@@ -1,6 +1,6 @@
-/* ===== GhostBrowser App.js — Full Frontend Logic ===== */
+/* ===== GhostBrowser App.js â€” Full Frontend Logic ===== */
 
-const API = '';  // Same origin — FastAPI serves frontend
+const API = '';  // Same origin â€” FastAPI serves frontend
 
 // =========================================================
 // STATE
@@ -139,7 +139,7 @@ function renderCFAccounts(data) {
         const mins = isCooling ? Math.ceil((acc.cooldown_remaining_seconds || 0) / 60) : 0;
         items.push(`
             <div class="cf-account-item">
-                <div class="cf-status ${isCooling ? 'cooldown' : 'healthy'}">${isCooling ? '⏳ Cooldown' : '✓ Healthy'}</div>
+                <div class="cf-status ${isCooling ? 'cooldown' : 'healthy'}">${isCooling ? 'â³ Cooldown' : 'âœ“ Healthy'}</div>
                 <div class="cf-account-id">${acc.account_id}</div>
                 ${isCooling ? `<div class="cf-cooldown-timer">${mins}m left</div>` : ''}
             </div>
@@ -165,7 +165,7 @@ async function fetchProfiles() {
     } catch (e) { /* backend offline */ }
 }
 
-function renderProfiles(profiles) {
+﻿function renderProfiles(profiles) {
     const grid = document.getElementById('profiles-grid');
     if (!grid) return;
 
@@ -181,35 +181,45 @@ function renderProfiles(profiles) {
     const emptyState = document.getElementById('profiles-empty');
     if (emptyState) emptyState.style.display = 'none';
 
+    const PROFILE_COLORS = ['#6366f1','#f43f5e','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ec4899','#06b6d4','#84cc16','#f97316'];
+
+    profiles = [...profiles].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+
     grid.innerHTML = profiles.map(p => {
         const isRunning = p.status === 'Running';
         const initials = (p.name || 'P').slice(0, 2).toUpperCase();
         const os = p.advanced?.os || p.os || '?';
-        const osEmoji = os === 'Mac' ? '🍎' : '🪟';
+        const osEmoji = os === 'Mac' ? '\u{1F34E}' : '\u{1FA9F}';
         const proxy = p.proxy ? p.proxy : 'No Proxy';
         const idShort = p.id ? p.id.split('-')[0] : 'N/A';
-        const tagElements = (p.tags || []).map(t => `<span class="status-indicator" style="background:var(--primary);color:var(--bg);font-weight:600;font-size:0.65rem;padding:2px 6px;">${escHtml(t)}</span>`).join('');
-        const pinBadge = p.proxy_pin ? `<span title="Proxy Pinned" style="font-size: 0.8rem; line-height: 1;">📌</span>` : '';
+        const tags = Array.isArray(p.tags) ? p.tags : (p.tags ? String(p.tags).split(',').map(s=>s.trim()).filter(Boolean) : []);
+        const tagElements = tags.map(t => `<span class="status-indicator" style="background:var(--primary);color:var(--bg);font-weight:600;font-size:0.65rem;padding:2px 6px;border-radius:3px;">${escHtml(t)}</span>`).join('');
+        const isPinned = p.pinned === true;
+        const color = p.color || PROFILE_COLORS[Math.abs(p.name.charCodeAt(0)) % PROFILE_COLORS.length];
+        const pinBtn = isPinned ? '\u{1F4CC}' : '';
 
         return `
             <tr id="card-${p.id}">
                 <td><input type="checkbox" class="profile-checkbox" value="${p.id}" onchange="updateBulkActions()"></td>
                 <td>
                     <div class="td-name">
-                        <div class="profile-icon-wrapper">${initials}</div>
+                        <div class="profile-icon-wrapper" style="border-left: 3px solid ${color};">${initials}</div>
                         <div>
                             <div style="display: flex; align-items: center; gap: 4px;">
-                                ${escHtml(p.name)}
+                                ${pinBtn} ${escHtml(p.name)}
                                 <button class="btn-icon" style="padding: 2px; color: var(--text-muted); background: transparent; border: none; cursor: pointer;" onclick="openEditModal('${p.id}')" title="Edit Settings">
-                                    ⚙️
+                                    \u2699\uFE0F
                                 </button>
                             </div>
                             <div style="display: flex; gap: 4px; margin-top: 4px;">
                                 <span class="td-id">${idShort}</span>
-                                ${pinBadge}
-                                ${tagElements}
                             </div>
                         </div>
+                    </div>
+                </td>
+                <td>
+                    <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
+                        ${tagElements || '<span style="color:var(--text-muted);font-size:0.75rem;">\u2014</span>'}
                     </div>
                 </td>
                 <td>
@@ -218,18 +228,22 @@ function renderProfiles(profiles) {
                         ${isRunning ? 'Running' : 'Stopped'}
                     </div>
                 </td>
-                <td><span class="td-proxy">${escHtml(proxy)}</span></td>
+                <td><span class="td-proxy">${escHtml(typeof proxy === 'object' ? (proxy.server || 'No Proxy') : proxy)}</span></td>
                 <td>
                     <div class="td-os">${osEmoji} ${os}</div>
                 </td>
                 <td class="td-actions">
+                    <button class="btn-icon" style="padding:2px;background:transparent;border:none;cursor:pointer;" onclick="togglePin('${p.id}')" title="${isPinned ? 'Unpin' : 'Pin'}">
+                        ${isPinned ? '\u{1F4CC}' : '\u{1F4CD}'}
+                    </button>
                     ${isRunning
-                        ? `<button class="btn-secondary btn-sm" onclick="stopProfile('${p.id}')">⏹ Stop</button>`
-                        : `<button class="btn-primary btn-sm" onclick="launchProfile('${p.id}')">▶ Launch</button>`}
-                    <button class="btn-secondary btn-sm" onclick="scanProfile('${p.id}')" title="Scan Fingerprint Risk" style="padding: 0.25rem 0.5rem; color: var(--primary);">🛡️</button>
-                    <button class="btn-secondary btn-sm" onclick="openMetadataModal('${p.id}')" title="Tags & Proxy Pin" style="padding: 0.25rem 0.5rem;">🏷️</button>
-                    <button class="btn-secondary btn-sm" onclick="cloneProfile('${p.id}')" title="Clone Profile" style="padding: 0.25rem 0.5rem;">🧬</button>
-                    <button class="btn-secondary btn-sm" onclick="openCookieModal('${p.id}')" title="Manage Cookies" style="padding: 0.25rem 0.5rem;">🍪</button>
+                        ? `<button class="btn-secondary btn-sm" onclick="stopProfile('${p.id}')">\u23F9 Stop</button>`
+                        : `<button class="btn-primary btn-sm" onclick="launchProfile('${p.id}')">\u25B6 Launch</button>`}
+                    <button class="btn-secondary btn-sm" onclick="scanProfile('${p.id}')" title="Scan Fingerprint Risk" style="padding: 0.25rem 0.5rem; color: var(--primary);">\u{1F6E1}\uFE0F</button>
+                    <button class="btn-secondary btn-sm" onclick="openFingerprintModal('${p.id}')" title="Edit Fingerprint" style="padding: 0.25rem 0.5rem;">&#128300;</button>
+                    <button class="btn-secondary btn-sm" onclick="openMetadataModal('${p.id}')" title="Tags & Proxy Pin" style="padding: 0.25rem 0.5rem;">\u{1F3F7}\uFE0F</button>
+                    <button class="btn-secondary btn-sm" onclick="cloneProfile('${p.id}')" title="Clone Profile" style="padding: 0.25rem 0.5rem;">\u{1F9EC}</button>
+                    <button class="btn-secondary btn-sm" onclick="openCookieModal('${p.id}')" title="Manage Cookies" style="padding: 0.25rem 0.5rem;">\u{1F36A}</button>
                     <button class="btn-icon stop" onclick="deleteProfile('${p.id}')" title="Delete Profile">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
                     </button>
@@ -237,6 +251,34 @@ function renderProfiles(profiles) {
             </tr>
         `;
     }).join('');
+}
+﻿
+async function togglePin(id) {
+    try {
+        const res = await fetch(`${API}/api/profiles`);
+        const data = await res.json();
+        const p = data.find(x => x.id === id);
+        if (!p) return;
+        const newPinned = !p.pinned;
+        await fetch(`${API}/api/profiles/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pinned: newPinned })
+        });
+        showToast(newPinned ? 'Profile pinned' : 'Profile unpinned', 'success');
+        fetchProfiles();
+    } catch(e) { showToast('Error toggling pin', 'error'); }
+}
+
+async function setProfileColor(id, color) {
+    try {
+        await fetch(`${API}/api/profiles/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ color: color })
+        });
+        fetchProfiles();
+    } catch(e) {}
 }
 
 // --- EDIT PROFILE (FULL SETTINGS) ---
@@ -264,7 +306,7 @@ function closeEditModal() {
     currentEditProfileId = null;
 }
 
-async function openEditModal(id) {
+﻿async function openEditModal(id) {
     currentEditProfileId = id;
     switchEditModalTab('overview');
     
@@ -272,40 +314,53 @@ async function openEditModal(id) {
         const res = await fetch(`${API}/api/profiles`);
         const data = await res.json();
         const p = data.find(x => x.id === id);
-        if (p) {
-            document.getElementById('edit-profile-name').value = p.name || '';
-            document.getElementById('edit-profile-locale').value = p.locale || '';
-            document.getElementById('edit-profile-timezone').value = p.timezone || '';
-            
-            // Proxy
-            let proxyStr = '';
-            if (p.proxy) {
-                proxyStr = p.proxy.server;
-                if (p.proxy.username) proxyStr += `:${p.proxy.username}:${p.proxy.password}`;
-            }
-            document.getElementById('edit-profile-proxy').value = proxyStr;
-            
-            // Advanced
-            const adv = p.advanced || {};
-            document.getElementById('edit-profile-webrtc').value = adv.webrtc_mode || 'altered';
-            
-            if (adv.canvas_noise !== false) document.getElementById('edit-chip-canvas').classList.add('active');
-            else document.getElementById('edit-chip-canvas').classList.remove('active');
-            
-            if (adv.webgl_noise !== false) document.getElementById('edit-chip-webgl').classList.add('active');
-            else document.getElementById('edit-chip-webgl').classList.remove('active');
-            
-            if (adv.audio_noise !== false) document.getElementById('edit-chip-audio').classList.add('active');
-            else document.getElementById('edit-chip-audio').classList.remove('active');
-            
-            if (adv.headless === true) document.getElementById('edit-chip-headless').classList.add('active');
-            else document.getElementById('edit-chip-headless').classList.remove('active');
-            
-            document.getElementById('edit-modal').classList.add('show');
+        if (!p) return;
+        document.getElementById('edit-profile-name').value = p.name || '';
+        document.getElementById('edit-profile-locale').value = p.locale || '';
+        document.getElementById('edit-profile-timezone').value = p.timezone || '';
+        
+        let proxyStr = '';
+        if (p.proxy) {
+            proxyStr = p.proxy.server || '';
+            if (p.proxy.username) proxyStr += `:${p.proxy.username}:${p.proxy.password}`;
         }
+        document.getElementById('edit-profile-proxy').value = proxyStr;
+        
+        const adv = p.advanced || {};
+        document.getElementById('edit-profile-webrtc').value = adv.webrtc_mode || 'altered';
+        
+        if (adv.canvas_noise !== false) document.getElementById('edit-chip-canvas').classList.add('active');
+        else document.getElementById('edit-chip-canvas').classList.remove('active');
+        if (adv.webgl_noise !== false) document.getElementById('edit-chip-webgl').classList.add('active');
+        else document.getElementById('edit-chip-webgl').classList.remove('active');
+        if (adv.audio_noise !== false) document.getElementById('edit-chip-audio').classList.add('active');
+        else document.getElementById('edit-chip-audio').classList.remove('active');
+        if (adv.headless === true) document.getElementById('edit-chip-headless').classList.add('active');
+        else document.getElementById('edit-chip-headless').classList.remove('active');
+        
+        // Color picker
+        const PROFILE_COLORS = ['#6366f1','#f43f5e','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ec4899','#06b6d4','#84cc16','#f97316'];
+        const colorContainer = document.getElementById('edit-color-picker');
+        if (colorContainer) {
+            colorContainer.innerHTML = PROFILE_COLORS.map(c => 
+                `<div class="color-swatch${(p.color || '#6366f1') === c ? ' active' : ''}" style="width:28px;height:28px;border-radius:50%;background:${c};cursor:pointer;border:2px solid ${(p.color || '#6366f1') === c ? '#fff' : 'transparent'};" onclick="selectEditColor('${c}')"></div>`
+            ).join('');
+        }
+        
+        document.getElementById('edit-modal').classList.add('show');
     } catch(e) {
         showToast('Error loading profile: ' + e.message, 'error');
     }
+}
+
+function selectEditColor(color) {
+    document.querySelectorAll('#edit-color-picker .color-swatch').forEach(s => {
+        s.style.border = '2px solid transparent';
+        s.classList.remove('active');
+    });
+    event.target.style.border = '2px solid #fff';
+    event.target.classList.add('active');
+    document.getElementById('edit-selected-color').value = color;
 }
 
 async function saveProfileEdits() {
@@ -328,7 +383,8 @@ async function saveProfileEdits() {
             webgl_noise: document.getElementById('edit-chip-webgl').classList.contains('active'),
             audio_noise: document.getElementById('edit-chip-audio').classList.contains('active'),
             headless: document.getElementById('edit-chip-headless').classList.contains('active')
-        }
+        },
+        color: document.getElementById('edit-selected-color') ? document.getElementById('edit-selected-color').value : undefined,
     };
     
     try {
@@ -362,7 +418,8 @@ async function openMetadataModal(id) {
         // HIGH-02 FIX: API returns flat array, not {profiles: [...]}. Use data.find() directly.
         const p = Array.isArray(data) ? data.find(x => x.id === id) : null;
         if (p) {
-            document.getElementById('profile-tags').value = p.tags || '';
+            const tags = Array.isArray(p.tags) ? p.tags.join(', ') : (p.tags || '');
+            document.getElementById('profile-tags').value = tags;
             document.getElementById('proxy-pin').value = p.proxy_pin || '';
         }
     } catch(e) {}
@@ -382,7 +439,7 @@ async function saveMetadata() {
         await fetch(`${API}/api/profiles/${currentMetadataProfileId}/metadata`, {
             method: 'PATCH',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ tags: tags, proxy_pin: proxy_pin })
+            body: JSON.stringify({ tags: tags.split(',').map(s=>s.trim()).filter(Boolean), proxy_pin: proxy_pin })
         });
         showToast('Profile updated', 'success');
         closeMetadataModal();
@@ -602,13 +659,15 @@ function switchModalTab(tabName, el) {
     document.getElementById('tab-' + tabName).classList.add('active');
 }
 
-function filterProfiles() {
+﻿function filterProfiles() {
     const q = document.getElementById('profile-search').value.toLowerCase();
-    const filtered = allProfiles.filter(p =>
-        p.name.toLowerCase().includes(q) ||
-        p.id.toLowerCase().includes(q) ||
-        (p.advanced?.os || '').toLowerCase().includes(q)
-    );
+    const filtered = allProfiles.filter(p => {
+        const tags = Array.isArray(p.tags) ? p.tags : (p.tags ? String(p.tags).split(',') : []);
+        return p.name.toLowerCase().includes(q) ||
+            p.id.toLowerCase().includes(q) ||
+            (p.advanced?.os || '').toLowerCase().includes(q) ||
+            tags.some(t => t.toLowerCase().includes(q));
+    });
     renderProfiles(filtered);
 }
 
@@ -850,7 +909,7 @@ async function submitCreateProfile() {
 
         if (!res.ok) {
             setStepError(4);
-            addLogLine(`❌ Error: ${data.detail}`);
+            addLogLine(`âŒ Error: ${data.detail}`);
             document.getElementById('modal-error-msg').textContent = data.detail;
             showModalSection('modal-error');
             addActivity(`Profile creation failed: ${data.detail}`, 'error');
@@ -859,13 +918,13 @@ async function submitCreateProfile() {
         }
 
         setStepDone(4);
-        addLogLine('✅ Profile accepted — Zero-Leak Ready!');
+        addLogLine('âœ… Profile accepted â€” Zero-Leak Ready!');
         profile = data;
         createdProfileId = profile.id || "bulk-creation";
 
     } catch (e) {
         setStepError(1);
-        addLogLine(`❌ Network error: ${e.message}`);
+        addLogLine(`âŒ Network error: ${e.message}`);
         document.getElementById('modal-error-msg').textContent = 'Could not reach backend: ' + e.message;
         showModalSection('modal-error');
         return;
@@ -939,7 +998,7 @@ function setStepDone(n) {
     step.className = 'progress-step done';
     const icon = step.querySelector('.step-icon');
     icon.className = 'step-icon done-icon';
-    icon.textContent = '✓';
+    icon.textContent = 'âœ“';
 }
 
 function setStepError(n) {
@@ -948,7 +1007,7 @@ function setStepError(n) {
     step.className = 'progress-step error-step';
     const icon = step.querySelector('.step-icon');
     icon.className = 'step-icon error-icon';
-    icon.textContent = '✕';
+    icon.textContent = 'âœ•';
 }
 
 function addLogLine(msg) {
@@ -1217,8 +1276,8 @@ function showToast(msg, type = 'info') {
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
 
-    const icons = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
-    toast.innerHTML = `<span>${icons[type] || 'ℹ️'}</span><span>${escHtml(msg)}</span>`;
+    const icons = { success: 'âœ…', error: 'âŒ', warning: 'âš ï¸', info: 'â„¹ï¸' };
+    toast.innerHTML = `<span>${icons[type] || 'â„¹ï¸'}</span><span>${escHtml(msg)}</span>`;
     container.appendChild(toast);
 
     setTimeout(() => {
@@ -1235,232 +1294,6 @@ function showToast(msg, type = 'info') {
 let currentMacros = [];
 let macroStepCount = 0;
 let currentSchedules = [];
-
-async function fetchMacros() {
-    try {
-        const res = await fetch(`${API}/api/macros`);
-        const data = await res.json();
-        currentMacros = data || [];
-        renderMacros(currentMacros);
-        fetchSchedules(); // Also fetch schedules when on macros page
-    } catch (e) { console.error('Failed to fetch macros:', e); }
-}
-
-async function fetchSchedules() {
-    try {
-        const res = await fetch(`${API}/api/macros/schedule`);
-        const data = await res.json();
-        currentSchedules = data || [];
-        renderSchedules(currentSchedules);
-    } catch (e) { console.error('Failed to fetch schedules:', e); }
-}
-
-function renderSchedules(schedules) {
-    const tbody = document.getElementById('schedules-grid');
-    if (!tbody) return;
-    
-    if (!schedules || schedules.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted);">No active scheduled jobs.</td></tr>';
-        return;
-    }
-    
-    tbody.innerHTML = schedules.map(s => {
-        const macro = currentMacros.find(m => m.id === s.macro_id) || { name: 'Unknown Macro' };
-        return `
-        <tr>
-            <td class="mono" style="font-size: 0.8rem;">${s.id.substring(0,8)}</td>
-            <td><strong>${escHtml(macro.name)}</strong></td>
-            <td>${s.profile_ids.length} profiles</td>
-            <td class="mono">${escHtml(s.cron)}</td>
-            <td style="text-align:right;">
-                <button class="btn-icon stop" onclick="deleteSchedule('${s.id}')" title="Delete Schedule">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                </button>
-            </td>
-        </tr>
-    `}).join('');
-}
-
-function openScheduleModal() {
-    if (currentMacros.length === 0) return showToast('Create a Macro first!', 'error');
-    if (allProfiles.length === 0) return showToast('Create a Profile first!', 'error');
-    
-    document.getElementById('schedule-cron').value = '* * * * *';
-    
-    const macroSelect = document.getElementById('schedule-macro-select');
-    macroSelect.innerHTML = currentMacros.map(m => `<option value="${m.id}">${escHtml(m.name)}</option>`).join('');
-    
-    const profileSelect = document.getElementById('schedule-profile-select');
-    profileSelect.innerHTML = allProfiles.map(p => `<option value="${p.id}">${escHtml(p.name)}</option>`).join('');
-    
-    document.getElementById('schedule-modal').classList.add('show');
-}
-
-function closeScheduleModal() {
-    document.getElementById('schedule-modal').classList.remove('show');
-}
-
-async function saveSchedule() {
-    const macro_id = document.getElementById('schedule-macro-select').value;
-    const cron = document.getElementById('schedule-cron').value.trim();
-    
-    const profileSelect = document.getElementById('schedule-profile-select');
-    const profile_ids = Array.from(profileSelect.selectedOptions).map(opt => opt.value);
-    
-    if (!cron) return showToast('Cron expression is required', 'error');
-    if (profile_ids.length === 0) return showToast('Select at least one profile', 'error');
-    
-    try {
-        const res = await fetch(`${API}/api/macros/schedule`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ macro_id, profile_ids, cron })
-        });
-        if (res.ok) {
-            showToast('Schedule created', 'success');
-            closeScheduleModal();
-            fetchSchedules();
-        } else {
-            const data = await res.json();
-            showToast('Error: ' + data.detail, 'error');
-        }
-    } catch (e) { showToast('Error saving schedule', 'error'); }
-}
-
-async function deleteSchedule(job_id) {
-    if (!confirm('Delete this schedule?')) return;
-    try {
-        await fetch(`${API}/api/macros/schedule/${job_id}`, { method: 'DELETE' });
-        showToast('Schedule deleted', 'success');
-        fetchSchedules();
-    } catch(e) { showToast('Error deleting schedule', 'error'); }
-}
-
-function renderMacros(macros) {
-    const tbody = document.getElementById('macros-grid');
-    if (!tbody) return;
-    
-    if (!macros || macros.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--text-muted);">No macros created yet.</td></tr>';
-        return;
-    }
-    
-    tbody.innerHTML = macros.map(m => `
-        <tr>
-            <td><strong>${escHtml(m.name)}</strong></td>
-            <td style="color:var(--text-muted);">${escHtml(m.description || '--')}</td>
-            <td>${m.steps ? m.steps.length : 0} steps</td>
-            <td style="text-align:right;">
-                <button class="btn-icon stop" onclick="deleteMacro('${m.id}')" title="Delete Macro">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                </button>
-            </td>
-        </tr>
-    `).join('');
-}
-
-function openMacroModal() {
-    document.getElementById('macro-name').value = '';
-    document.getElementById('macro-desc').value = '';
-    document.getElementById('macro-steps-container').innerHTML = '<div id="empty-steps-msg" style="text-align:center; color:var(--text-muted); margin: auto;">No steps added yet. Select an action above.</div>';
-    macroStepCount = 0;
-    document.getElementById('macro-modal').classList.add('show');
-}
-
-function closeMacroModal() {
-    document.getElementById('macro-modal').classList.remove('show');
-}
-
-function addMacroStep() {
-    const select = document.getElementById('add-step-select');
-    const action = select.value;
-    if (!action) return;
-    select.value = '';
-    
-    const container = document.getElementById('macro-steps-container');
-    const emptyMsg = document.getElementById('empty-steps-msg');
-    if (emptyMsg) emptyMsg.remove();
-    
-    macroStepCount++;
-    const stepDiv = document.createElement('div');
-    stepDiv.className = 'macro-step';
-    stepDiv.dataset.action = action;
-    stepDiv.style.cssText = 'display:flex; gap:1rem; align-items:center; background:rgba(0,0,0,0.2); padding:0.75rem; border-radius:6px;';
-    
-    let innerHTML = `<strong style="width: 70px;">${action.toUpperCase()}</strong>`;
-    
-    if (action === 'goto') {
-        innerHTML += `<input type="text" class="step-url" placeholder="URL (https://...)" style="flex:1;" class="input-base">`;
-    } else if (action === 'wait') {
-        innerHTML += `<input type="number" class="step-ms" placeholder="Wait MS (e.g. 2000)" style="width: 150px;" class="input-base">`;
-    } else if (action === 'click') {
-        innerHTML += `<input type="text" class="step-selector" placeholder="CSS Selector (e.g. #button)" style="flex:1;" class="input-base">`;
-    } else if (action === 'type') {
-        innerHTML += `<input type="text" class="step-selector" placeholder="CSS Selector" style="width: 150px;" class="input-base">`;
-        innerHTML += `<input type="text" class="step-text" placeholder="Text to type" style="flex:1;" class="input-base">`;
-    } else if (action === 'scroll') {
-        innerHTML += `<select class="step-dir input-base" style="width: 120px;"><option value="down">Down</option><option value="up">Up</option></select>`;
-        innerHTML += `<input type="number" class="step-amount input-base" placeholder="Amount (e.g. 500)" style="width: 120px;">`;
-    }
-    
-    innerHTML += `<button class="btn-icon stop" onclick="this.parentElement.remove()" style="margin-left:auto;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
-    
-    stepDiv.innerHTML = innerHTML;
-    container.appendChild(stepDiv);
-}
-
-async function saveMacro() {
-    const name = document.getElementById('macro-name').value.trim();
-    const desc = document.getElementById('macro-desc').value.trim();
-    if (!name) return showToast('Macro name is required', 'error');
-    
-    const steps = [];
-    const stepEls = document.querySelectorAll('.macro-step');
-    if (stepEls.length === 0) return showToast('Add at least one step', 'error');
-    
-    for (let el of stepEls) {
-        const action = el.dataset.action;
-        let stepObj = { action };
-        
-        if (action === 'goto') stepObj.url = el.querySelector('.step-url').value;
-        if (action === 'wait') stepObj.ms = parseInt(el.querySelector('.step-ms').value) || 1000;
-        if (action === 'click') stepObj.selector = el.querySelector('.step-selector').value;
-        if (action === 'type') {
-            stepObj.selector = el.querySelector('.step-selector').value;
-            stepObj.text = el.querySelector('.step-text').value;
-        }
-        if (action === 'scroll') {
-            stepObj.direction = el.querySelector('.step-dir').value;
-            stepObj.amount = parseInt(el.querySelector('.step-amount').value) || 500;
-        }
-        steps.push(stepObj);
-    }
-    
-    try {
-        const res = await fetch(`${API}/api/macros`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, description: desc, steps })
-        });
-        if (res.ok) {
-            showToast('Macro saved', 'success');
-            closeMacroModal();
-            fetchMacros();
-        } else {
-            const data = await res.json();
-            showToast('Error: ' + data.detail, 'error');
-        }
-    } catch (e) { showToast('Error saving macro', 'error'); }
-}
-
-async function deleteMacro(id) {
-    if (!confirm('Delete this macro?')) return;
-    try {
-        await fetch(`${API}/api/macros/${id}`, { method: 'DELETE' });
-        showToast('Macro deleted', 'success');
-        fetchMacros();
-    } catch(e) { showToast('Error deleting macro', 'error'); }
-}
 
 function openRunMacroModal() {
     const checked = Array.from(document.querySelectorAll('.profile-checkbox:checked')).map(cb => cb.value);
@@ -1505,48 +1338,6 @@ async function executeBulkMacro() {
     } catch(e) {
         showToast('Failed to start macro', 'error');
     }
-}
-
-// =========================================================
-// TAGS, NOTES, FINGERPRINT
-// =========================================================
-function openTagsModal(profileId) {
-    document.getElementById('tags-profile-id').value = profileId;
-    const profile = allProfiles.find(p => p.id === profileId);
-    if (!profile) return;
-    
-    document.getElementById('tags-input').value = (profile.tags || []).join(', ');
-    document.getElementById('notes-input').value = profile.notes || '';
-    
-    document.getElementById('tags-modal').classList.add('show');
-}
-
-function closeTagsModal() {
-    document.getElementById('tags-modal').classList.remove('show');
-}
-
-async function saveTagsNotes() {
-    const id = document.getElementById('tags-profile-id').value;
-    const tagsStr = document.getElementById('tags-input').value;
-    const notes = document.getElementById('notes-input').value;
-    
-    const tags = tagsStr.split(',').map(t => t.trim()).filter(t => t.length > 0);
-    
-    try {
-        // HIGH-03 FIX: Correct endpoint is /metadata (PATCH), not /tags_notes which doesn't exist
-        const res = await fetch(`${API}/api/profiles/${id}/metadata`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tags, notes })
-        });
-        if (res.ok) {
-            showToast('Tags & Notes saved', 'success');
-            closeTagsModal();
-            fetchProfiles();
-        } else {
-            showToast('Failed to save', 'error');
-        }
-    } catch(e) { showToast('Error saving tags/notes', 'error'); }
 }
 
 async function openFingerprintModal(profileId) {
@@ -1832,6 +1623,17 @@ async function deleteSchedule(jobId) {
     } catch(e) {}
 }
 
+function startSyncSessionWrapper() {
+    const checked = Array.from(document.querySelectorAll('.profile-checkbox:checked')).map(cb => cb.value);
+    if (checked.length === 0) { showToast('Select profiles to sync first', 'warning'); return; }
+    startSyncSession(checked);
+}
+function startCookieRobotWarming() {
+    const checked = Array.from(document.querySelectorAll('.profile-checkbox:checked')).map(cb => cb.value);
+    if (checked.length === 0) { showToast('Select profiles to warm first', 'warning'); return; }
+    startCookieRobot(checked);
+}
+
 // =========================================================
 // UTILS
 // =========================================================
@@ -1875,7 +1677,7 @@ document.addEventListener('DOMContentLoaded', () => {
     navigate('dashboard');
     startPolling();
     addLogEntry('info', 'GhostBrowser dashboard initialized');
-    addLogEntry('info', 'Strict Kimi-only mode: ACTIVE — profiles require Cloudflare AI');
+    addLogEntry('info', 'Strict Kimi-only mode: ACTIVE â€” profiles require Cloudflare AI');
 
     // Load auto-replenish state
     const autoReplenishToggle = document.getElementById('auto-replenish-toggle');
@@ -1905,7 +1707,7 @@ function toggleTheme() {
     root.setAttribute('data-theme', next);
     localStorage.setItem('theme', next);
     const btn = document.querySelector('.theme-toggle');
-    if (btn) btn.textContent = next === 'dark' ? '🌙' : '☀️';
+    if (btn) btn.textContent = next === 'dark' ? 'ðŸŒ™' : 'â˜€ï¸';
 }
 
 // Load saved theme on startup
@@ -1914,7 +1716,7 @@ function toggleTheme() {
     if (saved === 'light') {
         document.documentElement.setAttribute('data-theme', 'light');
         const btn = document.querySelector('.theme-toggle');
-        if (btn) btn.textContent = '☀️';
+        if (btn) btn.textContent = 'â˜€ï¸';
     }
 })();
 
@@ -1930,10 +1732,36 @@ async function fetchFolders() {
         // Update sidebar if it exists
         const sidebar = document.getElementById('folder-list');
         if (sidebar) {
-            sidebar.innerHTML = '<div class="folder-item active" onclick="filterByFolder(null)">📁 All Profiles</div>' +
-                folders.map(f => `<div class="folder-item" onclick="filterByFolder('${f.id}')">📁 ${f.name}</div>`).join('');
+            sidebar.innerHTML = '<div class="folder-item active" onclick="filterByFolder(null)">ðŸ“ All Profiles</div>' +
+                folders.map(f => `<div class="folder-item" onclick="filterByFolder('${f.id}')">ðŸ“ ${f.name}</div>`).join('');
         }
     } catch (e) { /* backend not running */ }
+}
+﻿
+let currentFolderFilter = null;
+
+function filterByFolder(folderId) {
+    currentFolderFilter = folderId;
+    // Update active state in sidebar
+    document.querySelectorAll('.folder-item').forEach(f => f.classList.remove('active'));
+    if (!folderId) {
+        document.querySelector('.folder-item').classList.add('active');
+    } else {
+        // Find and activate the matching folder item
+        const items = document.querySelectorAll('.folder-item');
+        items.forEach(item => {
+            if (item.onclick && item.onclick.toString().includes(folderId)) {
+                item.classList.add('active');
+            }
+        });
+    }
+    // Filter profiles
+    if (!folderId) {
+        renderProfiles(allProfiles);
+    } else {
+        const filtered = allProfiles.filter(p => p.folder === folderId);
+        renderProfiles(filtered);
+    }
 }
 
 // =========================================================
@@ -2135,4 +1963,78 @@ async function exportProfiles(profileIds) {
 
 setInterval(() => {
     fetchCookieRobotStatus();
-}, 5000); 
+}, 5000);
+
+// === IMPORT/EXPORT ===
+async function exportProfile(id) {
+    try {
+        const res = await fetch(`${API}/api/profiles/${id}/export`);
+        if (!res.ok) throw new Error('Export failed');
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `profile_${id.substring(0,8)}.json`;
+        a.click(); URL.revokeObjectURL(url);
+        showToast('Profile exported', 'success');
+    } catch(e) { showToast('Export error', 'error'); }
+}
+
+async function importProfiles() {
+    const input = document.getElementById('import-file-input');
+    if (!input || !input.files.length) return showToast('Select a JSON file', 'error');
+    const formData = new FormData();
+    formData.append('file', input.files[0]);
+    try {
+        const res = await fetch(`${API}/api/profiles/import`, { method: 'POST', body: formData });
+        const data = await res.json();
+        if (res.ok) { showToast(data.message || 'Imported!', 'success'); fetchProfiles(); }
+        else showToast('Import failed', 'error');
+    } catch(e) { showToast('Import error', 'error'); }
+    input.value = '';
+}
+
+// === BULK ACTIONS ===
+async function bulkAssignTag() {
+    const checked = Array.from(document.querySelectorAll('.profile-checkbox:checked')).map(cb => cb.value);
+    if (!checked.length) return showToast('Select profiles first', 'error');
+    const tag = prompt('Tag to add to ' + checked.length + ' profiles:');
+    if (!tag || !tag.trim()) return;
+    try {
+        await fetch(`${API}/api/profiles/bulk/tag`, {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ profile_ids: checked, tags: [tag.trim()] })
+        });
+        showToast(`Tagged ${checked.length} profiles`, 'success'); fetchProfiles();
+    } catch(e) { showToast('Error', 'error'); }
+}
+
+async function bulkMoveToFolder() {
+    const checked = Array.from(document.querySelectorAll('.profile-checkbox:checked')).map(cb => cb.value);
+    if (!checked.length) return showToast('Select profiles first', 'error');
+    try {
+        const res = await fetch(`${API}/api/folders`);
+        const data = await res.json();
+        const folders = data.folders || data || [];
+        const name = prompt('Move ' + checked.length + ' profiles to folder:');
+        if (!name || !name.trim()) return;
+        const folder = folders.find(f => f.name.toLowerCase() === name.trim().toLowerCase());
+        await fetch(`${API}/api/profiles/bulk/folder`, {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ profile_ids: checked, folder_id: folder ? folder.id : name.trim() })
+        });
+        showToast(`Moved ${checked.length} profiles`, 'success'); fetchProfiles();
+    } catch(e) { showToast('Error', 'error'); }
+}
+
+// === FOLDER CREATION ===
+async function createFolder() {
+    const name = prompt('Folder name:');
+    if (!name || !name.trim()) return;
+    try {
+        await fetch(`${API}/api/folders`, {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ name: name.trim() })
+        });
+        showToast('Folder created', 'success'); fetchFolders();
+    } catch(e) { showToast('Error', 'error'); }
+}

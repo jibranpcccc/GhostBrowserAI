@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GhostBrowser Fingerprint Test Page</title>
+    <style>
+        body { background: #1a1a2e; color: #e0e0e0; font-family: monospace; padding: 20px; }
+        h1 { color: #6366f1; }
+        #results { white-space: pre-wrap; background: #0d1117; padding: 15px; border-radius: 8px; max-height: 80vh; overflow-y: auto; border: 1px solid #30363d; font-size: 12px; }
+        .status { padding: 10px; border-radius: 5px; margin: 10px 0; }
+        .running { background: #1e3a5f; }
+        .done { background: #1a4731; }
+    </style>
+</head>
+<body>
+    <h1>GhostBrowser Fingerprint Collector</h1>
+    <div id="status" class="status running">Initializing...</div>
+    <div id="results">Waiting for fingerprint collection...</div>
+    
+    <script src="fingerprint_collector.js"></script>
+    <script>
+        // Signal readiness
+        window.__collectorReady = true;
+        
+        // Auto-collect on load
+        (async function() {
+            try {
+                document.getElementById('status').textContent = 'Collecting fingerprint...';
+                document.getElementById('status').className = 'status running';
+                
+                const fp = await collectFingerprint();
+                
+                // Display results
+                document.getElementById('results').textContent = JSON.stringify(fp, null, 2);
+                document.getElementById('status').textContent = 'Collection complete at ' + new Date().toISOString();
+                document.getElementById('status').className = 'status done';
+                
+                // Post to parent if in iframe
+                if (window.parent !== window) {
+                    window.parent.postMessage({ type: 'fingerprint', data: fp }, '*');
+                }
+                
+                // Store globally for programmatic access
+                window.__fingerprint = fp;
+            } catch(e) {
+                document.getElementById('status').textContent = 'ERROR: ' + e.message;
+                document.getElementById('status').className = 'status running';
+                document.getElementById('results').textContent = e.stack;
+            }
+        })();
+        
+        // Allow programmatic collection via message
+        window.addEventListener('message', async function(e) {
+            if (e.data && e.data.command === 'collect') {
+                const fp = await collectFingerprint();
+                window.parent.postMessage({ type: 'fingerprint', data: fp, id: e.data.id }, '*');
+            }
+        });
+    </script>
+</body>
+</html>

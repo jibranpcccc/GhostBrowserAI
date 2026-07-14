@@ -1,0 +1,459 @@
+{
+  "browser_identity": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    "appVersion": "5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    "platform": "Win32",
+    "vendor": "Google Inc.",
+    "product": "Gecko",
+    "productSub": "20030107",
+    "webdriver": null,
+    "appName": "Netscape",
+    "appCodeName": "Mozilla",
+    "cookieEnabled": true,
+    "doNotTrack": "1",
+    "globalPrivacyControl": true,
+    "hardwareConcurrency": 8,
+    "deviceMemory": 16,
+    "maxTouchPoints": 0,
+    "languages": [
+      "en-US",
+      "en"
+    ],
+    "language": "en-US",
+    "chromiumVersion": "149.0.0.0"
+  },
+  "client_hints": {
+    "brands": [
+      {
+        "brand": "Not)A;Brand",
+        "version": "8"
+      },
+      {
+        "brand": "Chromium",
+        "version": "149"
+      },
+      {
+        "brand": "Google Chrome",
+        "version": "149"
+      }
+    ],
+    "mobile": false,
+    "platform": "Windows",
+    "platformVersion": "10.0.19041",
+    "architecture": "x86",
+    "bitness": "64",
+    "model": "",
+    "fullVersionList": [
+      {
+        "brand": "Not)A;Brand",
+        "version": "8.0.0.0"
+      },
+      {
+        "brand": "Chromium",
+        "version": "149.0.0.0"
+      },
+      {
+        "brand": "Google Chrome",
+        "version": "149.0.0.0"
+      }
+    ],
+    "fullVersion": null,
+    "wow64": null
+  },
+  "screen": {
+    "width": 1920,
+    "height": 1080,
+    "availWidth": 1920,
+    "availHeight": 1040,
+    "availTop": 0,
+    "availLeft": 0,
+    "colorDepth": 24,
+    "pixelDepth": 24,
+    "orientation": {
+      "type": "landscape-primary",
+      "angle": 0
+    }
+  },
+  "window": {
+    "innerWidth": 1280,
+    "innerHeight": 720,
+    "outerWidth": 1920,
+    "outerHeight": 1165,
+    "screenX": 0,
+    "screenY": 0,
+    "screenLeft": 0,
+    "screenTop": 0,
+    "devicePixelRatio": 1.25,
+    "chrome": true,
+    "chromeRuntime": true,
+    "chromeApp": true
+  },
+  "visual_viewport": {
+    "width": 1920,
+    "height": 1080,
+    "offsetLeft": 0,
+    "offsetTop": 0,
+    "pageLeft": 0,
+    "pageTop": 0,
+    "scale": 1
+  },
+  "locale": {
+    "language": "en-US",
+    "languages": [
+      "en-US",
+      "en"
+    ],
+    "timezone": "America/New_York",
+    "utcOffset": -300,
+    "calendar": "gregory",
+    "numberingSystem": "latn",
+    "dateFormat": "Tuesday, July 14, 2026",
+    "timeFormat": "2:41:24 AM Eastern Daylight Time"
+  },
+  "canvas_2d": {
+    "dataURL": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAARgAAAA8CAYAAAC9xKUYAAAQAElEQVR4AexZC1xVVdb/n3vhAoKAyE",
+    "hash": "a862ac9f826f5b01cabf7b5f43ab0507c70070c3406051d935878041502b9844",
+    "width": 280,
+    "height": 60
+  },
+  "offscreen_canvas": {
+    "supported": true,
+    "hash": "a862ac9f826f5b01cabf7b5f43ab0507c70070c3406051d935878041502b9844",
+    "width": 280,
+    "height": 60
+  },
+  "webgl1": {
+    "vendor": "Google Inc. (Intel)",
+    "renderer": "ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "vendorRaw": "Google Inc",
+    "rendererRaw": "ANGLE (Intel",
+    "version": "WebGL 1.0",
+    "shadingLanguageVersion": "WebGL GLSL ES 1.0",
+    "maxTextureSize": 19585,
+    "maxViewportDims": 9345,
+    "maxRenderbufferSize": 8192,
+    "supportedExtensions": [
+      "ANGLE_instanced_arrays",
+      "EXT_blend_minmax",
+      "EXT_clip_control",
+      "EXT_color_buffer_half_float",
+      "EXT_depth_clamp",
+      "EXT_float_blend",
+      "EXT_frag_depth",
+      "EXT_polygon_offset_clamp",
+      "EXT_shader_texture_lod",
+      "EXT_texture_compression_bptc",
+      "EXT_texture_compression_rgtc",
+      "EXT_texture_filter_anisotropic",
+      "EXT_texture_mirror_clamp_to_edge",
+      "EXT_sRGB",
+      "OES_element_index_uint",
+      "OES_fbo_render_mipmap",
+      "OES_standard_derivatives",
+      "OES_texture_float",
+      "OES_texture_float_linear",
+      "OES_texture_half_float",
+      "OES_texture_half_float_linear",
+      "OES_vertex_array_object",
+      "WEBGL_color_buffer_float",
+      "WEBGL_compressed_texture_astc",
+      "WEBGL_compressed_texture_etc",
+      "WEBGL_compressed_texture_etc1",
+      "WEBGL_compressed_texture_s3tc",
+      "WEBGL_compressed_texture_s3tc_srgb",
+      "WEBGL_debug_renderer_info",
+      "WEBGL_debug_shaders",
+      "WEBGL_depth_texture",
+      "WEBGL_draw_buffers",
+      "WEBGL_lose_context",
+      "WEBGL_multi_draw",
+      "WEBGL_polygon_mode"
+    ],
+    "antialias": true,
+    "colorBits": [
+      8,
+      8,
+      8,
+      8
+    ],
+    "depthBits": 24,
+    "stencilBits": 0,
+    "shaderPrecision": {
+      "rangeMin": 127,
+      "rangeMax": 127,
+      "precision": 23
+    }
+  },
+  "webgl2": {
+    "vendor": "Google Inc. (Intel)",
+    "renderer": "ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "version": "WebGL 1.0",
+    "maxTextureSize": 19585,
+    "supportedExtensions": [
+      "EXT_clip_control",
+      "EXT_color_buffer_float",
+      "EXT_color_buffer_half_float",
+      "EXT_conservative_depth",
+      "EXT_depth_clamp",
+      "EXT_float_blend",
+      "EXT_polygon_offset_clamp",
+      "EXT_texture_compression_bptc",
+      "EXT_texture_compression_rgtc",
+      "EXT_texture_filter_anisotropic",
+      "EXT_texture_mirror_clamp_to_edge",
+      "NV_shader_noperspective_interpolation",
+      "OES_draw_buffers_indexed",
+      "OES_sample_variables",
+      "OES_shader_multisample_interpolation",
+      "OES_texture_float_linear",
+      "OVR_multiview2",
+      "WEBGL_clip_cull_distance",
+      "WEBGL_compressed_texture_astc",
+      "WEBGL_compressed_texture_etc",
+      "WEBGL_compressed_texture_etc1",
+      "WEBGL_compressed_texture_s3tc",
+      "WEBGL_compressed_texture_s3tc_srgb",
+      "WEBGL_debug_renderer_info",
+      "WEBGL_debug_shaders",
+      "WEBGL_lose_context",
+      "WEBGL_multi_draw",
+      "WEBGL_polygon_mode",
+      "WEBGL_stencil_texturing"
+    ]
+  },
+  "webgpu": {},
+  "audio": {
+    "sampleRate": 48000,
+    "baseLatency": 0.01,
+    "state": "running",
+    "offlineHash": 249.90625,
+    "offlineDataPoints": [
+      -0.46875,
+      0.21875,
+      0.9375,
+      -0.375,
+      0.34375,
+      -0.96875,
+      -0.25,
+      0.4375,
+      -0.84375,
+      -0.15625,
+      0.5625,
+      -0.75,
+      -0.03125,
+      0.65625,
+      -0.625,
+      0.0625,
+      0.75,
+      -0.53125,
+      0.15625,
+      0.875
+    ]
+  },
+  "fonts": {
+    "detected": [
+      "Arial",
+      "Verdana",
+      "Times New Roman",
+      "Courier New",
+      "Georgia",
+      "Garamond",
+      "Comic Sans MS",
+      "Impact",
+      "Lucida Console",
+      "Tahoma",
+      "Trebuchet MS",
+      "Helvetica",
+      "MS Serif",
+      "Arial Black",
+      "Segoe UI",
+      "Consolas"
+    ],
+    "count": 16,
+    "fontFaceApi": true,
+    "fontFaceApiSupported": true,
+    "checkArial": true,
+    "checkFake": true
+  },
+  "media_devices": {
+    "count": 3,
+    "devices": [
+      {
+        "kind": "audioinput",
+        "label": "",
+        "deviceId": "",
+        "groupId": ""
+      },
+      {
+        "kind": "videoinput",
+        "label": "",
+        "deviceId": "",
+        "groupId": ""
+      },
+      {
+        "kind": "audiooutput",
+        "label": "",
+        "deviceId": "",
+        "groupId": ""
+      }
+    ]
+  },
+  "permissions": {
+    "geolocation": "prompt",
+    "notifications": "default",
+    "camera": "prompt",
+    "microphone": "prompt",
+    "midi": "granted",
+    "push": "denied",
+    "clipboard-read": "prompt",
+    "clipboard-write": "granted"
+  },
+  "storage": {
+    "cookiesEnabled": true,
+    "localStorage": true,
+    "sessionStorage": true,
+    "indexedDB": true,
+    "serviceWorker": true,
+    "quota": 292839591936,
+    "usage": 0
+  },
+  "property_descriptors": {
+    "userAgent": {
+      "configurable": false,
+      "enumerable": false,
+      "writable": null,
+      "hasGetter": true,
+      "hasSetter": false,
+      "onPrototype": "own"
+    },
+    "platform": {
+      "configurable": false,
+      "enumerable": false,
+      "writable": null,
+      "hasGetter": true,
+      "hasSetter": false,
+      "onPrototype": "own"
+    },
+    "vendor": {
+      "configurable": false,
+      "enumerable": false,
+      "writable": null,
+      "hasGetter": true,
+      "hasSetter": false,
+      "onPrototype": "own"
+    },
+    "hardwareConcurrency": {
+      "configurable": false,
+      "enumerable": false,
+      "writable": null,
+      "hasGetter": true,
+      "hasSetter": false,
+      "onPrototype": "own"
+    },
+    "deviceMemory": {
+      "configurable": false,
+      "enumerable": false,
+      "writable": null,
+      "hasGetter": true,
+      "hasSetter": false,
+      "onPrototype": "own"
+    },
+    "languages": {
+      "configurable": true,
+      "enumerable": false,
+      "writable": null,
+      "hasGetter": true,
+      "hasSetter": false,
+      "onPrototype": "own"
+    },
+    "webdriver": {
+      "configurable": false,
+      "enumerable": false,
+      "writable": null,
+      "hasGetter": true,
+      "hasSetter": false,
+      "onPrototype": "own"
+    },
+    "width": {
+      "configurable": false,
+      "enumerable": false,
+      "writable": null,
+      "hasGetter": true,
+      "hasSetter": false,
+      "onPrototype": "own"
+    },
+    "height": {
+      "configurable": false,
+      "enumerable": false,
+      "writable": null,
+      "hasGetter": true,
+      "hasSetter": false,
+      "onPrototype": "own"
+    },
+    "availWidth": {
+      "configurable": false,
+      "enumerable": false,
+      "writable": null,
+      "hasGetter": true,
+      "hasSetter": false,
+      "onPrototype": "own"
+    },
+    "outerWidth": {
+      "configurable": true,
+      "enumerable": true,
+      "writable": null,
+      "hasGetter": true,
+      "hasSetter": true,
+      "onPrototype": "own"
+    },
+    "innerWidth": {
+      "configurable": true,
+      "enumerable": true,
+      "writable": null,
+      "hasGetter": true,
+      "hasSetter": true,
+      "onPrototype": "own"
+    }
+  },
+  "prototype_chain": {
+    "navigatorProto": "Navigator",
+    "screenProto": "Screen",
+    "webglProto": "WebGLRenderingContext",
+    "canvasProto": "HTMLCanvasElement"
+  },
+  "js_errors": [],
+  "connection": {
+    "downlink": 36.1,
+    "effectiveType": "4g",
+    "rtt": 75,
+    "saveData": false,
+    "type": "wifi",
+    "metered": false,
+    "downlinkMax": 100
+  },
+  "navigator_extended": {
+    "cookieEnabled": true,
+    "clipboard": true,
+    "credentials": true,
+    "userActivation": true,
+    "keyboard": true,
+    "locks": true,
+    "mediaCapabilities": true,
+    "mediaSession": true,
+    "share": false,
+    "bluetooth": {},
+    "usb": {},
+    "serial": {},
+    "hid": {}
+  },
+  "webrtc": {
+    "available": true,
+    "constructorName": "RTCPeerConnection",
+    "exists": true
+  },
+  "composite_hash": "a9b4b162b2ceebababe71f9b2c32bceac05257f86a7a0ed661417583925589a4",
+  "timestamp": 1784011284913,
+  "iso_time": "2026-07-14T06:41:24.913Z",
+  "profile_name": "TestProfile03",
+  "profile_id": "bb27ec81-53d7-4bcf-b8be-800633521080"
+}

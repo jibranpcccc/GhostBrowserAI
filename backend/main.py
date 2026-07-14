@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -9,6 +10,7 @@ import os
 import sys
 import asyncio
 import logging
+import secrets
 
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
@@ -86,6 +88,42 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# --- Admin token authentication for mutation endpoints ---
+ADMIN_TOKEN = os.environ.get("GHOSTBROWSER_ADMIN_TOKEN")
+if not ADMIN_TOKEN:
+    ADMIN_TOKEN = "bootstrap_" + secrets.token_urlsafe(16)
+    print(f"[SECURITY] GHOSTBROWSER_ADMIN_TOKEN not set. Bootstrap token: {ADMIN_TOKEN}")
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return await call_next(request)
+
+    if not request.url.path.startswith("/api/"):
+        return await call_next(request)
+
+    token = request.headers.get("X-Admin-Token") or request.headers.get("Authorization", "").replace("Bearer ", "")
+
+    if token != ADMIN_TOKEN:
+        from backend.api_automation import _API_KEYS_FILE
+        import json
+        api_key_valid = False
+        if os.path.exists(_API_KEYS_FILE):
+            try:
+                with open(_API_KEYS_FILE, "r") as f:
+                    keys_data = json.load(f)
+                import hashlib
+                key_hash = hashlib.sha256(token.encode()).hexdigest()
+                api_key_valid = key_hash in [k.get("key_hash") for k in keys_data.values()]
+            except Exception:
+                pass
+
+        if not api_key_valid:
+            return JSONResponse(status_code=401, content={"detail": "Invalid or missing API key/token"})
+
+    return await call_next(request)
+
+
 
 class ProxyModel(BaseModel):
     server: str
@@ -110,6 +148,16 @@ class CreateProfileModel(BaseModel):
     timezone: Optional[str] = None
     locale: Optional[str] = None
     advanced: Optional[AdvancedSettingsModel] = None
+
+class UpdateProfileModel(BaseModel):
+    name: str
+    proxy: Optional[ProxyModel] = None
+    proxy_string: Optional[str] = None
+    timezone: Optional[str] = None
+    locale: Optional[str] = None
+    advanced: Optional[AdvancedSettingsModel] = None
+    pinned: Optional[bool] = None
+    color: Optional[str] = None
 
 def parse_proxy_string(proxy_str: str) -> Optional[dict]:
     if not proxy_str: return None
@@ -265,7 +313,7 @@ async def update_metadata(profile_id: str, req: UpdateMetadataRequest):
     return {"status": "success"}
 
 @app.put("/api/profiles/{profile_id}")
-async def edit_profile(profile_id: str, data: CreateProfileModel):
+async def edit_profile(profile_id: str, data: UpdateProfileModel):
     """Full update for a profile's settings, proxy, and fingerprint."""
     profile = profile_manager.get_profile(profile_id)
     if not profile:
@@ -282,6 +330,11 @@ async def edit_profile(profile_id: str, data: CreateProfileModel):
         "advanced": advanced_dict
     }
     
+    if data.pinned is not None:
+        updates["pinned"] = data.pinned
+    if data.color is not None:
+        updates["color"] = data.color
+    
     # Remove None values so we don't accidentally wipe out stuff
     updates = {k: v for k, v in updates.items() if v is not None}
     
@@ -291,6 +344,19 @@ async def edit_profile(profile_id: str, data: CreateProfileModel):
         
     return {"status": "success", "message": "Profile updated successfully"}
 
+
+@app.get("/api/profiles/{profile_id}/export")
+async def export_profile(profile_id: str):
+    """Export a single profile's full config as downloadable JSON"""
+    profile = profile_manager.get_profile(profile_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    from fastapi.responses import JSONResponse
+    export_data = {k: v for k, v in profile.items() if k not in ["path", "status"]}
+    return JSONResponse(
+        content=export_data,
+        headers={"Content-Disposition": f"attachment; filename=profile_{profile_id[:8]}.json"}
+    )
 @app.get("/api/profiles/{profile_id}/fingerprint")
 async def get_fingerprint(profile_id: str):
     profile = profile_manager.get_profile(profile_id)
@@ -441,6 +507,38 @@ async def export_cookies(profile_id: str):
         return {"status": "success", "cookies": cookies}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to export cookies: {e}")
+
+@app.post("/api/profiles/bulk/tag")
+async def bulk_tag_profiles(data: dict):
+    """Add tags to multiple profiles"""
+    profile_ids = data.get("profile_ids", [])
+    tags = data.get("tags", [])
+    if not profile_ids or not tags:
+        raise HTTPException(status_code=400, detail="profile_ids and tags required")
+    count = 0
+    for pid in profile_ids:
+        profile = profile_manager.get_profile(pid)
+        if profile:
+            existing = profile.get("tags", [])
+            if isinstance(existing, str):
+                existing = [t.strip() for t in existing.split(",") if t.strip()]
+            new_tags = list(set(existing + tags))
+            profile_manager.update_profile(pid, {"tags": new_tags})
+            count += 1
+    return {"status": "success", "message": f"Tagged {count} profiles"}
+
+@app.post("/api/profiles/bulk/folder")
+async def bulk_move_to_folder(data: dict):
+    """Move multiple profiles to a folder"""
+    profile_ids = data.get("profile_ids", [])
+    folder_id = data.get("folder_id")
+    if not profile_ids:
+        raise HTTPException(status_code=400, detail="profile_ids required")
+    count = 0
+    for pid in profile_ids:
+        if profile_manager.update_profile(pid, {"folder_id": folder_id}):
+            count += 1
+    return {"status": "success", "message": f"Moved {count} profiles"}
 
 from backend.profile_rotator import rotator
 
@@ -708,6 +806,16 @@ async def cookie_robot_stop(profile_id: str):
     """Stop a running cookie warming task for a profile."""
     return await cookie_robot.stop_warming(profile_id)
 
+
+@app.post("/api/folders")
+async def create_folder(data: dict):
+    """Create a new folder"""
+    name = data.get("name", "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Folder name required")
+    from backend.profile_folders import profile_folders
+    folder = profile_folders.create_folder(name)
+    return {"status": "success", "folder": folder}
 # --- Register new API routers (Agent 1) ---
 app.include_router(api_automation_router)
 app.include_router(synchronizer_router)
