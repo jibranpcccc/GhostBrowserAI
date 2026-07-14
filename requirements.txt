@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+pydantic
+httpx
+httpx-socks[socks]
+playwright
+playwright-stealth
+cryptography
+psutil
+aiohttp
+croniter
+python-multipart
