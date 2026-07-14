@@ -27,7 +27,18 @@ _shared_client = httpx.AsyncClient(timeout=45.0, limits=httpx.Limits(max_keepali
 # ============================================================
 
 RACING_PROXY_URL = "http://127.0.0.1:8005/v1/chat/completions"
-KIMI_MODEL       = "@cf/moonshotai/kimi-k2.7-code"
+
+# Model fallback chain: fast/cheap first, powerful last.
+# Each model is tried in order until one succeeds.
+# Order: glm-4.7-flash (fastest, cheapest) → gpt-oss-120b → llama-4-scout → qwen3-30b → kimi-k2.7-code (most expensive)
+MODEL_CHAIN = [
+    "@cf/zai-org/glm-4.7-flash",
+    "@cf/openai/gpt-oss-120b",
+    "@cf/meta/llama-4-scout-17b-16e-instruct",
+    "@cf/qwen/qwen3-30b-a3b-fp8",
+    "@cf/moonshotai/kimi-k2.7-code",
+]
+KIMI_MODEL = MODEL_CHAIN[0]  # Default to fastest
 
 SYSTEM_PROMPT = """You are a professional anti-detect browser fingerprint generator.
 You MUST output ONLY a single valid JSON object — no markdown, no backticks, no explanation.
@@ -86,59 +97,65 @@ OUTPUT THIS EXACT JSON STRUCTURE (fill in real values):
 
 async def _call_via_racing_proxy(target_os: str, target_browser: str) -> Optional[dict]:
     """
-    Call Kimi AI through the Hermes Racing Proxy (port 8005).
-    This proxy has 434 accounts loaded and handles rotation automatically.
+    Call AI through the Hermes Racing Proxy (port 8005).
+    Tries models in order (fast→powerful). The proxy handles rotation.
     """
     user_prompt = (
         f"Generate a complete realistic fingerprint for a {target_os} machine "
         f"running {target_browser} with Chrome version between 130 and 137. "
         f"Output ONLY the JSON object with all required fields."
     )
-    payload = {
-        "model": KIMI_MODEL,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",   "content": user_prompt}
-        ],
-        "max_tokens": 1024
-    }
-    try:
-        response = await _shared_client.post(
-            RACING_PROXY_URL,
-            headers={"Content-Type": "application/json"},
-            json=payload
-        )
 
-        if response.status_code == 200:
-            data = response.json()
-            # OpenAI-compatible response format
-            raw_text = data["choices"][0]["message"]["content"]
-            raw_text = re.sub(r'```json\s*', '', raw_text)
-            raw_text = re.sub(r'```\s*', '', raw_text)
-            raw_text = raw_text.strip()
-            parsed = json.loads(raw_text)
-            parsed["_is_fallback"] = False
-            parsed["_source"] = "racing_proxy"
-            print(f"[AI Generator] ✅ Kimi AI via Racing Proxy (434 accounts) — Success!")
-            return parsed
-        else:
-            print(f"[AI Generator] ⚠️  Racing proxy returned HTTP {response.status_code}")
+    for model in MODEL_CHAIN:
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user",   "content": user_prompt}
+            ],
+            "max_tokens": 1024
+        }
+        try:
+            response = await _shared_client.post(
+                RACING_PROXY_URL,
+                headers={"Content-Type": "application/json"},
+                json=payload
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                msg = data["choices"][0]["message"]
+                raw_text = msg.get("content") or ""
+                if isinstance(raw_text, dict):
+                    raw_text = json.dumps(raw_text)
+                raw_text = re.sub(r'```json\s*', '', raw_text)
+                raw_text = re.sub(r'```\s*', '', raw_text)
+                raw_text = raw_text.strip()
+                parsed = json.loads(raw_text)
+                parsed["_is_fallback"] = False
+                parsed["_source"] = f"racing_proxy_{model.split('/')[-1]}"
+                print(f"[AI Generator] ✅ {model.split('/')[-1]} via Racing Proxy — Success!")
+                return parsed
+            else:
+                print(f"[AI Generator] ⚠️  Racing proxy {model.split('/')[-1]} HTTP {response.status_code}")
+                continue  # Try next model
+        except httpx.ConnectError:
+            print(f"[AI Generator] ⚠️  Racing proxy not running on port 8005. Falling back to direct API...")
             return None
-    except httpx.ConnectError:
-        print(f"[AI Generator] ⚠️  Racing proxy not running on port 8005. Falling back to direct API...")
-        return None
-    except json.JSONDecodeError:
-        print(f"[AI Generator] ⚠️  Racing proxy returned invalid JSON. Retrying...")
-        return None
-    except Exception as e:
-        print(f"[AI Generator] ⚠️  Racing proxy error: {e}")
-        return None
+        except json.JSONDecodeError:
+            print(f"[AI Generator] ⚠️  Racing proxy returned invalid JSON. Retrying...")
+            continue
+        except Exception as e:
+            print(f"[AI Generator] ⚠️  Racing proxy error: {e}")
+            continue
+
+    return None
 
 
 async def _call_direct_cloudflare(target_os: str, target_browser: str) -> Optional[dict]:
     """
     Direct fallback: call Cloudflare Workers AI using accounts from cloudflare_accounts.txt.
-    Uses the /ai/v1/chat/completions OpenAI-compatible endpoint.
+    Tries models in order (fast→powerful) across multiple accounts.
     """
     cloudflare_manager.load_accounts()
     all_accounts = cloudflare_manager.accounts
@@ -153,73 +170,71 @@ async def _call_direct_cloudflare(target_os: str, target_browser: str) -> Option
         f"Output ONLY the JSON object with all required fields."
     )
 
-    tried = set()
-    max_tries = len(all_accounts)
+    for model in MODEL_CHAIN:
+        tried = set()
+        max_tries = min(len(all_accounts), 3)  # Try up to 3 accounts per model
 
-    for attempt in range(max_tries):
-        account = cloudflare_manager.get_account()
-        if not account or account["account_id"] in tried:
-            break
-        tried.add(account["account_id"])
+        for attempt in range(max_tries):
+            account = cloudflare_manager.get_account()
+            if not account or account["account_id"] in tried:
+                break
+            tried.add(account["account_id"])
 
-        account_id = account["account_id"]
-        token       = account["token"]
+            account_id = account["account_id"]
+            token       = account["token"]
+            model_short = model.split("/")[-1]
 
-        try:
-            response = await _shared_client.post(
-                f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": KIMI_MODEL,
-                    "messages": [
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user",   "content": user_prompt}
-                    ],
-                    "max_tokens": 1024
-                }
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                raw_text = data["choices"][0]["message"]["content"]
-                raw_text = re.sub(r'```json\s*', '', raw_text)
-                raw_text = re.sub(r'```\s*', '', raw_text)
-                raw_text = raw_text.strip()
-                parsed = json.loads(raw_text)
-                parsed["_is_fallback"] = False
-                parsed["_source"] = "direct_cloudflare"
-                print(f"[AI Generator] ✅ Kimi AI via direct Cloudflare ({account_id[:8]}...) — Success!")
-                return parsed
+            try:
+                response = await _shared_client.post(
+                    f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": model,
+                        "messages": [
+                            {"role": "system", "content": SYSTEM_PROMPT},
+                            {"role": "user",   "content": user_prompt}
+                        ],
+                        "max_tokens": 1024
+                    }
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    msg = data["choices"][0]["message"]
+                    raw_text = msg.get("content") or ""
 
-            elif response.status_code in (401, 403):
-                print(f"[AI Generator] ❌ {account_id[:8]}... auth failed ({response.status_code}). Cooldown 60min.")
-                cloudflare_manager.report_failure(account_id, cooldown_minutes=60)
+                    # Some models return dict instead of string (llama-4-scout)
+                    if isinstance(raw_text, dict):
+                        raw_text = json.dumps(raw_text)
 
-            elif response.status_code == 404:
-                body = response.text[:200]
-                print(f"[AI Generator] ❌ {account_id[:8]}... 404. Bad account ID? Body: {body}")
-                cloudflare_manager.report_failure(account_id, cooldown_minutes=60)
+                    raw_text = re.sub(r'```json\s*', '', raw_text)
+                    raw_text = re.sub(r'```\s*', '', raw_text)
+                    raw_text = raw_text.strip()
+                    parsed = json.loads(raw_text)
+                    parsed["_is_fallback"] = False
+                    parsed["_source"] = f"direct_cloudflare_{model_short}"
+                    print(f"[AI Generator] ✅ {model_short} via {account_id[:8]}... — Success!")
+                    return parsed
 
-            elif response.status_code == 429:
-                print(f"[AI Generator] ⚠️  {account_id[:8]}... rate limited. Cooldown 5min.")
-                cloudflare_manager.report_failure(account_id, cooldown_minutes=5)
+                elif response.status_code in (401, 403):
+                    cloudflare_manager.report_failure(account_id, cooldown_minutes=60)
+                elif response.status_code == 429:
+                    cloudflare_manager.report_failure(account_id, cooldown_minutes=5)
+                    break  # Rate limited on this model, try next model
+                else:
+                    cloudflare_manager.report_failure(account_id, cooldown_minutes=2)
 
-            else:
-                print(f"[AI Generator] ⚠️  {account_id[:8]}... HTTP {response.status_code}. Cooldown 5min.")
-                cloudflare_manager.report_failure(account_id, cooldown_minutes=5)
+                await asyncio.sleep(0.3)
 
-            await asyncio.sleep(0.3)
+            except httpx.TimeoutException:
+                cloudflare_manager.report_failure(account_id, cooldown_minutes=2)
+            except Exception as e:
+                print(f"[AI Generator] ❌ {account_id[:8]}... {model_short} exception: {e}")
 
-        except httpx.TimeoutException:
-            print(f"[AI Generator] ⏱️  {account_id[:8]}... timeout.")
-            cloudflare_manager.report_failure(account_id, cooldown_minutes=2)
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            print(f"[AI Generator] ❌ {account_id[:8]}... exception: {e}")
+        print(f"[AI Generator] ⚠️  {model_short} exhausted all accounts. Trying next model...")
 
     return None
 
