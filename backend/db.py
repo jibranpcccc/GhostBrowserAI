@@ -150,5 +150,24 @@ def get_all_alive_proxies() -> List[Dict]:
     conn.close()
     return [dict(row) for row in rows]
 
+def get_proxies_needing_geo_backfill() -> List[Dict]:
+    """Return alive proxies that still have default UTC timezone (need geo resolution)."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM proxies WHERE status = 'alive' AND (timezone = 'UTC' OR timezone IS NULL)")
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+def update_proxy_geo(ip: str, port: str, country: str, city: str, timezone: str, locale: str):
+    """Update geo info for a specific proxy."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE proxies SET country=?, city=?, timezone=?, locale=? WHERE ip=? AND port=?",
+                   (country, city, timezone, locale, ip, port))
+    conn.commit()
+    conn.close()
+
 # Initialize DB on import
 init_db()

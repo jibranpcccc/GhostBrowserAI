@@ -46,6 +46,30 @@ async def lifespan(app: FastAPI):
     scheduler_manager.runner.browser_manager = bm
     await system_monitor.start()
     scheduler_manager.start()
+
+    # Backfill geo for existing proxies that still have default UTC timezone
+    import backend.db as _db
+    import asyncio as _aio
+    async def _backfill_proxy_geo():
+        try:
+            proxies = _db.get_proxies_needing_geo_backfill()
+            if not proxies:
+                return
+            logger.info(f"[Startup] Backfilling geo for {len(proxies)} proxies with unknown timezone...")
+            for p in proxies:
+                try:
+                    server = f"{p['protocol']}://{p['ip']}:{p['port']}"
+                    geo = await proxy_manager.resolve_proxy_geo({"server": server})
+                    _db.update_proxy_geo(p['ip'], p['port'], geo.get("country", "Unknown"), geo.get("city", "Unknown"),
+                                         geo["timezone"], geo["locale"])
+                except Exception:
+                    pass
+                await _aio.sleep(0.5)
+            logger.info("[Startup] Proxy geo backfill complete.")
+        except Exception:
+            pass
+    _aio.create_task(_backfill_proxy_geo())
+
     yield
     # Shutdown
     system_monitor.stop()
@@ -763,15 +787,24 @@ async def add_proxies(data: AddProxiesModel):
 
 @app.get("/api/proxies")
 def get_proxies():
-    # Merge manager proxies with the free pool for the UI
-    try:
-        import json
-        pool_file = os.path.join(os.path.dirname(__file__), "..", "profiles_data", "proxy_pool.json")
-        if os.path.exists(pool_file):
-            with open(pool_file, "r") as f:
-                return json.load(f)
-    except Exception: pass
-    return proxy_manager._get_active_proxies()
+    """Return all alive proxies from the SQLite DB (has timezone/locale)."""
+    import backend.db as _db
+    rows = _db.get_all_alive_proxies()
+    return [
+        {
+            "server": f"{r['protocol']}://{r['ip']}:{r['port']}",
+            "ip": r['ip'],
+            "port": r['port'],
+            "protocol": r['protocol'],
+            "country": r.get('country', 'Unknown'),
+            "city": r.get('city', 'Unknown'),
+            "latency_ms": r.get('latency_ms', 0),
+            "status": r.get('status', 'alive'),
+            "timezone": r.get('timezone', 'UTC'),
+            "locale": r.get('locale', 'en-US'),
+        }
+        for r in rows
+    ]
 
 class ScrapeConfigModel(BaseModel):
     target_count: int = 20
