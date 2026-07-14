@@ -28,7 +28,7 @@ def _generate_spoofing_js(profile_config: dict) -> str:
     if _has_proxy:
         try:
             _srv = _proxy_cfg.get('server', '')
-            _srv_clean = _srv.replace('http://', '').replace('https://', '')
+            _srv_clean = _srv.split('://', 1)[-1] if '://' in _srv else _srv
             _proxy_ip = _srv_clean.split(':')[0]
         except Exception:
             _proxy_ip = None
@@ -1627,8 +1627,11 @@ async def launch_profile(profile_id: str, force_headless: bool = False):
         from backend.proxy_manager import proxy_manager
         
         if pinned_proxy_str:
-            parts = pinned_proxy_str.replace("http://", "").split(":")
+            # Strip scheme (http://, socks5://, etc.) before parsing
+            _pp_body = pinned_proxy_str.split('://', 1)[-1] if '://' in pinned_proxy_str else pinned_proxy_str
+            parts = _pp_body.split(":")
             if len(parts) == 4:
+                # ip:port:user:pass
                 assigned_proxy = {
                     "server": f"http://{parts[0]}:{parts[1]}",
                     "username": parts[2],
@@ -1674,7 +1677,8 @@ async def launch_profile(profile_id: str, force_headless: bool = False):
                 proxy["username"] = assigned_proxy["username"]
                 proxy["password"] = assigned_proxy["password"]
                 
-            args.append(f'--host-resolver-rules="MAP * ~NOTFOUND , EXCLUDE {assigned_proxy["server"].replace("http://", "").split(":")[0]}"')
+            _proxy_host = assigned_proxy["server"].split('://', 1)[-1].split(":")[0] if '://' in assigned_proxy["server"] else assigned_proxy["server"].split(":")[0]
+            args.append(f'--host-resolver-rules="MAP * ~NOTFOUND , EXCLUDE {_proxy_host}"')
 
         is_headless = force_headless or _early_adv_for_args.get("headless", False)
 
