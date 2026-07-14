@@ -419,7 +419,10 @@
     <section class="page" id="page-ai-status">
         <div class="page-toolbar">
             <h2 style="margin:0;font-size:1rem;font-weight:600;">Cloudflare Kimi AI Account Pool</h2>
-            <button class="btn-secondary" onclick="fetchCFStatus()">Refresh</button>
+            <div style="display:flex;gap:0.5rem;">
+                <button class="btn-secondary" onclick="showCFImportModal()">Import Accounts</button>
+                <button class="btn-secondary" onclick="fetchCFStatus()">Refresh</button>
+            </div>
         </div>
         <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 1.5rem;">
             <div class="stat-card">
@@ -1079,6 +1082,25 @@
 </div>
 
 <!-- TEMPLATE: MACRO STEP -->
+<!-- CF Accounts Import Modal -->
+<div id="cf-import-modal" class="modal-overlay" style="display:none;">
+    <div class="modal glass-card">
+        <div class="modal-header">
+            <h3>Import Cloudflare Accounts</h3>
+            <button class="btn-icon" onclick="closeCFImportModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
+        <div class="modal-body">
+            <p style="color:var(--text-muted);font-size:0.8rem;margin-bottom:0.75rem;">Paste one account per line. Accepts tab, comma, or colon separated.</p>
+            <textarea id="cf-import-text" rows="10" style="width:100%;font-family:monospace;font-size:0.8rem;background:rgba(0,0,0,0.4);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.75rem;resize:vertical;" placeholder="ACCOUNT_ID&#9;API_TOKEN&#10;ACCOUNT_ID&#9;API_TOKEN"></textarea>
+            <div id="cf-import-result" style="margin-top:0.75rem;font-size:0.8rem;display:none;"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-secondary" onclick="closeCFImportModal()">Cancel</button>
+            <button class="btn-primary" id="cf-import-btn" onclick="importCFAccounts()">Import</button>
+        </div>
+    </div>
+</div>
+
 <template id="tpl-macro-step">
     <div class="macro-step" style="background:rgba(0,0,0,0.2);padding:0.75rem;border-radius:var(--radius-sm);border:1px solid rgba(255,255,255,0.05);display:flex;gap:0.5rem;align-items:flex-start;">
         <select class="form-input step-action" style="width:120px;" onchange="updateMacroStepFields(this)">

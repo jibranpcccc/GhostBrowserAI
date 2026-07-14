@@ -2053,3 +2053,50 @@ async function createFolder() {
         showToast('Folder created', 'success'); fetchFolders();
     } catch(e) { showToast('Error', 'error'); }
 }
+
+// CF ACCOUNTS IMPORT
+function showCFImportModal() {
+    document.getElementById('cf-import-modal').style.display = 'flex';
+    document.getElementById('cf-import-text').value = '';
+    document.getElementById('cf-import-result').style.display = 'none';
+    document.getElementById('cf-import-text').focus();
+}
+
+function closeCFImportModal() {
+    document.getElementById('cf-import-modal').style.display = 'none';
+}
+
+async function importCFAccounts() {
+    const text = document.getElementById('cf-import-text').value.trim();
+    if (!text) { showToast('Paste account data first', 'error'); return; }
+
+    const btn = document.getElementById('cf-import-btn');
+    const result = document.getElementById('cf-import-result');
+    btn.disabled = true;
+    btn.textContent = 'Importing...';
+
+    try {
+        const res = await fetch(`${API}/api/cloudflare/import`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text })
+        });
+        const data = await res.json();
+        result.style.display = 'block';
+        if (data.status === 'success') {
+            result.style.color = 'var(--success)';
+            result.textContent = `Imported ${data.imported} accounts. ${data.skipped} skipped. Total loaded: ${data.total_loaded}.`;
+            fetchCFStatus();
+        } else {
+            result.style.color = 'var(--error)';
+            result.textContent = data.message || 'Import failed.';
+        }
+    } catch(e) {
+        result.style.display = 'block';
+        result.style.color = 'var(--error)';
+        result.textContent = 'Connection error: ' + e.message;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Import';
+    }
+}

@@ -27,7 +27,7 @@ SCREENSHOTS_DIR = TEST_DIR / "screenshots"
 LOGS_DIR = TEST_DIR / "logs"
 REPRO_DIR = TEST_DIR / "reproduction_steps"
 
-API = "http://127.0.0.1:8000"
+API = "http://127.0.0.1:8888"
 ADMIN_TOKEN = os.environ.get("GHOSTBROWSER_ADMIN_TOKEN", "")
 
 # Profile configs for 10 profiles

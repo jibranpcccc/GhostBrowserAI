@@ -51,10 +51,9 @@ class CloudflareManager:
                 if not line or line.startswith("#"):
                     continue
 
-                # Support both formats:
-                #   ACCOUNT_ID,API_TOKEN  (Hermes cloudflare_working_accounts.txt format)
-                #   ACCOUNT_ID:API_TOKEN  (colon format)
-                if "," in line:
+                if "\t" in line:
+                    parts = [p.strip() for p in line.split("\t", 1)]
+                elif "," in line:
                     parts = [p.strip() for p in line.split(",", 1)]
                 else:
                     parts = [p.strip() for p in line.split(":", 1)]

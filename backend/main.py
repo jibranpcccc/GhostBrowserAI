@@ -83,7 +83,7 @@ async def log_500_errors(request, call_next):
 app.add_middleware(
     CORSMiddleware,
     # CRIT-01 FIX: Restrict to localhost only. Wildcard + credentials is a CSRF vulnerability.
-    allow_origins=["http://127.0.0.1:8000", "http://localhost:8000"],
+    allow_origins=["http://127.0.0.1:8888", "http://localhost:8888"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -674,6 +674,70 @@ async def test_cloudflare_account():
             }
     except Exception as e:
         return {"status": "error", "message": f"Connection failed: {str(e)}"}
+
+@app.post("/api/cloudflare/import")
+def import_cloudflare_accounts(data: dict):
+    """
+    Import Cloudflare accounts from text.
+    Expects {"text": "ACCOUNT_ID\tAPI_TOKEN\\n..."} format (tab-separated, one per line).
+    """
+    raw = data.get("text", "")
+    if not raw.strip():
+        return {"status": "error", "message": "Empty text"}
+    
+    accounts_file = os.path.join(os.path.dirname(__file__), "..", "cloudflare_accounts.txt")
+    os.makedirs(os.path.dirname(accounts_file), exist_ok=True)
+    
+    count = 0
+    skipped = 0
+    lines = []
+    
+    for line in raw.strip().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        
+        if "\t" in line:
+            parts = [p.strip() for p in line.split("\t", 1)]
+        elif "," in line:
+            parts = [p.strip() for p in line.split(",", 1)]
+        elif ":" in line:
+            parts = [p.strip() for p in line.split(":", 1)]
+        else:
+            skipped += 1
+            continue
+        
+        parts = [p for p in parts if p]
+        
+        if len(parts) >= 2:
+            account_id = parts[0]
+            api_token = parts[1]
+            if any(x in account_id.lower() for x in ["your_real", "example", "account_id"]):
+                skipped += 1
+                continue
+            if any(x in api_token.lower() for x in ["your_real", "sk-kimi-token", "api_token"]):
+                skipped += 1
+                continue
+            lines.append(f"{account_id}:{api_token}")
+            count += 1
+        else:
+            skipped += 1
+    
+    if count == 0:
+        return {"status": "error", "message": f"No valid accounts found. Skipped {skipped} lines."}
+    
+    with open(accounts_file, "a", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    
+    cloudflare_manager.load_accounts()
+    
+    return {
+        "status": "success",
+        "imported": count,
+        "skipped": skipped,
+        "total_loaded": cloudflare_manager.total_accounts
+    }
+
 from backend.proxy_manager import proxy_manager
 
 class AddProxiesModel(BaseModel):
@@ -851,4 +915,4 @@ os.makedirs(frontend_dir, exist_ok=True)
 app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
 
 if __name__ == "__main__":
-    uvicorn.run("backend.main:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("backend.main:app", host="127.0.0.1", port=8888, reload=True)
