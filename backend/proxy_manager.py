@@ -13,13 +13,15 @@ class ProxyManager:
         pass
 
     def _get_active_proxies(self):
-        # Fetch the top 200 best proxies from the Titan DB
+        # Fetch the top 200 best proxies from the Titan DB (includes credentials)
         best_proxies = db.get_best_proxies(limit=200)
         formatted_proxies = []
         for p in best_proxies:
-            formatted_proxies.append({
-                "server": f"{p['protocol']}://{p['ip']}:{p['port']}"
-            })
+            entry = {"server": f"{p['protocol']}://{p['ip']}:{p['port']}"}
+            if p.get('username'):
+                entry["username"] = p['username']
+                entry["password"] = p.get('password', '')
+            formatted_proxies.append(entry)
         return formatted_proxies
 
     def add_proxies(self, proxy_list: list):
@@ -141,6 +143,7 @@ class ProxyManager:
                                 "country": country, "city": city,
                                 "latency_ms": latency, "status": "alive",
                                 "timezone": tz, "locale": locale,
+                                "username": username, "password": password,
                             })
                             result["status"] = "alive"
                             result["country"] = country
@@ -257,9 +260,8 @@ class ProxyManager:
                 transport = AsyncProxyTransport.from_url(socks_url)
                 client = httpx.AsyncClient(transport=transport, timeout=10.0)
             else:
-                client = httpx.AsyncClient(proxy=server, timeout=10.0)
-                if username:
-                    client.auth = (username, password)
+                auth_tuple = (username, password) if username else None
+                client = httpx.AsyncClient(proxy=server, auth=auth_tuple, timeout=10.0)
                 
             async with client:
                 response = await client.get("http://ip-api.com/json/")

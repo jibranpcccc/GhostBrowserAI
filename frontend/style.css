@@ -522,16 +522,22 @@ input[type="checkbox"]:checked::after {
 
 .proxy-textarea:focus { border-color: var(--primary); }
 
-.proxy-list { display: flex; flex-direction: column; gap: 0.4rem; max-height: 280px; overflow-y: auto; }
+.proxy-list { display: flex; flex-direction: column; gap: 0.35rem; max-height: 400px; overflow-y: auto; }
 
 .proxy-item {
     display: flex; align-items: center; justify-content: space-between;
     padding: 0.5rem 0.75rem;
     background: var(--surface-2); border-radius: var(--radius-sm);
-    font-size: 0.78rem;
+    font-size: 0.78rem; border: 1px solid var(--border);
+    transition: border-color 0.15s;
 }
+.proxy-item:hover { border-color: var(--border-hover); }
 
 .proxy-item .mono { font-family: 'JetBrains Mono', monospace; }
+
+.proxy-badge { font-size: 0.65rem; font-weight: 600; padding: 1px 6px; border-radius: 99px; margin-left: 0.5rem; vertical-align: middle; }
+.proxy-badge.auth { background: var(--warning-bg); color: var(--warning); }
+.proxy-badge.open { background: var(--success-bg); color: var(--success); }
 
 .proxy-status { font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 99px; }
 .proxy-status.alive { background: var(--success-bg); color: var(--success); }

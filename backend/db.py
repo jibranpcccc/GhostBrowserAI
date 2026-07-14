@@ -28,15 +28,12 @@ def init_db():
             PRIMARY KEY (ip, port)
         )
     """)
-    # Migration: add timezone/locale columns if missing
-    try:
-        cursor.execute("ALTER TABLE proxies ADD COLUMN timezone TEXT DEFAULT 'UTC'")
-    except sqlite3.OperationalError:
-        pass
-    try:
-        cursor.execute("ALTER TABLE proxies ADD COLUMN locale TEXT DEFAULT 'en-US'")
-    except sqlite3.OperationalError:
-        pass
+    # Migration: add columns if missing
+    for col, default in [("timezone", "UTC"), ("locale", "en-US"), ("username", ""), ("password", "")]:
+        try:
+            cursor.execute(f"ALTER TABLE proxies ADD COLUMN {col} TEXT DEFAULT '{default}'")
+        except sqlite3.OperationalError:
+            pass
     conn.commit()
     conn.close()
 
@@ -53,23 +50,34 @@ def upsert_proxy(proxy_data: Dict):
     now = time.time()
     tz = proxy_data.get('timezone', 'UTC')
     locale = proxy_data.get('locale', 'en-US')
+    username = proxy_data.get('username', '')
+    password = proxy_data.get('password', '')
     
     if row:
-        # Update existing
-        cursor.execute("""
-            UPDATE proxies 
-            SET protocol=?, country=?, city=?, latency_ms=?, last_checked=?, status=?, timezone=?, locale=?
-            WHERE ip=? AND port=?
-        """, (proxy_data['protocol'], proxy_data['country'], proxy_data['city'], 
-              proxy_data['latency_ms'], now, proxy_data['status'], tz, locale,
-              proxy_data['ip'], proxy_data['port']))
+        # Update existing (don't overwrite credentials if not provided)
+        if username:
+            cursor.execute("""
+                UPDATE proxies 
+                SET protocol=?, country=?, city=?, latency_ms=?, last_checked=?, status=?, timezone=?, locale=?, username=?, password=?
+                WHERE ip=? AND port=?
+            """, (proxy_data['protocol'], proxy_data['country'], proxy_data['city'], 
+                  proxy_data['latency_ms'], now, proxy_data['status'], tz, locale, username, password,
+                  proxy_data['ip'], proxy_data['port']))
+        else:
+            cursor.execute("""
+                UPDATE proxies 
+                SET protocol=?, country=?, city=?, latency_ms=?, last_checked=?, status=?, timezone=?, locale=?
+                WHERE ip=? AND port=?
+            """, (proxy_data['protocol'], proxy_data['country'], proxy_data['city'], 
+                  proxy_data['latency_ms'], now, proxy_data['status'], tz, locale,
+                  proxy_data['ip'], proxy_data['port']))
     else:
         # Insert new
         cursor.execute("""
-            INSERT INTO proxies (ip, port, protocol, country, city, latency_ms, last_checked, status, timezone, locale)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO proxies (ip, port, protocol, country, city, latency_ms, last_checked, status, timezone, locale, username, password)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (proxy_data['ip'], proxy_data['port'], proxy_data['protocol'], proxy_data['country'], 
-              proxy_data['city'], proxy_data['latency_ms'], now, proxy_data['status'], tz, locale))
+              proxy_data['city'], proxy_data['latency_ms'], now, proxy_data['status'], tz, locale, username, password))
         
     conn.commit()
     conn.close()

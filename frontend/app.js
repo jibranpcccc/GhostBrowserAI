@@ -419,8 +419,8 @@ async function openMetadataModal(id) {
         const p = Array.isArray(data) ? data.find(x => x.id === id) : null;
         if (p) {
             const tags = Array.isArray(p.tags) ? p.tags.join(', ') : (p.tags || '');
-            document.getElementById('profile-tags').value = tags;
-            document.getElementById('proxy-pin').value = p.proxy_pin || '';
+            document.getElementById('meta-tags').value = tags;
+            document.getElementById('meta-proxy-pin').value = p.proxy_pin || '';
         }
     } catch(e) {}
 }
@@ -432,8 +432,8 @@ function closeMetadataModal() {
 
 async function saveMetadata() {
     if(!currentMetadataProfileId) return;
-    const tags = document.getElementById('profile-tags').value;
-    const proxy_pin = document.getElementById('proxy-pin').value;
+    const tags = document.getElementById('meta-tags').value;
+    const proxy_pin = document.getElementById('meta-proxy-pin').value;
     
     try {
         await fetch(`${API}/api/profiles/${currentMetadataProfileId}/metadata`, {
@@ -1051,12 +1051,29 @@ async function fetchProxies() {
             return;
         }
 
-        list.innerHTML = proxies.map(p => `
+        list.innerHTML = proxies.map(p => {
+            const ip = p.ip || p.server;
+            const loc = (p.country && p.country !== 'Unknown') ? `${p.city || ''} ${p.country}` : '';
+            const tz = p.timezone && p.timezone !== 'UTC' ? p.timezone : '';
+            return `
             <div class="proxy-item">
-                <span class="mono">${escHtml(p.server)}</span>
-                ${p.username ? `<span class="proxy-status alive">Auth</span>` : `<span class="proxy-status alive">Open</span>`}
-            </div>
-        `).join('');
+                <div style="flex:1;min-width:0;">
+                    <span class="mono" style="font-size:0.82rem;">${escHtml(ip)}</span>
+                    ${p.username ? `<span class="proxy-badge auth">Auth</span>` : `<span class="proxy-badge open">Open</span>`}
+                </div>
+                <div style="display:flex;gap:0.75rem;align-items:center;font-size:0.75rem;color:var(--text-muted);flex-shrink:0;">
+                    ${loc ? `<span>${escHtml(loc)}</span>` : ''}
+                    ${tz ? `<span class="mono">${escHtml(tz)}</span>` : ''}
+                    ${p.latency_ms ? `<span style="color:${p.latency_ms < 300 ? 'var(--success)' : p.latency_ms < 600 ? 'var(--warning)' : 'var(--danger)'}">${p.latency_ms}ms</span>` : ''}
+                    <button class="btn-icon-sm" onclick="testSingleProxy('${escHtml(p.server)}')" title="Test" style="color:var(--text-muted);cursor:pointer;background:none;border:none;padding:2px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    </button>
+                    <button class="btn-icon-sm" onclick="deleteProxy('${escHtml(p.server)}')" title="Remove" style="color:var(--danger);cursor:pointer;background:none;border:none;padding:2px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+            </div>`;
+        }).join('');
     } catch (e) { /* offline */ }
 }
 
@@ -1143,6 +1160,82 @@ async function importProxies() {
         }
     } catch (e) { showToast('Import failed: ' + e.message, 'error'); }
     finally { if (btn) { btn.disabled = false; btn.textContent = origText; } }
+}
+
+async function addSingleProxy() {
+    const type = document.getElementById('proxy-add-type').value;
+    const host = document.getElementById('proxy-add-host').value.trim();
+    const port = document.getElementById('proxy-add-port').value.trim();
+    const user = document.getElementById('proxy-add-user').value.trim();
+    const pass = document.getElementById('proxy-add-pass').value.trim();
+    const resultDiv = document.getElementById('proxy-add-result');
+
+    if (!host || !port) { showToast('Enter host and port', 'warning'); return; }
+
+    const server = `${type}://${host}:${port}`;
+    const proxy = { server, username: user || null, password: pass || null };
+
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = '<span style="color:var(--warning);font-size:0.82rem;">Testing proxy...</span>';
+
+    try {
+        const res = await fetch(`${API}/api/proxies`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ proxies: [proxy] })
+        });
+        if (res.ok) {
+            const data = await res.json();
+            const r = data.results && data.results[0];
+            if (r && r.status === 'alive') {
+                resultDiv.innerHTML = `<span style="color:var(--success);font-size:0.82rem;">&#10003; Alive — ${r.country || ''} ${r.city || ''} | ${r.timezone || ''} | ${r.latency_ms || 0}ms</span>`;
+                document.getElementById('proxy-add-host').value = '';
+                document.getElementById('proxy-add-port').value = '';
+                document.getElementById('proxy-add-user').value = '';
+                document.getElementById('proxy-add-pass').value = '';
+                fetchProxies();
+            } else {
+                resultDiv.innerHTML = `<span style="color:var(--danger);font-size:0.82rem;">&#10007; Dead — proxy did not respond</span>`;
+            }
+        } else {
+            resultDiv.innerHTML = `<span style="color:var(--danger);font-size:0.82rem;">&#10007; Server error</span>`;
+        }
+    } catch(e) {
+        resultDiv.innerHTML = `<span style="color:var(--danger);font-size:0.82rem;">&#10007; ${e.message}</span>`;
+    }
+}
+
+async function testSingleProxy(server) {
+    showToast('Testing proxy...', 'info');
+    try {
+        const res = await fetch(`${API}/api/proxies`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ proxies: [{ server }] })
+        });
+        if (res.ok) {
+            const data = await res.json();
+            const r = data.results && data.results[0];
+            if (r && r.status === 'alive') {
+                showToast(`Alive — ${r.country || ''} ${r.timezone || ''} ${r.latency_ms || 0}ms`, 'success');
+            } else {
+                showToast('Proxy is dead', 'error');
+            }
+            fetchProxies();
+        }
+    } catch(e) { showToast('Test failed: ' + e.message, 'error'); }
+}
+
+async function deleteProxy(server) {
+    if (!confirm('Remove this proxy?')) return;
+    try {
+        await fetch(`${API}/api/proxies/remove`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ server })
+        });
+        fetchProxies();
+    } catch(e) {}
 }
 
 async function testAllProxies() {

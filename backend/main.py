@@ -802,6 +802,7 @@ def get_proxies():
             "status": r.get('status', 'alive'),
             "timezone": r.get('timezone', 'UTC'),
             "locale": r.get('locale', 'en-US'),
+            "username": r.get('username', ''),
         }
         for r in rows
     ]
@@ -816,8 +817,27 @@ async def scrape_free_proxies(config: ScrapeConfigModel):
     added = await proxy_scraper.run_scraper(target_count=config.target_count)
     
     # Reload proxy manager so it picks up the new proxies
-    proxy_manager._load_proxies()
+    # _load_proxies no longer needed — proxies are read from SQLite directly
     return {"status": "success", "message": f"Scraped and validated {added} free proxies"}
+
+
+class RemoveProxyModel(BaseModel):
+    server: str
+
+@app.post("/api/proxies/remove")
+async def remove_proxy(data: RemoveProxyModel):
+    """Remove a proxy from the pool."""
+    import backend.db as _db
+    try:
+        server = data.server
+        protocol, rest = server.split("://", 1)
+        ip, port = rest.split(":", 1)
+        # Mark as dead (3 failures) so it's filtered out
+        for _ in range(3):
+            _db.mark_failure(ip, port)
+        return {"status": "success", "message": f"Proxy {ip}:{port} removed"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 # H2 FIX: Add missing POST /api/proxies/test endpoint that frontend app.js calls
 @app.post("/api/proxies/test")

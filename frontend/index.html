@@ -242,26 +242,62 @@
     <section class="page" id="page-proxies">
         <div class="page-toolbar">
             <h2 style="margin:0;font-size:1rem;font-weight:600;">Proxy Pool</h2>
-            <button class="btn-secondary" onclick="testAllProxies()">Test All Proxies</button>
+            <button class="btn-secondary" id="btn-test-proxies" onclick="testAllProxies()">Test All Proxies</button>
         </div>
+
+        <!-- Single Proxy Add (AdsPower-style) -->
+        <div class="glass-card" style="margin-bottom:1rem;">
+            <div class="card-header"><h3>Add Proxy</h3></div>
+            <div style="display:grid;grid-template-columns:120px 1fr 1fr 1fr 1fr auto;gap:0.5rem;align-items:end;">
+                <div>
+                    <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:4px;">Type</label>
+                    <select id="proxy-add-type" class="form-input" style="height:36px;font-size:0.82rem;">
+                        <option value="http">HTTP</option>
+                        <option value="https">HTTPS</option>
+                        <option value="socks5">SOCKS5</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:4px;">Host</label>
+                    <input type="text" id="proxy-add-host" class="form-input" style="height:36px;font-size:0.82rem;" placeholder="1.2.3.4">
+                </div>
+                <div>
+                    <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:4px;">Port</label>
+                    <input type="text" id="proxy-add-port" class="form-input" style="height:36px;font-size:0.82rem;" placeholder="8080">
+                </div>
+                <div>
+                    <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:4px;">Username <span style="color:var(--text-dim);">(optional)</span></label>
+                    <input type="text" id="proxy-add-user" class="form-input" style="height:36px;font-size:0.82rem;" placeholder="">
+                </div>
+                <div>
+                    <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:4px;">Password <span style="color:var(--text-dim);">(optional)</span></label>
+                    <input type="password" id="proxy-add-pass" class="form-input" style="height:36px;font-size:0.82rem;" placeholder="">
+                </div>
+                <div style="display:flex;gap:0.35rem;">
+                    <button class="btn-primary" style="height:36px;font-size:0.82rem;white-space:nowrap;" onclick="addSingleProxy()">Add & Test</button>
+                </div>
+            </div>
+            <div id="proxy-add-result" style="margin-top:0.75rem;display:none;"></div>
+        </div>
+
         <div class="two-col-grid">
             <div class="glass-card">
-                <div class="card-header"><h3>Import Proxies</h3></div>
-                <p style="color:var(--text-muted);font-size:0.85rem;margin-top:0;">Format: <span class="mono">ip:port</span> or <span class="mono">ip:port:user:pass</span> (one per line)</p>
-                <textarea id="proxy-import-text" class="proxy-textarea" placeholder="1.2.3.4:8080&#10;5.6.7.8:3128:user:pass&#10;..."></textarea>
-                <button class="btn-primary" style="margin-top:1rem;width:100%;" onclick="importProxies()">Import Proxies</button>
+                <div class="card-header"><h3>Bulk Import</h3></div>
+                <p style="color:var(--text-muted);font-size:0.85rem;margin-top:0;">One per line: <span class="mono">ip:port</span> or <span class="mono">ip:port:user:pass</span></p>
+                <textarea id="proxy-import-text" class="proxy-textarea" placeholder="1.2.3.4:8080&#10;5.6.7.8:3128:user:pass&#10;socks5://9.10.11.12:1080"></textarea>
+                <button class="btn-primary" style="margin-top:1rem;width:100%;" onclick="importProxies()">Import & Test All</button>
                 
                 <hr style="border:0;border-top:1px solid var(--border-color);margin:1.5rem 0;">
                 
                 <div class="card-header"><h3>Auto-Scrape Free Proxies</h3></div>
-                <p style="color:var(--text-muted);font-size:0.85rem;margin-top:0;">Scrapes and tests thousands of public proxies, saving only the anonymous ones to your pool.</p>
+                <p style="color:var(--text-muted);font-size:0.85rem;margin-top:0;">Scrapes public proxies, saves only the anonymous ones.</p>
                 <button class="btn-primary btn-glow" style="margin-top:0.5rem;width:100%;background:linear-gradient(135deg, #f59e0b, #d97706);" id="btn-scrape-proxies" onclick="scrapeFreeProxies()">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M16.2 7.8l-2 6.3-6.4 2.1 2-6.3z"/></svg>
                     Start Free Scraper
                 </button>
             </div>
             <div class="glass-card">
-                <div class="card-header"><h3>Local Proxy Pool <span class="badge-count" id="proxy-total-badge">0</span></h3></div>
+                <div class="card-header"><h3>Proxy Pool <span class="badge-count" id="proxy-total-badge">0</span></h3></div>
                 <div class="proxy-list" id="proxy-list">
                     <div class="empty-state-small">No proxies loaded.</div>
                 </div>
