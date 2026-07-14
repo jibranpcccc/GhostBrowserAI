@@ -50,6 +50,8 @@ def _generate_spoofing_js(profile_config: dict) -> str:
         speech_voices_json = '["Microsoft David Desktop","Microsoft Zira Desktop","Microsoft Mark Desktop","Microsoft David - English (United States)"]'
     _fonts_list = advanced.get('fonts', [])
     fonts_json = json.dumps(_fonts_list) if _fonts_list else '[]'
+    _plugins_list = advanced.get('plugins', ['Chrome PDF Plugin', 'Chrome PDF Viewer', 'Chromium PDF Viewer'])
+    plugins_json = json.dumps(_plugins_list) if _plugins_list else '["Chrome PDF Plugin", "Chrome PDF Viewer", "Chromium PDF Viewer"]'
 
     # --- World-class anti-detect derived variables ---
     if ua_os_val == 'Mac':
@@ -459,7 +461,7 @@ def _generate_spoofing_js(profile_config: dict) -> str:
 
         // 7. Plugin and MimeType spoofing (proper prototypes)
         (function() {{
-            var _pluginNames = ['Chrome PDF Plugin', 'Chrome PDF Viewer', 'Chromium PDF Viewer'];
+            var _pluginNames = {plugins_json};
             var _pluginData = _pluginNames.map(function(name, idx) {{
                 return {{ name: name, description: name, filename: name + '.dll', length: 1,
                     item: function(i) {{ return i === 0 ? this : null; }},
@@ -718,22 +720,66 @@ def _generate_spoofing_js(profile_config: dict) -> str:
             }}
         }})();
 
-        // Fix #10: performance.timeOrigin â€” add session noise to break bot-timing analysis
-        // MED-11 FIX: Use seeded noise so timeOrigin is consistent within a session
-        // and doesn't differ between main frame and iframes (detectable cross-context variance).
+                        // Fix #10: performance.timeOrigin + performance.timing + performance.now jitter
+        // CRITICAL: All three must be consistent to pass whoer.net timing checks
         (function() {{
             try {{
                 const _realTO = performance.timeOrigin;
-                const _toNoise = ({(_seed % 200) - 100}); // Seeded +/- 100 ms, consistent per profile
+                const _toNoise = ({(_seed % 200) - 100}); // Seeded +/- 100 ms
                 Object.defineProperty(performance, 'timeOrigin', {{
                     get: function() {{ return _realTO + _toNoise; }}, configurable: true
                 }});
+                // CRITICAL: Override performance.timing to match timeOrigin
+                if (performance.timing) {{
+                    try {{
+                        Object.defineProperty(performance.timing, 'navigationStart', {{
+                            get: function() {{ return Math.floor(_realTO + _toNoise); }}, configurable: true
+                        }});
+                    }} catch(e) {{}}
+                }}
             }} catch(e) {{}}
+            // Per-call micro-jitter using seeded LCG (not constant offset)
+            const _rngState = new Uint32Array([{_seed}]);
+            function _microJitter() {{
+                _rngState[0] = (_rngState[0] * 1664525 + 1013904223) >>> 0;
+                return ((_rngState[0] >>> 16) & 0xFF) / 65536.0 - 0.5;
+            }}
             const _origNow = performance.now.bind(performance);
-            const _nowNoise = ({((_seed % 10) - 5) / 1.0});
             performance.now = function() {{
-                return _origNow() + _nowNoise;
+                return _origNow() + _microJitter();
             }};
+        }})();
+
+// CRITICAL FIX: Intercept Navigation Timing API to match spoofed timeOrigin
+        (function() {{
+            try {{
+                var _spoofedNavStart = Math.floor(performance.timeOrigin);
+                var _origGetEntries = performance.getEntriesByType.bind(performance);
+                performance.getEntriesByType = function(type) {{
+                    var entries = _origGetEntries(type);
+                    if (type === 'navigation') {{
+                        entries = entries.map(function(e) {{
+                            var patched = Object.create(e);
+                            Object.defineProperty(patched, 'startTime', {{ get: function() {{ return 0; }} }});
+                            Object.defineProperty(patched, 'redirectStart', {{ get: function() {{ return 0; }} }});
+                            Object.defineProperty(patched, 'redirectEnd', {{ get: function() {{ return 0; }} }});
+                            Object.defineProperty(patched, 'fetchStart', {{ get: function() {{ return 1; }} }});
+                            Object.defineProperty(patched, 'domainLookupStart', {{ get: function() {{ return 2; }} }});
+                            Object.defineProperty(patched, 'domainLookupEnd', {{ get: function() {{ return 3; }} }});
+                            Object.defineProperty(patched, 'connectStart', {{ get: function() {{ return 4; }} }});
+                            Object.defineProperty(patched, 'connectEnd', {{ get: function() {{ return 5; }} }});
+                            Object.defineProperty(patched, 'responseStart', {{ get: function() {{ return 50; }} }});
+                            Object.defineProperty(patched, 'responseEnd', {{ get: function() {{ return 80; }} }});
+                            Object.defineProperty(patched, 'domInteractive', {{ get: function() {{ return 120; }} }});
+                            Object.defineProperty(patched, 'domContentLoadedEventEnd', {{ get: function() {{ return 150; }} }});
+                            Object.defineProperty(patched, 'domComplete', {{ get: function() {{ return 200; }} }});
+                            Object.defineProperty(patched, 'loadEventEnd', {{ get: function() {{ return 250; }} }});
+                            return patched;
+                        }});
+                    }}
+                    return entries;
+                }};
+            }} catch(e) {{}}
         }})();
 
         // Fix #11: CSS media queries â€” force dark preference + no reduced-motion
@@ -777,7 +823,7 @@ def _generate_spoofing_js(profile_config: dict) -> str:
         // Headless Chrome detection bypass: chrome.loadTimes and chrome.csi
         if (!window.chrome.loadTimes) {{
             window.chrome.loadTimes = function() {{
-                var _navStart = performance.timing.navigationStart / 1000;
+                var _navStart = performance.timeOrigin / 1000;
                 var _now = Date.now() / 1000;
                 return {{
                     requestTime: _navStart,
@@ -935,10 +981,7 @@ def _generate_spoofing_js(profile_config: dict) -> str:
                 var _OrigFontFace = _FontFace;
                 window.FontFace = function(family, source, descriptors) {{
                     var ff = new _OrigFontFace(family, source, descriptors);
-                    if (family && !_fontSet.has(String(family).toLowerCase())) {{
-                        _fontSet.add(String(family).toLowerCase());
-                        _spoofedFonts.push(String(family));
-                    }}
+                    // Don't add unknown fonts - real browsers don't gain system fonts during session
                     return ff;
                 }};
                 window.FontFace.prototype = _OrigFontFace.prototype;
@@ -975,9 +1018,12 @@ def _generate_spoofing_js(profile_config: dict) -> str:
 
         // A. WebGL Extended Parameters (GPU fingerprint normalization)
         if ({str(webgl_noise).lower()}) {{
+            // GPU-matched texture limits (realistic per GPU model)
+            var _texSize = _seed % 2 === 0 ? 16384 : 8192;
+            var _cubeSize = _seed % 2 === 0 ? 8192 : 4096;
             const _wp = {{
-                3379: {16384 + (_seed % 4096)}, 34076: {16384 + (_seed % 4096)},
-                3386: {8192 + (_seed % 2048)}, 34930: 32, 35661: 32, 36349: 16,
+                3379: _texSize, 34076: _texSize,
+                3386: _cubeSize, 34930: 32, 35661: 32, 36349: 16,
                 36347: 1024, 36348: 512, 34921: 16, 36345: 256,
                 7938: 'WebGL 1.0', 35724: 'WebGL GLSL ES 1.0',
                 7936: '{ai_webgl_vendor.split(".")[0]}',
@@ -1436,6 +1482,14 @@ async def launch_profile(profile_id: str, force_headless: bool = False):
 
         is_headless = force_headless or _early_adv_for_args.get("headless", False)
 
+        # CRITICAL FIX: Send sec-ch-ua headers + DNT header via HTTP
+        _extra_headers = {
+            "DNT": "1",
+            "Sec-CH-UA": _early_adv_for_args.get("sec_ch_ua", '"Chromium";v="136", "Google Chrome";v="136", "Not=A?Brand";v="8"'),
+            "Sec-CH-UA-Mobile": "?0",
+            "Sec-CH-UA-Platform": _early_adv_for_args.get("sec_ch_ua_platform", '"Windows"'),
+        }
+
         context = await playwright.chromium.launch_persistent_context(
             user_data_dir=profile["path"],
             headless=is_headless,
@@ -1444,7 +1498,8 @@ async def launch_profile(profile_id: str, force_headless: bool = False):
             user_agent=profile.get("user_agent"),
             timezone_id=profile.get("timezone"),
             locale=profile.get("locale"),
-            viewport={"width": _vp_w, "height": _vp_h}  # Now matches AI-generated screen_resolution
+            viewport={"width": _vp_w, "height": _vp_h},
+            extra_http_headers=_extra_headers
         )
         
         if _early_adv_for_args.get("block_trackers", False):
