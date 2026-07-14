@@ -14,11 +14,11 @@ class AIAutoValidator:
     def __init__(self):
         self.leak_scanner = leak_scanner
         self.coherence_validator = coherence_validator
-        self.model_name = os.environ.get("KIMI_MODEL_NAME", "@cf/moonshotai/kimi-k2.7-code")
+        self.model_name = os.environ.get("KIMI_MODEL_NAME", "@cf/zai-org/glm-4.7-flash")
 
     async def validate_profile(self, profile: dict, fingerprint: dict) -> dict:
         """
-        Main auto-check function. Uses both rules + Moonshot Kimi AI.
+        Main auto-check function. Uses both rules + Cloudflare Workers AI.
         """
         profile_id = profile["id"]
         print(f"[AutoValidator] Starting AI-powered validation for profile: {profile_id}")
@@ -26,7 +26,7 @@ class AIAutoValidator:
         # Step 1: Technical checks (fast)
         technical_result = await self._run_technical_checks(profile, fingerprint)
         
-        # Step 2: AI Analysis using Moonshot Kimi
+        # Step 2: AI Analysis using Cloudflare Workers AI
         ai_analysis = await self._get_kimi_analysis(profile_id, fingerprint, technical_result)
         
         # Step 3: Final scoring and decision
@@ -131,8 +131,8 @@ class AIAutoValidator:
 
     async def _get_kimi_analysis(self, profile_id: str, fingerprint: dict, technical_result: dict) -> dict:
         """
-        Send data to Moonshot Kimi AI for intelligent evaluation.
-        Uses the Hermes Racing Proxy (port 8005) with 434 accounts — fast and reliable.
+        Send data to Cloudflare Workers AI for intelligent evaluation.
+        Uses model fallback chain with account rotation.
         """
         # Compact fingerprint to reduce token usage
         compact_fp = {
@@ -250,6 +250,50 @@ Output ONLY this JSON object, nothing else:
             print("[AutoValidator] ⚠️  AI returned invalid JSON. Using fallback scoring.")
         except Exception as e:
             print(f"[AutoValidator] ⚠️  Validation error: {e}. Using fallback.")
+
+        # FALLBACK 2: Direct Cloudflare API
+        try:
+            from backend.cloudflare_manager import cloudflare_manager as cfm
+            cfm.load_accounts()
+            if cfm.accounts:
+                account = cfm.get_account()
+                if account:
+                    async with httpx.AsyncClient(timeout=30.0) as client:
+                        response = await client.post(
+                            f"https://api.cloudflare.com/client/v4/accounts/{account['account_id']}/ai/v1/chat/completions",
+                            headers={"Authorization": f"Bearer {account['token']}", "Content-Type": "application/json"},
+                            json={
+                                "model": self.model_name,
+                                "messages": [
+                                    {"role": "system", "content": 'You are a JSON API. You MUST respond with ONLY a JSON object.'},
+                                    {"role": "user", "content": prompt}
+                                ],
+                                "max_tokens": 300
+                            }
+                        )
+                    if response.status_code == 200:
+                        data = response.json()
+                        result_text = data["choices"][0]["message"]["content"].strip()
+                        if isinstance(result_text, dict):
+                            result_text = json.dumps(result_text)
+                        ai_result = None
+                        for attempt_text in [result_text, re.sub(r'```json\s*', '', re.sub(r'```\s*', '', result_text)).strip()]:
+                            try:
+                                ai_result = json.loads(attempt_text)
+                                break
+                            except json.JSONDecodeError:
+                                pass
+                        if ai_result:
+                            ai_result.setdefault("ai_score", 75)
+                            ai_result.setdefault("overall_verdict", "Acceptable")
+                            ai_result.setdefault("detected_issues", [])
+                            ai_result.setdefault("recommendations", [])
+                            ai_result.setdefault("reasoning", "")
+                            ai_result["_is_fallback"] = False
+                            print(f"[AutoValidator] ✅ AI validation via Direct Cloudflare — Score: {ai_result.get('ai_score')}")
+                            return ai_result
+        except Exception as e:
+            print(f"[AutoValidator] ⚠️  Direct Cloudflare fallback failed: {e}")
 
         # FALLBACK: Technical checks already passed — accept with warning
         print("[AutoValidator] Using fallback scoring (technical checks still ran).")

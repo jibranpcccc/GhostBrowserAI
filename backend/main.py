@@ -220,8 +220,8 @@ from backend.profile_creator import profile_creator
 @app.post("/api/profiles")
 async def create_profile(data: CreateProfileModel):
     """
-    Creates a Zero-Leak profile using the full Kimi AI → Coherence → LeakScan pipeline.
-    NO profile is ever created without Kimi AI successfully generating the fingerprint.
+    Creates a Zero-Leak profile using the full Cloudflare AI → Coherence → LeakScan pipeline.
+    NO profile is ever created without AI successfully generating the fingerprint.
     """
     async with _profile_create_sem:
         proxy_dict = data.proxy.model_dump() if data.proxy else parse_proxy_string(data.proxy_string)
@@ -242,7 +242,7 @@ async def create_profile(data: CreateProfileModel):
 
 @app.post("/api/profiles/generate")
 async def generate_profile(data: CreateProfileModel):
-    """Alias for POST /api/profiles — triggers full Kimi AI zero-leak creation."""
+    """Alias for POST /api/profiles — triggers full AI zero-leak creation."""
     return await create_profile(data)
 
 class BulkCreateProfileModel(BaseModel):
@@ -253,7 +253,7 @@ class BulkCreateProfileModel(BaseModel):
 
 @app.post("/api/profiles/generate/bulk")
 async def generate_bulk_profiles(data: BulkCreateProfileModel):
-    """Generate multiple profiles concurrently via Kimi AI, with concurrency limits."""
+    """Generate multiple profiles concurrently via Cloudflare AI, with concurrency limits."""
     count = min(data.count, 50) # Cap at 50 to prevent overload
     
     # Limit to 8 concurrent creations to prevent Playwright leak scanner from melting the CPU
@@ -289,7 +289,7 @@ def list_profiles():
 
 @app.post("/api/profiles/{profile_id}/clone")
 async def clone_profile(profile_id: str):
-    """Smart Duplicate a profile: Re-runs Kimi AI to generate a fresh, unique fingerprint but copies metadata, proxy, and tags."""
+    """Smart Duplicate a profile: Re-runs AI to generate a fresh, unique fingerprint but copies metadata, proxy, and tags."""
     original = profile_manager.get_profile(profile_id)
     if not original:
         raise HTTPException(status_code=404, detail="Original profile not found")
@@ -622,7 +622,7 @@ def get_cloudflare_status():
         "total_accounts": cloudflare_manager.total_accounts,
         "healthy_count": cloudflare_manager.healthy_count,
         "cooldown_count": cloudflare_manager.cooldown_count,
-        "model": "@cf/moonshotai/kimi-k2.7-code",
+        "model": "@cf/zai-org/glm-4.7-flash",
         "accounts": cloudflare_manager.get_all_status()
     }
 
@@ -648,7 +648,7 @@ async def test_cloudflare_account():
     
     account_id = account["account_id"]
     token = account["token"]
-    model = "@cf/moonshotai/kimi-k2.7-code"
+    model = "@cf/zai-org/glm-4.7-flash"
     url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model}"
     
     try:
@@ -664,7 +664,7 @@ async def test_cloudflare_account():
             if data.get("success"):
                 return {
                     "status": "success",
-                    "message": f"✅ Account {account_id[:8]}... is working! Kimi AI responded correctly.",
+                    "message": f"✅ Account {account_id[:8]}... is working! Cloudflare AI responded correctly.",
                     "account_id_prefix": account_id[:8] + "...",
                     "http_code": 200
                 }

@@ -45,16 +45,16 @@ class ProfileCreationOrchestrator:
             try:
                 print(f"[Orchestrator] Attempt {attempt + 1}/{max_attempts}")
 
-                # Step 1: Generate AI Fingerprint via Kimi/Cloudflare ONLY
-                print("[Orchestrator] Step 1: Generating Fingerprint via Kimi AI...")
+                # Step 1: Generate AI Fingerprint via Cloudflare Workers AI ONLY
+                print("[Orchestrator] Step 1: Generating Fingerprint via Cloudflare AI...")
                 fp = await generate_fingerprint_ai()
 
                 if fp.get("_is_fallback"):
-                    print("[Orchestrator] STRICT MODE: Kimi AI unavailable. All Cloudflare accounts exhausted.")
-                    print("[Orchestrator] Profile creation REFUSED. No profile is ever made without Kimi AI.")
+                    print("[Orchestrator] STRICT MODE: Cloudflare AI unavailable. All accounts exhausted.")
+                    print("[Orchestrator] Profile creation REFUSED. No profile is ever made without AI.")
                     return {
                         "status": "error",
-                        "message": "Kimi AI unavailable: all Cloudflare accounts failed or are on cooldown. Add more accounts to cloudflare_accounts.txt and retry.",
+                        "message": "Cloudflare AI unavailable: all accounts failed or are on cooldown. Add more accounts to cloudflare_accounts.txt and retry.",
                         "code": "KIMI_UNAVAILABLE"
                     }
 
