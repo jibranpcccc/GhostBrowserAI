@@ -62,6 +62,106 @@ class ProxyManager:
                 logger.warning(f"Failed to add proxy {server}: {e}")
         return added
 
+    async def add_proxies_tested(self, proxy_list: list) -> dict:
+        """
+        Adds proxies one-by-one: tests health first, then resolves geo.
+        Returns results per proxy for the frontend.
+        """
+        import asyncio
+        import httpx
+        from httpx_socks import AsyncProxyTransport
+
+        results = []
+        for p in proxy_list:
+            server = p.get("server", "")
+            username = p.get("username", "")
+            password = p.get("password", "")
+            result = {"server": server, "status": "unknown", "timezone": "UTC", "locale": "en-US"}
+
+            try:
+                if "://" not in server:
+                    result["status"] = "invalid"
+                    results.append(result)
+                    continue
+                protocol, rest = server.split("://", 1)
+                if "@" in rest:
+                    rest = rest.split("@", 1)[1]
+                parts = rest.split(":")
+                if len(parts) < 2:
+                    result["status"] = "invalid"
+                    results.append(result)
+                    continue
+                ip, port = parts[0], parts[1]
+            except Exception:
+                result["status"] = "invalid"
+                results.append(result)
+                continue
+
+            # Build client
+            try:
+                if server.startswith("socks"):
+                    if username:
+                        socks_url = f"{protocol}://{username}:{password}@{rest}"
+                    else:
+                        socks_url = server
+                    transport = AsyncProxyTransport.from_url(socks_url)
+                    client = httpx.AsyncClient(transport=transport, timeout=8.0)
+                else:
+                    auth_tuple = (username, password) if username else None
+                    client = httpx.AsyncClient(proxy=server, auth=auth_tuple, timeout=8.0)
+            except Exception:
+                result["status"] = "invalid"
+                results.append(result)
+                continue
+
+            # Test health
+            try:
+                async with client as c:
+                    t0 = __import__("time").time()
+                    resp = await c.get("http://ip-api.com/json/?fields=status,countryCode,city,timezone")
+                    latency = int((__import__("time").time() - t0) * 1000)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if data.get("status") == "success":
+                            country = data.get("countryCode", "Unknown")
+                            city = data.get("city", "Unknown")
+                            tz = data.get("timezone", "UTC")
+                            COUNTRY_LANG = {
+                                "US": "en", "GB": "en", "AU": "en", "CA": "en", "DE": "de",
+                                "FR": "fr", "ES": "es", "IT": "it", "PT": "pt", "BR": "pt",
+                                "NL": "nl", "RU": "ru", "PL": "pl", "TR": "tr", "JP": "ja",
+                                "KR": "ko", "CN": "zh", "SA": "ar", "AE": "ar", "IN": "hi",
+                                "TH": "th", "VN": "vi", "ID": "id",
+                            }
+                            lang = COUNTRY_LANG.get(country, "en")
+                            locale = f"{lang}-{country}"
+
+                            db.upsert_proxy({
+                                "ip": ip, "port": port, "protocol": protocol,
+                                "country": country, "city": city,
+                                "latency_ms": latency, "status": "alive",
+                                "timezone": tz, "locale": locale,
+                            })
+                            result["status"] = "alive"
+                            result["country"] = country
+                            result["city"] = city
+                            result["timezone"] = tz
+                            result["locale"] = locale
+                            result["latency_ms"] = latency
+                        else:
+                            result["status"] = "dead"
+                    else:
+                        result["status"] = "dead"
+            except Exception as e:
+                logger.warning(f"Proxy test failed for {server}: {e}")
+                result["status"] = "dead"
+
+            results.append(result)
+
+        alive = sum(1 for r in results if r["status"] == "alive")
+        dead = sum(1 for r in results if r["status"] == "dead")
+        return {"results": results, "alive": alive, "dead": dead, "total": len(results)}
+
     def remove_proxy(self, server: str):
         try:
             protocol, rest = server.split("://")

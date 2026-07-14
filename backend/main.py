@@ -749,11 +749,17 @@ class AddProxiesModel(BaseModel):
     proxies: list[ProxyModel]
 
 @app.post("/api/proxies")
-def add_proxies(data: AddProxiesModel):
-    # Convert Pydantic models to dicts
+async def add_proxies(data: AddProxiesModel):
+    """Add proxies with health testing and geo resolution."""
     proxy_dicts = [p.model_dump() for p in data.proxies]
-    added = proxy_manager.add_proxies(proxy_dicts)
-    return {"status": "success", "added": added}
+    result = await proxy_manager.add_proxies_tested(proxy_dicts)
+    return {
+        "status": "success",
+        "added": result["alive"],
+        "dead": result["dead"],
+        "total": result["total"],
+        "results": result["results"]
+    }
 
 @app.get("/api/proxies")
 def get_proxies():

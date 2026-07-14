@@ -1093,6 +1093,7 @@ async function fetchTitanProxies() {
                     <td class="mono">${p.port}</td>
                     <td><span style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:4px;font-size:0.75rem;">${p.protocol.toUpperCase()}</span></td>
                     <td>${p.city || 'Unknown'}, ${p.country || 'Unknown'}</td>
+                    <td class="mono" style="font-size:0.75rem;color:var(--text-muted);">${p.timezone || 'UTC'}</td>
                     <td class="mono" style="color:${pingColor};">${p.latency_ms}ms</td>
                     <td>${statusBadge}</td>
                 </tr>
@@ -1119,6 +1120,11 @@ async function importProxies() {
 
     if (proxies.length === 0) { showToast('No valid proxies found.', 'error'); return; }
 
+    const btn = document.querySelector('.proxy-import-btn') || document.querySelector('[onclick="importProxies()"]');
+    const origText = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = `Testing ${proxies.length} proxies...`; }
+    showToast(`Testing ${proxies.length} proxies for health and geo...`, 'info');
+
     try {
         const res = await fetch(`${API}/api/proxies`, {
             method: 'POST',
@@ -1127,12 +1133,16 @@ async function importProxies() {
         });
         if (res.ok) {
             const data = await res.json();
-            showToast(`${data.added} proxies imported!`, 'success');
-            addActivity(`${data.added} proxies added to pool`, 'success');
+            const msg = data.dead > 0
+                ? `${data.added} alive (timezone synced), ${data.dead} dead/invalid`
+                : `${data.added} proxies imported with timezone sync!`;
+            showToast(msg, data.dead > 0 ? 'warning' : 'success');
+            addActivity(`${data.added} proxies added and tested`, 'success');
             document.getElementById('proxy-import-text').value = '';
             fetchProxies();
         }
     } catch (e) { showToast('Import failed: ' + e.message, 'error'); }
+    finally { if (btn) { btn.disabled = false; btn.textContent = origText; } }
 }
 
 async function testAllProxies() {
