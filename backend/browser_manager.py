@@ -882,7 +882,8 @@ def _generate_spoofing_js(profile_config: dict) -> str:
         Object.defineProperty(navigator, 'maxTouchPoints', {{ get: () => 0 }});
         // navigator.cookieEnabled
         Object.defineProperty(navigator, 'cookieEnabled', {{ get: () => true }});
-        try {{ Object.defineProperty(navigator, 'doNotTrack', {{ get: () => '1', configurable: true }}); }} catch(e) {{}}
+        try {{ navigator.__proto__.doNotTrack = '1'; }} catch(e) {{}}
+        try {{ Object.defineProperty(navigator, 'doNotTrack', {{ get: () => '1', set: () => {{}}, configurable: true, enumerable: true }}); }} catch(e) {{}}
         try {{ Object.defineProperty(navigator, 'globalPrivacyControl', {{ get: () => true, configurable: true }}); }} catch(e) {{}}
 
         // navigator.mediaDevices.enumerateDevices() spoofing
@@ -1399,6 +1400,8 @@ async def launch_profile(profile_id: str, force_headless: bool = False):
             '--disable-infobars',
             '--no-sandbox',
             '--disable-setuid-sandbox',
+            '--disable-touch-events',
+            '--disable-features=TouchscreenDevice',
             # CRIT-04 FIX: Removed --disable-web-security and --disable-features=IsolateOrigins
             # These flags are massive fingerprinting signals detected by CreepJS/Pixelscan.
         ]
