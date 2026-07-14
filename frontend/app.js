@@ -2387,14 +2387,19 @@ async function exportProfile(id) {
 async function importProfiles() {
     const input = document.getElementById('import-file-input');
     if (!input || !input.files.length) return showToast('Select a JSON file', 'error');
-    const formData = new FormData();
-    formData.append('file', input.files[0]);
+    const file = input.files[0];
     try {
-        const res = await fetch(`${API}/api/profiles/import`, { method: 'POST', body: formData });
+        const text = await file.text();
+        JSON.parse(text); // validate it's valid JSON
+        const res = await fetch(`${API}/api/profiles/import`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data: text, encrypted: false, overwrite: false })
+        });
         const data = await res.json();
         if (res.ok) { showToast(data.message || 'Imported!', 'success'); fetchProfiles(); }
-        else showToast('Import failed', 'error');
-    } catch(e) { showToast('Import error', 'error'); }
+        else showToast(data.detail || 'Import failed', 'error');
+    } catch(e) { showToast('Import error: ' + e.message, 'error'); }
     input.value = '';
 }
 

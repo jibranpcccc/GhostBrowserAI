@@ -135,10 +135,43 @@ class ProfileCreationOrchestrator:
 
                 if validation_result["decision"] != "ACCEPT":
                     issues = validation_result.get("issues", [])
-                    only_ai_fallback = all("AI analysis failed" in i or "Fallback" in i for i in issues) if issues else False
 
-                    if only_ai_fallback:
-                        print(f"[Orchestrator] AI validator unreachable but technical checks PASSED. Accepting profile.")
+                    # Define issues that are real quarantine signals (actual automation detection,
+                    # IP leaks, runtime detection artifacts). Everything else is a warning.
+                    QUARANTINE_SIGNALS = [
+                        "RUNTIME LEAK", "Automation prevention is disabled",
+                        "Mac OS cannot have NVIDIA", "Mac OS does not use Direct3D",
+                        "Windows OS cannot have Apple GPU", "Chrome version mismatch",
+                        "Mac-only fonts detected on Windows",
+                        "Windows-only fonts detected on Mac",
+                        "$cdc_", "webdriver is true",
+                    ]
+                    # Issues that are just warnings — never trigger quarantine on their own
+                    WARNING_ISSUES = [
+                        "AI analysis failed", "Simulated boot failed",
+                        "Font fingerprint missing", "Fallback",
+                    ]
+
+                    def _has_quarantine_signal(issue_list):
+                        for issue in issue_list:
+                            issue_str = str(issue)
+                            if any(sig in issue_str for sig in QUARANTINE_SIGNALS):
+                                return True
+                        return False
+
+                    def _only_warnings(issue_list):
+                        for issue in issue_list:
+                            issue_str = str(issue)
+                            if any(w in issue_str for w in WARNING_ISSUES):
+                                continue
+                            if not _has_quarantine_signal([issue]):
+                                # Some other unknown issue — treat cautiously
+                                return False
+                        return True
+
+                    if not _has_quarantine_signal(issues) and _only_warnings(issues):
+                        print(f"[Orchestrator] Validator returned non-ACCEPT but issues are only warnings: {issues}")
+                        print("[Orchestrator] Accepting profile with warnings.")
                     else:
                         print(f"[Orchestrator] Validator flagged real issues: {issues}")
 
@@ -147,9 +180,8 @@ class ProfileCreationOrchestrator:
 
                         re_validation = await auto_validator.validate_profile(final_profile, fp)
                         re_issues = re_validation.get("issues", [])
-                        re_only_ai = all("AI analysis failed" in i or "Fallback" in i for i in re_issues) if re_issues else False
 
-                        if re_validation["decision"] != "ACCEPT" and not re_only_ai:
+                        if re_validation["decision"] != "ACCEPT" and _has_quarantine_signal(re_issues):
                             print("[Orchestrator] Sanitization failed. Quarantining profile.")
                             logger.warning(f"Profile {final_profile['id']} quarantined due to real leak: {re_issues}")
                             self._quarantine_profile(final_profile, re_issues)

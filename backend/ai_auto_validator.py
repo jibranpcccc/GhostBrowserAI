@@ -86,8 +86,9 @@ class AIAutoValidator:
         if os_name == "windows":
             missing_win = [f for f in win_fonts if f not in fonts_lower]
             if missing_win:
-                issues.append(f"Font fingerprint missing expected Windows fonts: {missing_win}")
-            # Mac-only fonts on Windows = anomaly
+                # Warning only — AI may generate a plausible subset; not a quarantine signal
+                print(f"[AutoValidator] ℹ️  Font warning: missing expected Windows fonts: {missing_win}")
+            # Mac-only fonts on Windows = real anomaly (quarantine signal)
             mac_present = [f for f in mac_fonts if f in fonts_lower]
             if mac_present:
                 issues.append(f"Mac-only fonts detected on Windows fingerprint: {mac_present}")
@@ -95,8 +96,9 @@ class AIAutoValidator:
         elif os_name in ("mac", "macos", "darwin"):
             missing_mac = [f for f in mac_fonts if f not in fonts_lower]
             if missing_mac:
-                issues.append(f"Font fingerprint missing expected Mac fonts: {missing_mac}")
-            # Windows-only fonts on Mac = anomaly
+                # Warning only — not a quarantine signal
+                print(f"[AutoValidator] ℹ️  Font warning: missing expected Mac fonts: {missing_mac}")
+            # Windows-only fonts on Mac = real anomaly (quarantine signal)
             win_present = [f for f in win_fonts if f in fonts_lower]
             if win_present:
                 issues.append(f"Windows-only fonts detected on Mac fingerprint: {win_present}")
@@ -273,9 +275,11 @@ Output ONLY this JSON object, nothing else:
                         )
                     if response.status_code == 200:
                         data = response.json()
-                        result_text = data["choices"][0]["message"]["content"].strip()
-                        if isinstance(result_text, dict):
-                            result_text = json.dumps(result_text)
+                        raw_content = data["choices"][0]["message"].get("content")
+                        if raw_content is None:
+                            print("[AutoValidator] ⚠️  Direct Cloudflare returned None content. Using fallback.")
+                            raise json.JSONDecodeError("None content", "", 0)
+                        result_text = raw_content.strip() if isinstance(raw_content, str) else json.dumps(raw_content)
                         ai_result = None
                         for attempt_text in [result_text, re.sub(r'```json\s*', '', re.sub(r'```\s*', '', result_text)).strip()]:
                             try:

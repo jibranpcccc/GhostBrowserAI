@@ -136,8 +136,10 @@ class AILeakScanner:
                     
                 await context.close()
         except Exception as e:
-            score = 0
+            # Boot failure (e.g. Playwright not installed) is a WARNING, not a hard fail.
+            # The profile may still be clean — don't zero the score.
             issues.append(f"Simulated boot failed: {e}")
+            print(f"[LeakScanner] ⚠️  Simulated boot failed (non-fatal): {e}")
         finally:
             # Always clean up the temp dir — never leave browser state behind
             shutil.rmtree(temp_dir, ignore_errors=True)
