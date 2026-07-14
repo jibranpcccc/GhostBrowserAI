@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GhostBrowser — AI Anti-Detect Dashboard</title>
-    <meta name="description" content="AI-powered anti-detect browser management dashboard powered by Kimi AI via Cloudflare.">
+                    <meta name="description" content="AI-powered anti-detect browser management dashboard powered by Cloudflare Workers AI.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css?v=1.1">
@@ -64,7 +64,7 @@
     <div class="sidebar-footer">
         <div class="ai-mode-badge">
             <div class="ai-dot"></div>
-            <span>Kimi via Cloudflare</span>
+            <span>Cloudflare AI</span>
         </div>
     </div>
 </aside>
@@ -108,7 +108,7 @@
             <div class="stat-card">
                 <div class="stat-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></div>
                 <div class="stat-body">
-                    <div class="stat-label">Kimi Accounts Healthy</div>
+                    <div class="stat-label">AI Accounts Healthy</div>
                     <div class="stat-value" id="stat-cf-healthy">-- / --</div>
                 </div>
                 <div class="stat-trend up" id="stat-cf-trend">OK</div>
@@ -165,7 +165,7 @@
                     <div class="legend-item"><div class="legend-dot amber"></div><span id="cf-legend-cooldown">-- On Cooldown</span></div>
                 </div>
                 <div class="model-info">
-                    <span class="mono">@cf/moonshotai/kimi-k2.7-code</span>
+                    <span class="mono">@cf/zai-org/glm-4.7-flash</span>
                 </div>
             </div>
         </div>
@@ -232,7 +232,7 @@
             <div class="empty-icon">👻</div>
             <h3>No Profiles Yet</h3>
             <p>Create your first AI-powered stealth profile.</p>
-            <button class="btn-primary" onclick="openCreateModal()">Generate with Kimi AI</button>
+            <button class="btn-primary" onclick="openCreateModal()">Generate with AI</button>
         </div>
             </div>
         </div>
@@ -419,7 +419,7 @@
     <!-- PAGE: AI STATUS -->
     <section class="page" id="page-ai-status">
         <div class="page-toolbar">
-            <h2 style="margin:0;font-size:1rem;font-weight:600;">Cloudflare Kimi AI Account Pool</h2>
+            <h2 style="margin:0;font-size:1rem;font-weight:600;">Cloudflare AI Account Pool</h2>
             <div style="display:flex;gap:0.5rem;">
                 <button class="btn-secondary" onclick="showCFImportModal()">Import Accounts</button>
                 <button class="btn-secondary" onclick="fetchCFStatus()">Refresh</button>
@@ -451,7 +451,7 @@
         <div class="glass-card">
             <div class="card-header">
                 <h3>Account Details</h3>
-                <div class="mono" style="font-size:0.75rem;color:var(--text-muted);">Model: @cf/moonshotai/kimi-k2.7-code</div>
+                <div class="mono" style="font-size:0.75rem;color:var(--text-muted);">Model: @cf/zai-org/glm-4.7-flash</div>
             </div>
             <div id="cf-accounts-list" class="cf-accounts-list">
                 <div class="empty-state-small">Loading account data...</div>
@@ -484,10 +484,10 @@
     <section class="page" id="page-settings">
         <div class="settings-grid">
             <div class="glass-card">
-                <div class="card-header"><h3>🤖 Kimi AI Configuration</h3></div>
+                <div class="card-header"><h3>Cloudflare AI Configuration</h3></div>
                 <div class="settings-group">
                     <label class="settings-label">Model Name</label>
-                    <input type="text" class="settings-input mono" value="@cf/moonshotai/kimi-k2.7-code" id="setting-model" readonly>
+                    <input type="text" class="settings-input mono" value="@cf/zai-org/glm-4.7-flash" id="setting-model" readonly>
                     <p class="settings-hint">Hosted on Cloudflare Workers AI. Uses your 500+ account pool for failover.</p>
                 </div>
                 <div class="settings-group">
@@ -495,10 +495,10 @@
                     <input type="text" class="settings-input mono" value="cloudflare_accounts.txt" readonly>
                 </div>
                 <div class="settings-group">
-                    <label class="settings-label">Strict Kimi-Only Mode</label>
-                    <div class="toggle-row">
-                        <div class="toggle active" title="Cannot be disabled — profiles are NEVER created without Kimi AI"></div>
-                        <span style="color:var(--success);font-size:0.85rem;font-weight:600;">ALWAYS ON — No profile without Kimi</span>
+                    <label class="settings-label">Strict AI-Only Mode</label>
+                        <div class="toggle-row">
+                        <div class="toggle active" title="Cannot be disabled — profiles are NEVER created without AI"></div>
+                        <span style="color:var(--success);font-size:0.85rem;font-weight:600;">ALWAYS ON — No profile without AI</span>
                     </div>
                 </div>
             </div>
@@ -556,7 +556,7 @@
         <div class="modal-header">
             <div>
                 <h2 class="modal-title">Generate AI Profile</h2>
-                <p class="modal-subtitle">Powered by Kimi AI via Cloudflare Workers</p>
+                <p class="modal-subtitle">Powered by Cloudflare Workers AI</p>
             </div>
             <button class="modal-close" onclick="closeCreateModal()">✕</button>
         </div>
@@ -597,10 +597,10 @@
                             <input type="number" class="form-input" id="new-profile-count" value="1" min="1" max="50" style="width: 80px;">
                     </div>
                 </div>
-                <div class="kimi-notice" style="margin-top: 1rem;">
-                    <div class="kimi-icon">🤖</div>
+                    <div class="kimi-notice" style="margin-top: 1rem;">
+                    <div class="kimi-icon">⚡</div>
                     <div>
-                        <strong>Powered by Kimi AI</strong>
+                        <strong>Powered by Cloudflare AI</strong>
                         <p>A unique, highly consistent browser fingerprint will be generated.</p>
                     </div>
                 </div>
@@ -663,8 +663,8 @@
                 <div class="progress-step" id="step-1">
                     <div class="step-icon spinner"></div>
                     <div class="step-text">
-                        <div class="step-title">Calling Kimi AI</div>
-                        <div class="step-sub">Generating fingerprint via @cf/moonshotai/kimi-k2.7-code...</div>
+                        <div class="step-title">Calling Cloudflare AI</div>
+                        <div class="step-sub">Generating fingerprint via @cf/zai-org/glm-4.7-flash...</div>
                     </div>
                 </div>
                 <div class="progress-step pending" id="step-2">
@@ -685,7 +685,7 @@
                     <div class="step-icon"></div>
                     <div class="step-text">
                         <div class="step-title">AI Validation</div>
-                        <div class="step-sub">Final Kimi AI profile audit...</div>
+                        <div class="step-sub">Final AI profile audit...</div>
                     </div>
                 </div>
             </div>

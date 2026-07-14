@@ -58,7 +58,7 @@ class BulkAssignFolderRequest(BaseModel):
 
 @router.post("/api/profiles/bulk/create")
 async def bulk_create_profiles(req: BulkCreateRequest):
-    """Create N profiles concurrently (does NOT use the Kimi AI pipeline)."""
+    """Create N profiles concurrently (does NOT use the AI pipeline)."""
     count = max(1, min(req.count, 100))  # cap at 100
 
     async def create_one(i: int):

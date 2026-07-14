@@ -39,7 +39,7 @@ async def create_five_profiles():
         account_id = parts[0].strip()
         api_token = parts[1].strip()
         
-        print(f"[{idx+1}/5] Generating robust fingerprint via Kimi AI (racing proxy)...")
+        print(f"[{idx+1}/5] Generating robust fingerprint via Cloudflare AI...")
         ai_fingerprint = await generate_fingerprint_ai()
         
         advanced = {

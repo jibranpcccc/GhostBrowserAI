@@ -841,7 +841,7 @@ async function submitCreateProfile() {
     addLogLine(`Starting Zero-Leak profile creation (${count > 1 ? 'Bulk Mode: ' + count + ' profiles' : 'Single Mode'})...`);
 
     setStepActive(1);
-    addLogLine('Calling Kimi AI via Cloudflare Workers...');
+    addLogLine('Calling Cloudflare AI...');
 
     let profile;
     try {
@@ -870,10 +870,10 @@ async function submitCreateProfile() {
         // --- SIMULATED DYNAMIC LOGGING FOR KIMI AI ---
         let isDone = false;
         
-        const kimiLogs = [
+        const aiLogs = [
             "Initializing Cloudflare Worker connection...",
             "Authenticating via proxy endpoint...",
-            "Kimi AI generating WebGL vendor signature...",
+            "AI generating WebGL vendor signature...",
             "Spoofing Canvas noise seed...",
             "Matching hardware concurrency to device memory...",
             "Running Coherence check across headers...",
@@ -887,8 +887,8 @@ async function submitCreateProfile() {
         const logSimulator = async () => {
             let stepIndex = 0;
             while (!isDone) {
-                if (stepIndex < kimiLogs.length) {
-                    addLogLine(`[Kimi AI] ${kimiLogs[stepIndex]}`);
+                if (stepIndex < aiLogs.length) {
+                    addLogLine(`[AI] ${aiLogs[stepIndex]}`);
                     
                     if (stepIndex === 3) {
                         setStepDone(1);
@@ -903,7 +903,7 @@ async function submitCreateProfile() {
                     
                     stepIndex++;
                 } else {
-                    addLogLine(`[Kimi AI] Waiting for final backend compilation...`);
+                    addLogLine(`[AI] Waiting for final backend compilation...`);
                 }
                 await delay(1500 + Math.random() * 1000); // 1.5s - 2.5s between logs
             }
@@ -1702,7 +1702,7 @@ document.addEventListener('DOMContentLoaded', () => {
     navigate('dashboard');
     startPolling();
     addLogEntry('info', 'GhostBrowser dashboard initialized');
-    addLogEntry('info', 'Strict Kimi-only mode: ACTIVE â€” profiles require Cloudflare AI');
+    addLogEntry('info', 'Strict AI-only mode: ACTIVE â€” profiles require Cloudflare AI');
 
     // Load auto-replenish state
     const autoReplenishToggle = document.getElementById('auto-replenish-toggle');

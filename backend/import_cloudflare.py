@@ -32,7 +32,7 @@ async def process_accounts():
         print(f"[{idx+1}/{len(lines)}] Generating robust fingerprint for account {account_id[:8]}...")
         
         try:
-            # We call the Kimi AI generator (uses racing proxy with all Cloudflare accounts)
+            # We call the Cloudflare AI generator (uses racing proxy with all Cloudflare accounts)
             ai_fingerprint = await generate_fingerprint_ai()
             
             # The generator returns specific fields, we map them into our "advanced" structure
