@@ -1,10 +1,86 @@
-/* ===== GhostBrowser App.js â€” Full Frontend Logic ===== */
-
-const API = '';  // Same origin â€” FastAPI serves frontend
+const API = '';  // Same origin
 
 // =========================================================
-// STATE
+// AUTH STATE
 // =========================================================
+let currentUser = null;
+let authToken = localStorage.getItem('ghost_session_token') || '';
+
+function setAuth(token, user) {
+    authToken = token;
+    currentUser = user;
+    localStorage.setItem('ghost_session_token', token);
+    localStorage.setItem('ghost_user', JSON.stringify(user));
+    updateAuthUI();
+}
+
+function clearAuth() {
+    authToken = '';
+    currentUser = null;
+    localStorage.removeItem('ghost_session_token');
+    localStorage.removeItem('ghost_user');
+    updateAuthUI();
+}
+
+function updateAuthUI() {
+    const authBtn = document.getElementById('auth-user-btn');
+    const authLabel = document.getElementById('auth-user-label');
+    if (currentUser) {
+        if (authLabel) authLabel.textContent = currentUser.display_name || currentUser.username;
+        if (authBtn) authBtn.style.display = 'flex';
+    } else {
+        if (authLabel) authLabel.textContent = 'Guest';
+        if (authBtn) authBtn.style.display = 'none';
+    }
+}
+
+function authHeaders() {
+    const h = { 'Content-Type': 'application/json' };
+    if (authToken) h['Authorization'] = 'Bearer ' + authToken;
+    return h;
+}
+
+async function checkAuth() {
+    const saved = localStorage.getItem('ghost_user');
+    if (saved) { try { currentUser = JSON.parse(saved); } catch(e) { currentUser = null; } }
+    if (!authToken) {
+        try {
+            const res = await fetch(API + '/api/auth/default-password');
+            const data = await res.json();
+            if (data.password) { await login(data.username, data.password); return; }
+        } catch(e) {}
+    }
+    updateAuthUI();
+}
+
+async function login(username, password) {
+    try {
+        const res = await fetch(API + '/api/auth/login', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        if (res.ok) { const data = await res.json(); setAuth(data.token, data.user); return true; }
+    } catch(e) {}
+    return false;
+}
+
+async function logout() {
+    try { await fetch(API + '/api/auth/logout', { method: 'POST', headers: authHeaders() }); } catch(e) {}
+    clearAuth();
+}
+
+async function register(username, password, displayName) {
+    try {
+        const res = await fetch(API + '/api/auth/register', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password, display_name: displayName })
+        });
+        if (res.ok) { await login(username, password); return true; }
+    } catch(e) {}
+    return false;
+}
+
+
 let allProfiles = [];
 let logFilter = 'all';
 let createdProfileId = null;
@@ -37,10 +113,11 @@ function navigate(page) {
     document.getElementById('page-title').textContent = PAGE_TITLES[page] || page;
 
     // Trigger page-specific loads
-    if (page === 'profiles') fetchProfiles();
+    if (page === 'profiles') { fetchProfiles(); fetchFolders(); }
     if (page === 'automation') switchAutomationTab('macros');
     if (page === 'ai-status') fetchCFStatus();
     if (page === 'proxies') { fetchProxies(); fetchTitanProxies(); }
+    if (page === 'settings') { fetchTeamMembers(); fetchApiKeys(); fetchExtensions(); fetchTemplates(); fetchProxyProviders(); }
 }
 
 // =========================================================
@@ -152,6 +229,40 @@ function renderCFAccounts(data) {
 // =========================================================
 // PROFILES
 // =========================================================
+let searchQuery = '';
+let filterFolder = '';
+let filterTag = '';
+let filterStatus = '';
+
+async function searchProfiles() {
+    try {
+        const params = new URLSearchParams();
+        if (searchQuery) params.set('q', searchQuery);
+        if (filterFolder) params.set('folder', filterFolder);
+        if (filterTag) params.set('tag', filterTag);
+        if (filterStatus) params.set('status', filterStatus);
+        const url = `${API}/api/profiles/search?${params.toString()}`;
+        const res = await fetch(url);
+        if (!res.ok) return fetchProfiles();
+        const data = await res.json();
+        allProfiles = data.profiles || [];
+        document.getElementById('profile-count-label').textContent = `${allProfiles.length} profile${allProfiles.length !== 1 ? 's' : ''}`;
+        renderProfiles(allProfiles);
+    } catch(e) { fetchProfiles(); }
+}
+
+function onSearchInput(e) { searchQuery = e.target.value; searchProfiles(); }
+function onFolderFilter(e) { filterFolder = e.target.value; searchProfiles(); }
+function onTagFilter(e) { filterTag = e.target.value; searchProfiles(); }
+function onStatusFilter(e) { filterStatus = e.target.value; searchProfiles(); }
+
+async function cloneProfileExact(id) {
+    try {
+        const res = await fetch(`${API}/api/profiles/${id}/clone-exact`, { method: 'POST' });
+        if (res.ok) { showToast('Profile cloned', 'success'); fetchProfiles(); }
+    } catch(e) { showToast('Clone failed', 'error'); }
+}
+
 async function fetchProfiles() {
     try {
         const res = await fetch(`${API}/api/profiles`);
@@ -415,12 +526,13 @@ async function openMetadataModal(id) {
     try {
         const res = await fetch(`${API}/api/profiles`);
         const data = await res.json();
-        // HIGH-02 FIX: API returns flat array, not {profiles: [...]}. Use data.find() directly.
         const p = Array.isArray(data) ? data.find(x => x.id === id) : null;
         if (p) {
             const tags = Array.isArray(p.tags) ? p.tags.join(', ') : (p.tags || '');
             document.getElementById('meta-tags').value = tags;
             document.getElementById('meta-proxy-pin').value = p.proxy_pin || '';
+            const notesEl = document.getElementById('meta-notes');
+            if (notesEl) notesEl.value = p.notes || '';
         }
     } catch(e) {}
 }
@@ -434,12 +546,13 @@ async function saveMetadata() {
     if(!currentMetadataProfileId) return;
     const tags = document.getElementById('meta-tags').value;
     const proxy_pin = document.getElementById('meta-proxy-pin').value;
+    const notes = document.getElementById('meta-notes') ? document.getElementById('meta-notes').value : '';
     
     try {
         await fetch(`${API}/api/profiles/${currentMetadataProfileId}/metadata`, {
             method: 'PATCH',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ tags: tags.split(',').map(s=>s.trim()).filter(Boolean), proxy_pin: proxy_pin })
+            body: JSON.stringify({ tags: tags.split(',').map(s=>s.trim()).filter(Boolean), proxy_pin: proxy_pin, notes: notes })
         });
         showToast('Profile updated', 'success');
         closeMetadataModal();
@@ -1373,6 +1486,13 @@ function addActivity(msg, type = 'info') {
 // =========================================================
 // SETTINGS
 // =========================================================
+function saveStealthSetting(key, value) {
+    const settings = JSON.parse(localStorage.getItem('ghost_stealth_settings') || '{}');
+    settings[key] = value;
+    localStorage.setItem('ghost_stealth_settings', JSON.stringify(settings));
+    showToast(`${key.replace(/_/g,' ')}: ${value ? 'ON' : 'OFF'}`, 'info');
+}
+
 async function saveSettings() {
     const maxConcurrent = document.getElementById('setting-max-concurrent').value;
     try {
@@ -1792,6 +1912,7 @@ function startPolling() {
 // INIT
 // =========================================================
 document.addEventListener('DOMContentLoaded', () => {
+    checkAuth();
     navigate('dashboard');
     startPolling();
     addLogEntry('info', 'GhostBrowser dashboard initialized');
@@ -1824,8 +1945,8 @@ function toggleTheme() {
     const next = current === 'dark' ? 'light' : 'dark';
     root.setAttribute('data-theme', next);
     localStorage.setItem('theme', next);
-    const btn = document.querySelector('.theme-toggle');
-    if (btn) btn.textContent = next === 'dark' ? 'ðŸŒ™' : 'â˜€ï¸';
+    const btn = document.querySelector('.theme-toggle-btn');
+    if (btn) btn.textContent = next === 'dark' ? '🌙' : '☀️';
 }
 
 // Load saved theme on startup
@@ -1833,8 +1954,8 @@ function toggleTheme() {
     const saved = localStorage.getItem('theme');
     if (saved === 'light') {
         document.documentElement.setAttribute('data-theme', 'light');
-        const btn = document.querySelector('.theme-toggle');
-        if (btn) btn.textContent = 'â˜€ï¸';
+        const btn = document.querySelector('.theme-toggle-btn');
+        if (btn) btn.textContent = '☀️';
     }
 })();
 
@@ -2036,6 +2157,156 @@ async function stopRpaRecording() {
     } catch (e) { showToast('Error: ' + e.message, 'error'); }
 }
 
+// =========================================================
+// EXTENSIONS
+// =========================================================
+async function fetchExtensions() {
+    try {
+        const res = await fetch(`${API}/api/extensions/available`);
+        const data = await res.json();
+        const container = document.getElementById('extensions-list');
+        if (container) {
+            container.innerHTML = data.map(e => `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);">
+                <div><span style="font-weight:600;font-size:0.85rem;">${e.name}</span> <span style="color:var(--text-muted);font-size:0.75rem;">v${e.version}</span><br><span style="color:var(--text-muted);font-size:0.78rem;">${e.description}</span></div>
+                <button class="${e.installed ? 'btn-secondary' : 'btn-primary'}" style="font-size:0.75rem;padding:0.3rem 0.6rem;" onclick="${e.installed ? `uninstallExt('${e.id}')` : `installExt('${e.id}')`}">${e.installed ? 'Uninstall' : 'Install'}</button>
+            </div>`).join('');
+        }
+    } catch(e) {}
+}
+
+async function installExt(extId) {
+    try {
+        await fetch(`${API}/api/extensions/install`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ext_id: extId}) });
+        showToast('Extension installed', 'success');
+        fetchExtensions();
+    } catch(e) { showToast('Install failed', 'error'); }
+}
+
+async function uninstallExt(extId) {
+    try {
+        await fetch(`${API}/api/extensions/uninstall/${extId}`, { method: 'POST' });
+        showToast('Extension removed', 'info');
+        fetchExtensions();
+    } catch(e) {}
+}
+
+// =========================================================
+// FINGERPRINT TEMPLATES
+// =========================================================
+async function fetchTemplates() {
+    try {
+        const res = await fetch(`${API}/api/fingerprint-templates`);
+        const data = await res.json();
+        const container = document.getElementById('templates-list');
+        if (container) {
+            container.innerHTML = data.map(t => `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);">
+                <div><span style="font-weight:600;font-size:0.85rem;">${t.name}</span> <span style="color:var(--text-muted);font-size:0.75rem;">${t.category}</span><br><span style="color:var(--text-muted);font-size:0.78rem;">${t.description}</span></div>
+                <button class="btn-primary" style="font-size:0.75rem;padding:0.3rem 0.6rem;" onclick="applyTemplate('${t.id}')">Use</button>
+            </div>`).join('');
+        }
+    } catch(e) {}
+}
+
+async function applyTemplate(templateId) {
+    try {
+        const res = await fetch(`${API}/api/fingerprint-templates/${templateId}/apply`, { method: 'POST' });
+        const data = await res.json();
+        if (data.config) {
+            const adv = document.getElementById('setting-advanced-json');
+            if (adv) adv.value = JSON.stringify(data.config, null, 2);
+            showToast('Template applied to form', 'success');
+        }
+    } catch(e) { showToast('Failed to apply template', 'error'); }
+}
+
+// =========================================================
+// BROWSER PROFILE IMPORT
+// =========================================================
+async function scanBrowserProfiles() {
+    try {
+        const res = await fetch(`${API}/api/import/browsers`);
+        const data = await res.json();
+        const container = document.getElementById('import-browser-list');
+        if (container) {
+            if (data.length === 0) {
+                container.innerHTML = '<p style="color:var(--text-muted);font-size:0.82rem;text-align:center;padding:1rem;">No browser profiles found.</p>';
+            } else {
+                container.innerHTML = data.map(b => `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);">
+                    <div><span style="font-weight:600;font-size:0.85rem;">${b.browser} — ${b.name}</span><br><span style="color:var(--text-muted);font-size:0.78rem;">Cookies: ${b.has_cookies ? 'Yes' : 'No'} | History: ${b.has_history ? 'Yes' : 'No'}</span></div>
+                    <button class="btn-primary" style="font-size:0.75rem;padding:0.3rem 0.6rem;" onclick="importBrowserProfile('${b.browser}','${b.name.replace(/'/g,"\\'")}','${b.path.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">Import</button>
+                </div>`).join('');
+            }
+        }
+    } catch(e) {}
+}
+
+async function importBrowserProfile(browser, name, path) {
+    try {
+        const res = await fetch(`${API}/api/import`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({browser, name, path, import_cookies: true}) });
+        const data = await res.json();
+        if (res.ok) { showToast(`Imported ${name}`, 'success'); fetchProfiles(); }
+        else showToast(data.detail || 'Import failed', 'error');
+    } catch(e) { showToast('Import failed', 'error'); }
+}
+
+// =========================================================
+// PROXY PROVIDERS
+// =========================================================
+async function fetchProxyProviders() {
+    try {
+        const res = await fetch(`${API}/api/proxy-providers`);
+        const data = await res.json();
+        const container = document.getElementById('proxy-providers-list');
+        if (container) {
+            if (data.length === 0) {
+                container.innerHTML = '<p style="color:var(--text-muted);font-size:0.82rem;text-align:center;padding:1rem;">No providers configured.</p>';
+            } else {
+                container.innerHTML = data.map(p => `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);">
+                    <div><span style="font-weight:600;font-size:0.85rem;">${p.name}</span> <span style="color:var(--text-muted);font-size:0.75rem;">${p.type}</span><br><span style="color:var(--text-muted);font-size:0.78rem;">${p.host}:${p.port} | ${p.last_test_ok === true ? '✅ OK' : p.last_test_ok === false ? '❌ Failed' : 'Not tested'}</span></div>
+                    <div style="display:flex;gap:0.25rem;">
+                        <button class="btn-secondary" style="font-size:0.75rem;padding:0.3rem 0.5rem;" onclick="testProxyProvider('${p.id}')">Test</button>
+                        <button class="btn-ghost stop" style="font-size:0.75rem;padding:0.3rem 0.5rem;" onclick="deleteProxyProvider('${p.id}')">🗑</button>
+                    </div>
+                </div>`).join('');
+            }
+        }
+    } catch(e) {}
+}
+
+async function addProxyProvider() {
+    const name = prompt('Provider name:');
+    if (!name) return;
+    const type = prompt('Provider type (brightdata/oxylabs/smartproxy/custom):', 'custom') || 'custom';
+    const host = prompt('Host:', '');
+    const port = parseInt(prompt('Port:', '8080')) || 8080;
+    const username = prompt('Username:', '');
+    const password = prompt('Password:', '');
+    try {
+        await fetch(`${API}/api/proxy-providers`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({name, type, host, port, username, password}) });
+        showToast('Provider added', 'success');
+        fetchProxyProviders();
+    } catch(e) { showToast('Failed to add provider', 'error'); }
+}
+
+async function testProxyProvider(id) {
+    showToast('Testing provider...', 'info');
+    try {
+        const res = await fetch(`${API}/api/proxy-providers/${id}/test`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) showToast(`OK — IP: ${data.ip}, ${data.country}`, 'success');
+        else showToast(`Failed: ${data.error}`, 'error');
+        fetchProxyProviders();
+    } catch(e) { showToast('Test failed', 'error'); }
+}
+
+async function deleteProxyProvider(id) {
+    try {
+        await fetch(`${API}/api/proxy-providers/${id}`, { method: 'DELETE' });
+        showToast('Provider deleted', 'info');
+        fetchProxyProviders();
+    } catch(e) {}
+}
+
 async function bulkLaunchProfiles(profileIds) {
     try {
         const res = await fetch(`${API}/api/profiles/bulk/launch`, {
@@ -2084,6 +2355,22 @@ setInterval(() => {
 }, 5000);
 
 // === IMPORT/EXPORT ===
+async function exportAllProfiles() {
+    const profiles = allProfiles.length > 0 ? allProfiles : [];
+    if (profiles.length === 0) { showToast('No profiles to export', 'warning'); return; }
+    const exportData = profiles.map(p => {
+        const clean = { ...p };
+        delete clean.path; delete clean.status;
+        return clean;
+    });
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `ghostbrowser_profiles_${Date.now()}.json`;
+    a.click(); URL.revokeObjectURL(url);
+    showToast(`Exported ${profiles.length} profiles`, 'success');
+}
+
 async function exportProfile(id) {
     try {
         const res = await fetch(`${API}/api/profiles/${id}/export`);

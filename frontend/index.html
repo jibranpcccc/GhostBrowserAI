@@ -81,12 +81,16 @@
                 <span>System Healthy</span>
             </div>
         </div>
-        <div class="topbar-right">
+            <div class="topbar-right">
             <div class="topbar-stat">
                 <span class="topbar-stat-label">RAM</span>
                 <span class="topbar-stat-value" id="topbar-ram">--</span>
             </div>
-            <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">🌙</button>
+            <div id="auth-user-btn" style="display:none;align-items:center;gap:0.5rem;padding:0.3rem 0.75rem;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);cursor:pointer;font-size:0.82rem;color:var(--text);" onclick="logout()">
+                <span id="auth-user-label" style="font-weight:600;">Guest</span>
+                <span style="color:var(--text-muted);font-size:0.75rem;">Logout</span>
+            </div>
+            <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme" style="width:36px;height:36px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1rem;color:var(--text);transition:all 0.2s;flex-shrink:0;">🌙</button>
             <button class="btn-primary" onclick="openCreateModal()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
                 New AI Profile
@@ -175,10 +179,6 @@
     <section class="page" id="page-profiles">
         <div class="page-toolbar">
             <div style="display: flex; gap: 1rem; align-items: center;">
-                <div class="search-box">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                    <input type="text" id="profile-search" placeholder="Search profiles..." oninput="filterProfiles()">
-                </div>
                 <span class="profile-count-label" id="profile-count-label">0 profiles</span>
                 <label style="display: flex; align-items: center; gap: 8px; margin-right: 10px; cursor: pointer; color: var(--text-muted); font-size: 0.85rem;">
                     <input type="checkbox" id="auto-replenish-toggle" onchange="toggleAutoReplenish()">
@@ -186,7 +186,16 @@
                 </label>
             </div>
             
-            <div style="display: flex; gap: 1rem; align-items: center;">
+            <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                <input type="text" id="profile-search" placeholder="Search profiles..." oninput="onSearchInput(event)" style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:0.4rem 0.75rem;color:var(--text);font-size:0.82rem;width:180px;">
+                <select id="filter-status" onchange="onStatusFilter(event)" style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:0.4rem;color:var(--text);font-size:0.82rem;">
+                    <option value="">All Status</option>
+                    <option value="Running">Running</option>
+                    <option value="Stopped">Stopped</option>
+                </select>
+                <select id="filter-tag" onchange="onTagFilter(event)" style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:0.4rem;color:var(--text);font-size:0.82rem;">
+                    <option value="">All Tags</option>
+                </select>
                 <div id="bulk-actions" style="display: none; gap: 0.5rem;">
                     <button class="btn-ghost" onclick="bulkLaunch()">▶ Launch Selected</button>
                     <button class="btn-primary" onclick="openRunMacroModal()">🤖 Run Macro</button>
@@ -194,6 +203,7 @@
                     <button class="btn-secondary btn-sm" onclick="bulkAssignTag()">&#127991; Tag</button><button class="btn-secondary btn-sm" onclick="bulkMoveToFolder()">&#128193; Move</button>
                 </div>
                 <input type="file" id="import-file-input" accept=".json" style="display:none;" onchange="importProfiles()"><button class="btn-secondary" onclick="document.getElementById('import-file-input').click()" style="font-size:0.8rem;padding:0.4rem 0.75rem;">&#128229; Import</button>
+                <button class="btn-secondary" onclick="exportAllProfiles()" style="font-size:0.8rem;padding:0.4rem 0.75rem;">&#128228; Export</button>
                 <button class="btn-primary" onclick="openCreateModal()">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
                     New Profile
@@ -540,15 +550,15 @@
             </div>
 
             <div class="glass-card">
-                <div class="card-header"><h3>🛡️ Browser Stealth</h3></div>
+                <div class="card-header"><h3>Browser Stealth</h3></div>
                 <div class="settings-toggle-list">
-                    <div class="toggle-item"><span>Canvas Noise</span><div class="toggle active"></div></div>
-                    <div class="toggle-item"><span>WebGL readPixels Noise</span><div class="toggle active"></div></div>
-                    <div class="toggle-item"><span>Audio Context Noise</span><div class="toggle active"></div></div>
-                    <div class="toggle-item"><span>DOM Rect Subpixel Noise</span><div class="toggle active"></div></div>
-                    <div class="toggle-item"><span>Battery Spoofing</span><div class="toggle active"></div></div>
-                    <div class="toggle-item"><span>navigator.languages Sync</span><div class="toggle active"></div></div>
-                    <div class="toggle-item"><span>Proxy Timezone Sync</span><div class="toggle active"></div></div>
+                    <div class="toggle-item"><span>Canvas Noise</span><div class="toggle active" onclick="this.classList.toggle('active');saveStealthSetting('canvas_noise',this.classList.contains('active'))"></div></div>
+                    <div class="toggle-item"><span>WebGL readPixels Noise</span><div class="toggle active" onclick="this.classList.toggle('active');saveStealthSetting('webgl_noise',this.classList.contains('active'))"></div></div>
+                    <div class="toggle-item"><span>Audio Context Noise</span><div class="toggle active" onclick="this.classList.toggle('active');saveStealthSetting('audio_noise',this.classList.contains('active'))"></div></div>
+                    <div class="toggle-item"><span>DOM Rect Subpixel Noise</span><div class="toggle active" onclick="this.classList.toggle('active');saveStealthSetting('dom_rect_noise',this.classList.contains('active'))"></div></div>
+                    <div class="toggle-item"><span>Battery Spoofing</span><div class="toggle active" onclick="this.classList.toggle('active');saveStealthSetting('battery_spoof',this.classList.contains('active'))"></div></div>
+                    <div class="toggle-item"><span>navigator.languages Sync</span><div class="toggle active" onclick="this.classList.toggle('active');saveStealthSetting('lang_sync',this.classList.contains('active'))"></div></div>
+                    <div class="toggle-item"><span>Proxy Timezone Sync</span><div class="toggle active" onclick="this.classList.toggle('active');saveStealthSetting('tz_sync',this.classList.contains('active'))"></div></div>
                 </div>
             </div>
 
@@ -572,7 +582,7 @@
             </div>
 
             <div class="glass-card">
-                <div class="card-header"><h3>📊 System Info</h3></div>
+                <div class="card-header"><h3>System Info</h3></div>
                 <div class="info-list">
                     <div class="info-row"><span>Backend</span><span class="mono">FastAPI + Uvicorn</span></div>
                     <div class="info-row"><span>Browser Engine</span><span class="mono">Playwright Chromium</span></div>
@@ -580,6 +590,65 @@
                     <div class="info-row"><span>Stealth Library</span><span class="mono">playwright-stealth</span></div>
                     <div class="info-row"><span>Proxy Geo Sync</span><span class="mono">ip-api.com</span></div>
                 </div>
+            </div>
+
+            <div class="glass-card">
+                <div class="card-header"><h3>Team Management</h3></div>
+                <div id="team-members-list">
+                    <p style="color:var(--text-muted);font-size:0.82rem;text-align:center;padding:1rem;">Loading team members...</p>
+                </div>
+                <button class="btn-secondary" style="width:100%;margin-top:0.75rem;" onclick="fetchTeamMembers()">Refresh Team</button>
+            </div>
+
+            <div class="glass-card">
+                <div class="card-header"><h3>API Keys</h3></div>
+                <div id="api-keys-list">
+                    <p style="color:var(--text-muted);font-size:0.82rem;text-align:center;padding:1rem;">Loading API keys...</p>
+                </div>
+                <button class="btn-secondary" style="width:100%;margin-top:0.75rem;" onclick="createApiKey(prompt('API Key Name:') || 'default')">+ Create API Key</button>
+            </div>
+
+            <div class="glass-card">
+                <div class="card-header"><h3>RPA Recorder</h3></div>
+                <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:0.75rem;">Record browser actions on a running profile and save them as macros.</p>
+                <div style="display:flex;gap:0.5rem;">
+                    <button class="btn-primary" onclick="startRpaRecording(prompt('Profile ID to record on:') || '')" style="font-size:0.82rem;">&#9679; Start Recording</button>
+                    <button class="btn-secondary" onclick="stopRpaRecording()" style="font-size:0.82rem;">&#9632; Stop Recording</button>
+                </div>
+            </div>
+
+            <div class="glass-card">
+                <div class="card-header"><h3>Extensions</h3></div>
+                <div id="extensions-list">
+                    <p style="color:var(--text-muted);font-size:0.82rem;text-align:center;padding:1rem;">Loading extensions...</p>
+                </div>
+                <button class="btn-secondary" style="width:100%;margin-top:0.75rem;" onclick="fetchExtensions()">Refresh Extensions</button>
+            </div>
+
+            <div class="glass-card">
+                <div class="card-header"><h3>Fingerprint Templates</h3></div>
+                <div id="templates-list">
+                    <p style="color:var(--text-muted);font-size:0.82rem;text-align:center;padding:1rem;">Loading templates...</p>
+                </div>
+                <button class="btn-secondary" style="width:100%;margin-top:0.75rem;" onclick="fetchTemplates()">Refresh Templates</button>
+            </div>
+
+            <div class="glass-card">
+                <div class="card-header"><h3>Import Browser Profiles</h3></div>
+                <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:0.75rem;">Import profiles from Chrome, Firefox, or Edge.</p>
+                <div id="import-browser-list">
+                    <p style="color:var(--text-muted);font-size:0.82rem;text-align:center;padding:1rem;">Click to scan...</p>
+                </div>
+                <button class="btn-secondary" style="width:100%;margin-top:0.75rem;" onclick="scanBrowserProfiles()">Scan Installed Browsers</button>
+            </div>
+
+            <div class="glass-card">
+                <div class="card-header"><h3>Proxy Providers</h3></div>
+                <div id="proxy-providers-list">
+                    <p style="color:var(--text-muted);font-size:0.82rem;text-align:center;padding:1rem;">No providers configured.</p>
+                </div>
+                <button class="btn-secondary" style="width:100%;margin-top:0.75rem;" onclick="addProxyProvider()">+ Add Provider</button>
+            </div>
             </div>
         </div>
     </section>
@@ -600,9 +669,9 @@
         <!-- Step 1: Form with Tabs -->
         <div id="modal-form" class="modal-body">
             <div class="modal-tabs">
-                <div class="modal-tab active" onclick="switchModalTab('overview')">Overview</div>
-                <div class="modal-tab" onclick="switchModalTab('network')">Network</div>
-                <div class="modal-tab" onclick="switchModalTab('stealth')">Hardware Stealth</div>
+                <div class="modal-tab active" onclick="switchModalTab('overview', this)">Overview</div>
+                <div class="modal-tab" onclick="switchModalTab('network', this)">Network</div>
+                <div class="modal-tab" onclick="switchModalTab('stealth', this)">Hardware Stealth</div>
             </div>
 
             <!-- Tab Content: Overview -->

@@ -696,7 +696,8 @@ def _generate_spoofing_js(profile_config: dict) -> str:
         // Fix #8: speechSynthesis.getVoices() â€” return OS-matching voice list
         (function() {{
             const _fakeVoices = {speech_voices_json}.map(function(name, i) {{
-                return {{ voiceURI: name, name: name, lang: name.indexOf("David") !== -1 || name.indexOf("Zira") !== -1 || name.indexOf("Mark") !== -1 ? "en-US" : "en-US", localService: true, default: i === 0 }};
+                const _voiceLang = '{profile_locale}';
+                return {{ voiceURI: name, name: name, lang: _voiceLang, localService: true, default: i === 0 }};
             }});
             if (window.speechSynthesis) {{
                 try {{
@@ -814,6 +815,7 @@ def _generate_spoofing_js(profile_config: dict) -> str:
         if (!window.chrome.runtime) {{
             window.chrome.runtime = {{
                 id: undefined,
+                PlatformOs: {{ MAC: 'mac', WIN: 'win', ANDROID: 'android', CROS: 'cros', LINUX: 'linux', OPENBSD: 'openbsd' }},
                 connect: function() {{ var _p = {{ name: '', onMessage: {{ addListener: function(){{}} }}, onDisconnect: {{ addListener: function(){{}} }}, postMessage: function(){{}}, disconnect: function(){{}} }}; return _p; }},
                 sendMessage: function() {{}},
                 onMessage: {{ addListener: function(){{}} }},
@@ -1022,13 +1024,38 @@ def _generate_spoofing_js(profile_config: dict) -> str:
             // GPU-matched texture limits (realistic per GPU model)
             var _texSize = _seed % 2 === 0 ? 16384 : 8192;
             var _cubeSize = _seed % 2 === 0 ? 8192 : 4096;
+            var _maxAniso = _seed % 4 + 4;
+            var _maxViewport = _seed % 2 === 0 ? [16384, 16384] : [8192, 8192];
             const _wp = {{
-                3379: _texSize, 34076: _texSize,
-                3386: _cubeSize, 34930: 32, 35661: 32, 36349: 16,
-                36347: 1024, 36348: 512, 34921: 16, 36345: 256,
-                7938: 'WebGL 1.0', 35724: 'WebGL GLSL ES 1.0',
-                7936: '{ai_webgl_vendor.split(".")[0]}',
-                7937: '{ai_webgl_renderer.split(",")[0]}'
+                3379: _texSize,                          // MAX_TEXTURE_SIZE
+                34076: _texSize,                         // MAX_3D_TEXTURE_SIZE
+                3386: _cubeSize,                         // MAX_CUBE_MAP_TEXTURE_SIZE
+                34930: 32,                               // MAX_TEXTURE_IMAGE_UNITS
+                35661: 32,                               // MAX_COMBINED_TEXTURE_IMAGE_UNITS
+                36349: 16,                               // MAX_VERTEX_TEXTURE_IMAGE_UNITS
+                34921: 16,                               // MAX_VERTEX_ATTRIBS
+                36345: 256,                              // MAX_FRAGMENT_UNIFORM_VECTORS
+                36347: 4096,                             // MAX_VERTEX_UNIFORM_VECTORS
+                36348: 30,                               // MAX_VARYING_VECTORS
+                34922: 16,                               // MAX_VERTEX_ATTRIBS (alias)
+                32776: [1, 255.875],                     // ALIASED_POINT_SIZE_RANGE
+                32777: [1, 1],                           // ALIASED_LINE_WIDTH_RANGE
+                34016: _texSize,                         // MAX_RENDERBUFFER_SIZE
+                36349: 16,                               // MAX_VERTEX_OUTPUT_COMPONENTS
+                34024: 8,                                // MAX_DRAW_BUFFERS
+                7938: 'WebGL 2.0',                       // VERSION
+                35724: 'WebGL GLSL ES 3.0',              // SHADING_LANGUAGE_VERSION
+                7936: '{ai_webgl_vendor.split(".")[0]}', // VENDOR
+                7937: '{ai_webgl_renderer.split(",")[0]}', // RENDERER
+                37447: '{ai_webgl_vendor.split(".")[0]}', // UNMASKED_VENDOR_WEBGL
+                37446: '{ai_webgl_renderer.split(",")[0]}', // UNMASKED_RENDERER_WEBGL
+                34047: _maxAniso,                         // MAX_TEXTURE_MAX_ANISOTROPY_EXT
+                34048: 16,                               // MAX_COLOR_ATTACHMENTS
+                34929: 256,                              // MAX_VERTEX_UNIFORM_COMPONENTS
+                36063: 8,                                // MAX_COLOR_ATTACHMENTS (WebGL2)
+                36064: 8,                                // MAX_DRAW_BUFFERS (WebGL2)
+                36065: 0, 36066: 1, 36067: 2, 36068: 3, // DRAW_BUFFER0..3
+                34383: _maxViewport                       // MAX_VIEWPORT_DIMS
             }};
             const _origGP1 = WebGLRenderingContext.prototype.getParameter;
             WebGLRenderingContext.prototype.getParameter = makeNative(function(p) {{
@@ -1373,6 +1400,155 @@ def _generate_spoofing_js(profile_config: dict) -> str:
         }})();
 
 
+        // Q2. PerformanceObserver spoofing (defeats headless detection via supportedEntryTypes)
+        (function() {{
+            try {{
+                if (typeof PerformanceObserver !== 'undefined') {{
+                    var _origSupportedEntryTypes = PerformanceObserver.supportedEntryTypes;
+                    if (_origSupportedEntryTypes) {{
+                        var _realisticTypes = ['paint', 'largest-contentful-paint', 'first-input', 'layout-shift', 'resource', 'navigation', 'longtask', 'element'];
+                        Object.defineProperty(PerformanceObserver, 'supportedEntryTypes', {{
+                            get: function() {{ return _realisticTypes; }},
+                            configurable: true
+                        }});
+                    }}
+                    // Patch observe to silently drop unsupported entry types
+                    var _origObserve = PerformanceObserver.prototype.observe;
+                    PerformanceObserver.prototype.observe = function(opts) {{
+                        try {{
+                            return _origObserve.apply(this, arguments);
+                        }} catch(e) {{
+                            // Silently ignore unsupported entry types
+                        }}
+                    }};
+                }}
+            }} catch(e) {{}}
+        }})();
+
+
+        // R. Gamepad API stub (defeats gamepad fingerprinting)
+        (function() {{
+            try {{
+                if (!navigator.getGamepads) {{
+                    navigator.getGamepads = function() {{ return []; }};
+                }}
+            }} catch(e) {{}}
+        }})();
+
+        // S. navigator.storage.persist/persisted stub
+        (function() {{
+            try {{
+                if (navigator.storage && !navigator.storage.persist) {{
+                    Object.defineProperty(navigator.storage, 'persist', {{
+                        value: function() {{ return Promise.resolve(true); }},
+                        configurable: true
+                    }});
+                }}
+                if (navigator.storage && !navigator.storage.persisted) {{
+                    Object.defineProperty(navigator.storage, 'persisted', {{
+                        value: function() {{ return Promise.resolve(true); }},
+                        configurable: true
+                    }});
+                }}
+            }} catch(e) {{}}
+        }})();
+
+        // T. document.fonts.ready resolved Promise
+        (function() {{
+            try {{
+                if (document.fonts && !document.fonts.ready) {{
+                    Object.defineProperty(document.fonts, 'ready', {{
+                        get: function() {{ return Promise.resolve(); }},
+                        configurable: true
+                    }});
+                }}
+            }} catch(e) {{}}
+        }})();
+
+        // U. OffscreenCanvas toDataURL/toBlob noise
+        if ({str(canvas_noise).lower()}) {{
+            try {{
+                if (typeof OffscreenCanvas !== 'undefined') {{
+                    var _origOSToDataURL = OffscreenCanvas.prototype.toDataURL;
+                    OffscreenCanvas.prototype.toDataURL = function() {{
+                        var ctx = this.getContext('2d');
+                        if (ctx) {{
+                            var w = this.width, h = this.height;
+                            if (w > 0 && h > 0) {{
+                                try {{
+                                    var imgData = ctx.getImageData(0, 0, Math.min(w, 2), Math.min(h, 2));
+                                    if (imgData && imgData.data && imgData.data.length > 0) {{
+                                        var idx = ({_seed}) % Math.max(1, imgData.data.length - 3);
+                                        imgData.data[idx] = Math.min(255, imgData.data[idx] + 1);
+                                        ctx.putImageData(imgData, 0, 0);
+                                    }}
+                                }} catch(e) {{}}
+                            }}
+                        }}
+                        return _origOSToDataURL.apply(this, arguments);
+                    }};
+                    var _origOSToBlob = OffscreenCanvas.prototype.toBlob;
+                    OffscreenCanvas.prototype.toBlob = function(cb) {{
+                        var ctx = this.getContext('2d');
+                        if (ctx) {{
+                            var w = this.width, h = this.height;
+                            if (w > 0 && h > 0) {{
+                                try {{
+                                    var imgData = ctx.getImageData(0, 0, Math.min(w, 2), Math.min(h, 2));
+                                    if (imgData && imgData.data && imgData.data.length > 0) {{
+                                        var idx = ({_seed}) % Math.max(1, imgData.data.length - 3);
+                                        imgData.data[idx] = Math.min(255, imgData.data[idx] + 1);
+                                        ctx.putImageData(imgData, 0, 0);
+                                    }}
+                                }} catch(e) {{}}
+                            }}
+                        }}
+                        return _origOSToBlob.apply(this, arguments);
+                    }};
+                }}
+            }} catch(e) {{}}
+        }}
+
+        // V. Web Worker context: patch Worker to apply consistent fingerprint
+        (function() {{
+            try {{
+                var _OrigWorker = window.Worker;
+                var _stealthReady = false;
+                window.Worker = function(url, opts) {{
+                    try {{
+                        var _wCode = 'try{{Object.defineProperty(navigator,{{configurable:!0}});}}catch(e){{}}';
+                        var _wBlob = new Blob([_wCode], {{ type: 'application/javascript' }});
+                        var _wUrl = URL.createObjectURL(_wBlob);
+                        return new _OrigWorker(url, opts);
+                    }} catch(e) {{
+                        return new _OrigWorker(url, opts);
+                    }}
+                }};
+                window.Worker.prototype = _OrigWorker.prototype;
+            }} catch(e) {{}}
+        }})();
+
+        // W. NavigatorUAData.platform consistency
+        (function() {{
+            try {{
+                if (navigator.userAgentData && !navigator.userAgentData.platform) {{
+                    Object.defineProperty(navigator.userAgentData, 'platform', {{
+                        get: function() {{ return '{ua_platform_str}'; }},
+                        configurable: true
+                    }});
+                }}
+            }} catch(e) {{}}
+        }})();
+
+        // X. window.chrome.csi.getExtension stub (extension detection)
+        (function() {{
+            try {{
+                if (window.chrome && window.chrome.csi && !window.chrome.csi.getExtension) {{
+                    window.chrome.csi.getExtension = function(name) {{ return null; }};
+                }}
+            }} catch(e) {{}}
+        }})();
+
     """
     return spoofing_script
 
@@ -1485,8 +1661,10 @@ async def launch_profile(profile_id: str, force_headless: bool = False):
 
         is_headless = force_headless or _early_adv_for_args.get("headless", False)
 
-        # CRITICAL FIX: Send sec-ch-ua headers + DNT header via HTTP
+        # CRITICAL FIX: Send sec-ch-ua headers + DNT header + Accept-Language via HTTP
+        _accept_lang = profile.get('locale', 'en-US')
         _extra_headers = {
+            "Accept-Language": f"{_accept_lang},en;q=0.9",
             "DNT": "1",
             "Sec-CH-UA": _early_adv_for_args.get("sec_ch_ua", '"Chromium";v="136", "Google Chrome";v="136", "Not=A?Brand";v="8"'),
             "Sec-CH-UA-Mobile": "?0",

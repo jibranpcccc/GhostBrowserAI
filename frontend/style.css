@@ -873,6 +873,30 @@ input[type="checkbox"]:checked::after {
     .main-content { margin-left: var(--sidebar-width-collapsed); }
     .settings-grid { grid-template-columns: 1fr; }
     .two-col-grid { grid-template-columns: 1fr; }
+    .page-toolbar { flex-wrap: wrap; }
+    .page-toolbar > div { flex-wrap: wrap; }
+}
+
+@media (max-width: 768px) {
+    .stats-grid { grid-template-columns: 1fr; }
+    .page { padding: 0.75rem; }
+    .data-table { font-size: 0.78rem; }
+    .data-table th, .data-table td { padding: 0.5rem 0.5rem; }
+    .td-actions { flex-wrap: wrap; gap: 0.25rem; }
+    .td-actions .btn-sm { font-size: 0.7rem; padding: 0.2rem 0.4rem; }
+    /* Proxy form: stack on mobile */
+    #page-proxies .glass-card > div[style*="grid-template-columns"] {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0.5rem !important;
+    }
+    #page-proxies .glass-card > div[style*="grid-template-columns"] > div {
+        width: 100% !important;
+    }
+    .topbar { padding: 0 0.75rem; gap: 0.5rem; }
+    .topbar-left { gap: 0.5rem; }
+    .page-title { font-size: 0.95rem; }
+    .modal { max-width: 95vw; margin: 0.5rem; }
 }
 
 /* ===== THEME TOGGLE ===== */
@@ -892,32 +916,7 @@ input[type="checkbox"]:checked::after {
         radial-gradient(at 100% 100%, rgba(217, 70, 239, 0.05) 0px, transparent 50%);
 }
 
-.theme-toggle {
-    position: fixed;
-    bottom: 1.5rem;
-    right: 1.5rem;
-    z-index: 1000;
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.2rem;
-    transition: all 0.3s ease;
-    color: var(--text);
-}
-
-.theme-toggle:hover {
-    border-color: var(--primary);
-    transform: scale(1.08);
-    box-shadow: 0 0 20px var(--primary-glow);
-}
+/* Theme toggle is now inline in topbar - see .theme-toggle-btn inline style in HTML */
 
 /* ===== FOLDER SIDEBAR ===== */
 .folder-sidebar {
@@ -932,15 +931,26 @@ input[type="checkbox"]:checked::after {
     overflow-y: auto;
 }
 
-    display: flex;
+.btn-icon-sm {
+    display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
     border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: background 0.15s;
+    border: 1px solid var(--border);
+    background: transparent;
     color: var(--text-muted);
-    font-size: 0.85rem;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: all 0.15s;
+    padding: 0;
+}
+
+.btn-icon-sm:hover {
+    background: var(--surface-2);
+    color: var(--text);
+    border-color: var(--border-hover);
 }
 
 

@@ -11,6 +11,7 @@ import sys
 import asyncio
 import logging
 import secrets
+import time
 import hashlib as _hashlib
 
 if sys.platform == 'win32':
@@ -31,6 +32,11 @@ from backend.synchronizer import router as synchronizer_router
 from backend.rpa_recorder import router as rpa_recorder_router
 from backend.profile_folders import router as profile_folders_router
 from backend.bulk_operations import router as bulk_operations_router
+from backend.auth_manager import router as auth_router
+from backend.proxy_providers import router as proxy_providers_router
+from backend.local_profile_import import router as import_router
+from backend.extension_manager import router as extensions_router
+from backend.fingerprint_templates import router as templates_router
 
 scheduler_manager = SchedulerManager(
     browser_manager=None,
@@ -70,8 +76,61 @@ async def lifespan(app: FastAPI):
             pass
     _aio.create_task(_backfill_proxy_geo())
 
+    # Session restore: auto-restart profiles that were running before shutdown
+    async def _restore_sessions():
+        try:
+            _aio.sleep(3)
+            from backend.profile_manager import profile_manager as _pm
+            profiles = _pm.list_profiles()
+            restored = 0
+            for p in profiles:
+                if p.get("auto_restart") and p.get("status") == "running":
+                    try:
+                        await bm.launch_profile(p["id"], p)
+                        restored += 1
+                        logger.info(f"[Restore] Auto-restarted profile: {p['name']}")
+                    except Exception as e:
+                        logger.warning(f"[Restore] Failed to restart {p['name']}: {e}")
+            if restored:
+                logger.info(f"[Restore] Restored {restored} profiles")
+        except Exception:
+            pass
+    _aio.create_task(_restore_sessions())
+
+    # Proxy health re-check: re-test all proxies every 30 minutes
+    async def _proxy_health_loop():
+        try:
+            while True:
+                await _aio.sleep(1800)
+                try:
+                    import backend.db as _db2
+                    proxies = _db2.get_all_alive_proxies()
+                    if proxies:
+                        logger.info(f"[ProxyHealth] Re-checking {len(proxies)} proxies...")
+                        checked = 0
+                        for p in proxies:
+                            try:
+                                server = f"{p['protocol']}://{p['ip']}:{p['port']}"
+                                geo = await proxy_manager.resolve_proxy_geo({"server": server})
+                                _db2.update_proxy_geo(p['ip'], p['port'],
+                                                      geo.get("country", p.get("country", "Unknown")),
+                                                      geo.get("city", p.get("city", "Unknown")),
+                                                      geo.get("timezone", p.get("timezone", "UTC")),
+                                                      geo.get("locale", p.get("locale", "en-US")))
+                                checked += 1
+                            except Exception:
+                                pass
+                            await _aio.sleep(0.5)
+                        logger.info(f"[ProxyHealth] Re-checked {checked}/{len(proxies)} proxies")
+                except Exception:
+                    pass
+        except asyncio.CancelledError:
+            pass
+    _proxy_health_task = _aio.create_task(_proxy_health_loop())
+
     yield
     # Shutdown
+    _proxy_health_task.cancel()
     system_monitor.stop()
     scheduler_manager.stop()
     # Close shared httpx client to prevent resource leak (CRIT-07)
@@ -143,17 +202,32 @@ async def auth_middleware(request: Request, call_next):
     token = request.headers.get("X-Admin-Token") or request.headers.get("Authorization", "").replace("Bearer ", "")
 
     if not _timing_safe_token_check(token, ADMIN_TOKEN):
-        from backend.api_automation import _API_KEYS_FILE
         import json
         api_key_valid = False
-        if os.path.exists(_API_KEYS_FILE):
-            try:
-                with open(_API_KEYS_FILE, "r") as f:
-                    keys_data = json.load(f)
-                key_hash = _hashlib.sha256(token.encode()).hexdigest()
-                api_key_valid = key_hash in [k.get("key_hash") for k in keys_data.values()]
-            except Exception:
-                pass
+        # Check both API key storage locations
+        key_files = []
+        try:
+            from backend.api_automation import _API_KEYS_FILE
+            key_files.append(_API_KEYS_FILE)
+        except Exception:
+            pass
+        try:
+            from backend.api_keys import API_KEYS_FILE as _ak_file
+            key_files.append(_ak_file)
+        except Exception:
+            pass
+
+        for _kf in key_files:
+            if api_key_valid:
+                break
+            if os.path.exists(_kf):
+                try:
+                    with open(_kf, "r") as f:
+                        keys_data = json.load(f)
+                    key_hash = _hashlib.sha256(token.encode()).hexdigest()
+                    api_key_valid = key_hash in [k.get("key_hash") for k in keys_data.values()]
+                except Exception:
+                    pass
 
         if not api_key_valid:
             return JSONResponse(status_code=401, content={"detail": "Invalid or missing API key/token"})
@@ -286,6 +360,14 @@ def list_profiles():
     for p in profiles:
         p["status"] = "Running" if is_profile_running(p["id"]) else "Stopped"
     return profiles
+
+@app.get("/api/profiles/{profile_id}")
+def get_profile(profile_id: str):
+    profile = profile_manager.get_profile(profile_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    profile["status"] = "Running" if is_profile_running(profile["id"]) else "Stopped"
+    return profile
 
 @app.post("/api/profiles/{profile_id}/clone")
 async def clone_profile(profile_id: str):
@@ -582,6 +664,61 @@ async def bulk_move_to_folder(data: dict):
         if profile_manager.update_profile(pid, {"folder_id": folder_id}):
             count += 1
     return {"status": "success", "message": f"Moved {count} profiles"}
+
+
+@app.post("/api/profiles/{profile_id}/clone-exact")
+async def clone_profile_exact(profile_id: str):
+    """Clone a profile with the EXACT same fingerprint (no AI regeneration)"""
+    original = profile_manager.get_profile(profile_id)
+    if not original:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    import copy, uuid as _uuid
+    new_id = str(_uuid.uuid4())
+    new_profile = copy.deepcopy(original)
+    new_profile["id"] = new_id
+    new_profile["name"] = original.get("name", "Profile") + " (Clone)"
+    new_profile["created_at"] = str(__import__('datetime').datetime.now())
+    new_profile["status"] = "idle"
+    new_path = os.path.join(os.path.dirname(profile_manager.metadata_file), new_id)
+    new_profile["path"] = new_path
+    if original.get("path") and os.path.exists(original["path"]):
+        import shutil
+        shutil.copytree(original["path"], new_path, dirs_exist_ok=True)
+    profile_manager.profiles[new_id] = new_profile
+    profile_manager._save_metadata()
+    return {"status": "success", "profile": new_profile}
+
+
+@app.get("/api/profiles/search")
+async def search_profiles(q: str = "", folder: str = None, tag: str = None,
+                          status: str = None, sort: str = "created_at", order: str = "desc"):
+    """Search and filter profiles by query, folder, tag, status, and sort"""
+    profiles = profile_manager.list_profiles()
+    for p in profiles:
+        p["status"] = "Running" if is_profile_running(p["id"]) else "Stopped"
+
+    if q:
+        q_lower = q.lower()
+        profiles = [p for p in profiles if
+                    q_lower in (p.get("name", "").lower()) or
+                    q_lower in str(p.get("tags", [])).lower() or
+                    q_lower in (p.get("notes", "").lower()) or
+                    q_lower in (p.get("id", "").lower())]
+
+    if folder:
+        profiles = [p for p in profiles if p.get("folder_id") == folder]
+
+    if tag:
+        profiles = [p for p in profiles if tag in (p.get("tags", []))]
+
+    if status:
+        profiles = [p for p in profiles if p.get("status", "").lower() == status.lower()]
+
+    reverse = order == "desc"
+    if sort in ("name", "created_at", "status"):
+        profiles.sort(key=lambda p: p.get(sort, ""), reverse=reverse)
+
+    return {"profiles": profiles, "total": len(profiles)}
 
 from backend.profile_rotator import rotator
 
@@ -972,6 +1109,13 @@ from backend.api_keys import router as api_keys_router
 app.include_router(team_router)
 app.include_router(profile_transfer_router)
 app.include_router(api_keys_router)
+
+# --- Register new feature routers ---
+app.include_router(auth_router)
+app.include_router(proxy_providers_router)
+app.include_router(import_router)
+app.include_router(extensions_router)
+app.include_router(templates_router)
 
 # Mount frontend
 frontend_dir = get_bundled_dir("frontend")
