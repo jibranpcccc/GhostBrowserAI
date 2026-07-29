@@ -1,19 +1,18 @@
 """
 API Key management module.
 Generate, store, list, and revoke API keys for external tool access.
-Provides a decorator for API-key-based authentication on endpoints.
 """
 
-import functools
 import json
 import os
 import secrets
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 
-from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, field_validator
 
+from backend.auth import require_admin_token
 from backend.config import get_data_dir
 from backend.logging_config import logger
 
@@ -32,6 +31,14 @@ API_KEY_HEADER = "X-API-Key"
 # ---------------------------------------------------------------------------
 class CreateKeyModel(BaseModel):
     name: str
+
+    @field_validator("name")
+    @classmethod
+    def _sanitize_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Key name is required")
+        return value[:100]
 
 
 # ---------------------------------------------------------------------------
@@ -108,51 +115,6 @@ class APIKeyManager:
         self._save()
         return True
 
-    # -- Decorator for endpoint protection ---------------------------------
-    def require_key(self, func):
-        """
-        Decorator: require a valid API key in the X-API-Key header.
-        Usage:
-            @api_key_manager.require_key
-            def my_protected_endpoint(...):
-        Works for both sync and async FastAPI route functions.
-        """
-        import inspect
-
-        if inspect.iscoroutinefunction(func):
-            @functools.wraps(func)
-            async def async_wrapper(*args, **kwargs):
-                request: Optional[Request] = kwargs.get("request")
-                if request is None:
-                    for a in args:
-                        if isinstance(a, Request):
-                            request = a
-                            break
-                if request is None:
-                    raise HTTPException(status_code=500, detail="Request object not found")
-                key = request.headers.get(API_KEY_HEADER)
-                if not key or not self.validate(key):
-                    raise HTTPException(status_code=401, detail="Invalid or missing API key")
-                return await func(*args, **kwargs)
-            return async_wrapper
-        else:
-            @functools.wraps(func)
-            def sync_wrapper(*args, **kwargs):
-                request: Optional[Request] = kwargs.get("request")
-                if request is None:
-                    for a in args:
-                        if isinstance(a, Request):
-                            request = a
-                            break
-                if request is None:
-                    raise HTTPException(status_code=500, detail="Request object not found")
-                key = request.headers.get(API_KEY_HEADER)
-                if not key or not self.validate(key):
-                    raise HTTPException(status_code=401, detail="Invalid or missing API key")
-                return func(*args, **kwargs)
-            return sync_wrapper
-
-
 # ---------------------------------------------------------------------------
 # Singleton
 # ---------------------------------------------------------------------------
@@ -166,43 +128,23 @@ router = APIRouter(prefix="/api/api-keys", tags=["api-keys"])
 
 
 # ---------------------------------------------------------------------------
-# Admin token for key management endpoints
-# SECURITY FIX: API key endpoints require admin token to prevent unauthorized access
+# Admin token for key management endpoints — FAIL CLOSED when not configured
 # ---------------------------------------------------------------------------
-ADMIN_TOKEN = os.environ.get("GHOSTBROWSER_ADMIN_TOKEN", "")
-
-def _check_admin(request: Request):
-    """Check admin token. If no admin token is configured, allow localhost-only access."""
-    if ADMIN_TOKEN:
-        token = request.headers.get("X-Admin-Token", "")
-        if token != ADMIN_TOKEN:
-            raise HTTPException(status_code=403, detail="Admin token required")
-    # If no admin token configured, allow (localhost-only binding provides protection)
-    return True
-
-
 @router.get("")
-def list_keys(request: Request):
-    """List all API keys (masked). Requires admin token if configured."""
-    _check_admin(request)
+def list_keys(_auth: None = Depends(require_admin_token)):
+    """List all API keys (masked). Requires admin token."""
     return api_key_manager.list_keys()
 
 
 @router.post("")
-def create_key(payload: CreateKeyModel, request: Request):
-    """Create a new API key. Requires admin token if configured."""
-    _check_admin(request)
-    # SECURITY: Sanitize key name
-    import html
-    safe_name = html.escape(payload.name.strip(), quote=True)[:100]
-    if not safe_name:
-        raise HTTPException(status_code=400, detail="Key name is required")
-    return api_key_manager.create_key(safe_name)
+def create_key(payload: CreateKeyModel, _auth: None = Depends(require_admin_token)):
+    """Create a new API key. Requires admin token."""
+    return api_key_manager.create_key(payload.name)
 
 
 @router.delete("/{key}")
-def revoke_key(key: str):
-    """Revoke an API key."""
+def revoke_key(key: str, _auth: None = Depends(require_admin_token)):
+    """Revoke an API key. Requires admin token."""
     # Accept the full key or the masked version for convenience
     full_key = key
     if key.endswith("..."):

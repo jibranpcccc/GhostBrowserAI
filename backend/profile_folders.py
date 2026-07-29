@@ -19,9 +19,10 @@ import uuid
 from typing import List, Optional
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
+from backend.auth import require_admin_token
 from backend.config import get_data_dir
 from backend.logging_config import logger
 from backend.profile_manager import profile_manager
@@ -70,7 +71,7 @@ class AssignFolderRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 @router.get("/api/folders")
-def list_folders():
+def list_folders(_auth: None = Depends(require_admin_token)):
     folders = _load_folders()
     profiles = profile_manager.list_profiles()
 
@@ -83,7 +84,7 @@ def list_folders():
 
 
 @router.post("/api/folders")
-def create_folder(req: CreateFolderRequest):
+def create_folder(req: CreateFolderRequest, _auth: None = Depends(require_admin_token)):
     if not req.name or not req.name.strip():
         raise HTTPException(status_code=400, detail="Folder name is required")
 
@@ -113,7 +114,7 @@ def create_folder(req: CreateFolderRequest):
 
 
 @router.delete("/api/folders/{folder_id}")
-def delete_folder(folder_id: str):
+def delete_folder(folder_id: str, _auth: None = Depends(require_admin_token)):
     folders = _load_folders()
     original = len(folders)
     folders = [f for f in folders if f["id"] != folder_id]
@@ -133,7 +134,7 @@ def delete_folder(folder_id: str):
 
 
 @router.put("/api/profiles/{profile_id}/folder")
-def assign_profile_to_folder(profile_id: str, req: AssignFolderRequest):
+def assign_profile_to_folder(profile_id: str, req: AssignFolderRequest, _auth: None = Depends(require_admin_token)):
     profile = profile_manager.get_profile(profile_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -154,7 +155,7 @@ def assign_profile_to_folder(profile_id: str, req: AssignFolderRequest):
 
 
 @router.get("/api/folders/{folder_id}/profiles")
-def list_profiles_in_folder(folder_id: str):
+def list_profiles_in_folder(folder_id: str, _auth: None = Depends(require_admin_token)):
     folders = _load_folders()
     if not any(f["id"] == folder_id for f in folders):
         raise HTTPException(status_code=404, detail="Folder not found")

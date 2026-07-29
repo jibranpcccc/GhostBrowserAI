@@ -1,0 +1,7 @@
+# Runtime dependencies for the GhostBrowser sync server.
+# The server intentionally uses only FastAPI/Pydantic plus standard library
+# cryptography (hashlib, hmac, sqlite3).  Uvicorn is required to run.
+
+fastapi>=0.100.0
+pydantic>=2.0.0
+uvicorn>=0.23.0

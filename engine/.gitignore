@@ -1,0 +1,25 @@
+# The Chromium source checkout is huge and must not be committed.
+src/
+out/
+
+# Local depot_tools copy if the bootstrap script downloads it.
+depot_tools/
+depot_tools.zip
+
+# ccache / build cache directories.
+.ccache/
+ccache/
+
+# Python / OS artifacts.
+__pycache__/
+*.py[cod]
+*.so
+*.log
+.DS_Store
+Thumbs.db
+
+# IDE and editor artifacts.
+.vscode/
+.idea/
+*.swp
+*~

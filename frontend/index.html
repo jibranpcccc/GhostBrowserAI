@@ -5,9 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GhostBrowser — AI Anti-Detect Dashboard</title>
     <meta name="description" content="AI-powered anti-detect browser management dashboard powered by Kimi AI via Cloudflare.">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=1.1">
+    <link rel="stylesheet" href="style.css?v=1.3">
 </head>
 <body>
 
@@ -29,33 +27,33 @@
     </div>
 
     <nav class="sidebar-nav">
-        <a class="nav-item active" data-page="dashboard" onclick="navigate('dashboard')">
+        <a class="nav-item active" data-page="dashboard" onclick="navigate('dashboard')" role="button" tabindex="0" aria-label="Dashboard" title="Dashboard">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
             <span class="nav-label">Dashboard</span>
         </a>
-        <a class="nav-item" data-page="profiles" onclick="navigate('profiles')">
+        <a class="nav-item" data-page="profiles" onclick="navigate('profiles')" role="button" tabindex="0" aria-label="Profiles" title="Profiles">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4"/><circle cx="17" cy="17" r="4"/><path d="M15 17h4M17 15v4"/></svg>
             <span class="nav-label">Profiles</span>
             <span class="nav-badge" id="sidebar-profile-count">0</span>
         </a>
-        <a class="nav-item" data-page="proxies" onclick="navigate('proxies')">
+        <a class="nav-item" data-page="proxies" onclick="navigate('proxies')" role="button" tabindex="0" aria-label="Proxies" title="Proxies">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
             <span class="nav-label">Proxies</span>
         </a>
-        <a class="nav-item" data-page="automation" onclick="navigate('automation')">
+        <a class="nav-item" data-page="automation" onclick="navigate('automation')" role="button" tabindex="0" aria-label="Automation" title="Automation">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
             <span class="nav-label">Automation</span>
         </a>
-        <a class="nav-item" data-page="ai-status" onclick="navigate('ai-status')">
+        <a class="nav-item" data-page="ai-status" onclick="navigate('ai-status')" role="button" tabindex="0" aria-label="AI Status" title="AI Status">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="M12 8v4l3 3"/></svg>
             <span class="nav-label">AI Status</span>
             <span class="nav-badge pulse-green" id="sidebar-cf-count">...</span>
         </a>
-        <a class="nav-item" data-page="logs" onclick="navigate('logs')">
+        <a class="nav-item" data-page="logs" onclick="navigate('logs')" role="button" tabindex="0" aria-label="Live Logs" title="Live Logs">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
             <span class="nav-label">Live Logs</span>
         </a>
-        <a class="nav-item" data-page="settings" onclick="navigate('settings')">
+        <a class="nav-item" data-page="settings" onclick="navigate('settings')" role="button" tabindex="0" aria-label="Settings" title="Settings">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             <span class="nav-label">Settings</span>
         </a>
@@ -77,8 +75,8 @@
         <div class="topbar-left">
             <h1 class="page-title" id="page-title">Dashboard</h1>
             <div class="system-health" id="system-health">
-                <div class="health-dot healthy"></div>
-                <span>System Healthy</span>
+                <div class="health-dot"></div>
+                <span>Checking backend...</span>
             </div>
         </div>
         <div class="topbar-right">
@@ -86,10 +84,12 @@
                 <span class="topbar-stat-label">RAM</span>
                 <span class="topbar-stat-value" id="topbar-ram">--</span>
             </div>
-            <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">🌙</button>
-            <button class="btn-primary" onclick="openCreateModal()">
+            <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle color theme">🌙</button>
+            <button class="btn-secondary" onclick="openSurfacesModal()" title="Fingerprint surfaces" aria-label="Fingerprint surfaces" style="padding:0.4rem 0.75rem;font-size:0.78rem;">🛡️ Surfaces</button>
+            <button class="btn-secondary" onclick="openAccessLogModal()" title="Per-site API access log" aria-label="Per-site API access log" style="padding:0.4rem 0.75rem;font-size:0.78rem;">📋 Access Log</button>
+            <button class="btn-primary topbar-create-button" onclick="openCreateModal()" aria-label="New AI Profile">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-                New AI Profile
+                <span class="topbar-action-label">New AI Profile</span>
             </button>
         </div>
     </header>
@@ -185,10 +185,11 @@
                     Auto-Replenish
                 </label>
             </div>
-            
+
             <div style="display: flex; gap: 1rem; align-items: center;">
                 <div id="bulk-actions" style="display: none; gap: 0.5rem;">
                     <button class="btn-ghost" onclick="bulkLaunch()">▶ Launch Selected</button>
+                    <button class="btn-ghost" onclick="bulkPinSelected()">📌 Pin Selected</button>
                     <button class="btn-primary" onclick="openRunMacroModal()">🤖 Run Macro</button>
                     <button class="btn-ghost stop" onclick="bulkDelete()">❌ Delete Selected</button>
                 </div>
@@ -206,6 +207,7 @@
                         <th>Profile Name</th>
                         <th>Tags</th>
                         <th>Status</th>
+                        <th>Privacy</th>
                         <th>Proxy</th>
                         <th>Fingerprint OS</th>
                         <th style="text-align: right;">Actions</th>
@@ -216,11 +218,11 @@
                 </tbody>
             </table>
         </div>
-        
+
         <div class="empty-state" id="profiles-empty" style="display: none;">
             <div class="empty-icon">👻</div>
             <h3>No Profiles Yet</h3>
-            <p>Create your first AI-powered stealth profile.</p>
+            <p>Create your first AI-generated privacy profile.</p>
             <button class="btn-primary" onclick="openCreateModal()">Generate with Kimi AI</button>
         </div>
     </section>
@@ -240,7 +242,7 @@
                 </button>
             </div>
         </div>
-        
+
         <div class="table-container">
             <table class="data-table">
                 <thead>
@@ -288,9 +290,9 @@
                 <p style="color:var(--text-muted);font-size:0.85rem;margin-top:0;">Format: <span class="mono">ip:port</span> or <span class="mono">ip:port:user:pass</span> (one per line)</p>
                 <textarea id="proxy-import-text" class="proxy-textarea" placeholder="1.2.3.4:8080&#10;5.6.7.8:3128:user:pass&#10;..."></textarea>
                 <button class="btn-primary" style="margin-top:1rem;width:100%;" onclick="importProxies()">Import Proxies</button>
-                
+
                 <hr style="border:0;border-top:1px solid var(--border-color);margin:1.5rem 0;">
-                
+
                 <div class="card-header"><h3>Auto-Scrape Free Proxies</h3></div>
                 <p style="color:var(--text-muted);font-size:0.85rem;margin-top:0;">Scrapes and tests thousands of public proxies, saving only the anonymous ones to your pool.</p>
                 <button class="btn-primary btn-glow" style="margin-top:0.5rem;width:100%;background:linear-gradient(135deg, #f59e0b, #d97706);" id="btn-scrape-proxies" onclick="scrapeFreeProxies()">
@@ -311,7 +313,7 @@
             Titan Proxies Database
         </h3>
         <p style="color:var(--text-muted);font-size:0.85rem;margin-top:-0.5rem;margin-bottom:1rem;">Live feed from your local <span class="mono">proxies.db</span> maintained by the Titan Scraper.</p>
-        
+
         <div class="table-container">
             <table class="data-table">
                 <thead>
@@ -402,7 +404,7 @@
                     <div class="badge-count" id="cookie-robot-profile-count">0 selected</div>
                 </div>
                 <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:1rem;">
-                    Automatically visits trusted sites to build real cookie history, making profiles appear more human-like and reducing detection risk. Select profiles on the Profiles page to warm them.
+                    Visits the configured sites to build cookie history for repeat-session testing. Select profiles on the Profiles page before starting.
                 </p>
                 <div style="display:flex;gap:0.75rem;margin-bottom:1rem;">
                     <button class="btn-primary" onclick="startCookieRobotWarming()">
@@ -459,7 +461,14 @@
             <h2 style="margin:0;font-size:1rem;font-weight:600;">Cloudflare Kimi AI Account Pool</h2>
             <button class="btn-secondary" onclick="fetchCFStatus()">Refresh</button>
         </div>
-        <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 1.5rem;">
+        <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 1.5rem;">
+            <div class="stat-card">
+                <div class="stat-icon violet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3z"/></svg></div>
+                <div class="stat-body">
+                    <div class="stat-label">Healthy Priority</div>
+                    <div class="stat-value" id="cf-priority-count">-- / --</div>
+                </div>
+            </div>
             <div class="stat-card">
                 <div class="stat-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div>
                 <div class="stat-body">
@@ -522,23 +531,24 @@
                 <div class="settings-group">
                     <label class="settings-label">Model Name</label>
                     <input type="text" class="settings-input mono" value="@cf/moonshotai/kimi-k2.7-code" id="setting-model" readonly>
-                    <p class="settings-hint">Hosted on Cloudflare Workers AI. Uses your 500+ account pool for failover.</p>
+                    <p class="settings-hint">Hosted on Cloudflare Workers AI. Uses the rotating priority pool first, then cooldown-aware fallbacks.</p>
                 </div>
                 <div class="settings-group">
-                    <label class="settings-label">Account Pool File</label>
-                    <input type="text" class="settings-input mono" value="cloudflare_accounts.txt" readonly>
+                    <label class="settings-label">Credential Protection</label>
+                    <input type="text" class="settings-input mono" id="setting-credential-store" value="Checking protected store..." readonly>
+                    <p class="settings-hint">Tokens are stored with Windows user-scoped DPAPI encryption and are never displayed here.</p>
                 </div>
                 <div class="settings-group">
-                    <label class="settings-label">Strict Kimi-Only Mode</label>
+                    <label class="settings-label">Kimi Generation Policy</label>
                     <div class="toggle-row">
-                        <div class="toggle active" title="Cannot be disabled — profiles are NEVER created without Kimi AI"></div>
-                        <span style="color:var(--success);font-size:0.85rem;font-weight:600;">ALWAYS ON — No profile without Kimi</span>
+                        <div class="toggle active" title="The primary create flow requests Kimi AI"></div>
+                        <span style="color:var(--success);font-size:0.85rem;font-weight:600;">PRIMARY CREATE FLOW — Kimi AI requested</span>
                     </div>
                 </div>
             </div>
 
             <div class="glass-card">
-                <div class="card-header"><h3>🛡️ Browser Stealth</h3></div>
+                <div class="card-header"><h3>🛡️ Browser Privacy Controls</h3></div>
                 <div class="settings-toggle-list">
                     <div class="toggle-item"><span>Canvas Noise</span><div class="toggle active"></div></div>
                     <div class="toggle-item"><span>WebGL readPixels Noise</span><div class="toggle active"></div></div>
@@ -547,6 +557,10 @@
                     <div class="toggle-item"><span>Battery Spoofing</span><div class="toggle active"></div></div>
                     <div class="toggle-item"><span>navigator.languages Sync</span><div class="toggle active"></div></div>
                     <div class="toggle-item"><span>Proxy Timezone Sync</span><div class="toggle active"></div></div>
+                    <div class="toggle-item" id="setting-use-virtual-keyboard" onclick="toggleVirtualKeyboardSetting()">
+                        <span>Use Virtual Keyboard for Sensitive Fields</span>
+                        <div class="toggle" id="toggle-use-virtual-keyboard"></div>
+                    </div>
                 </div>
             </div>
 
@@ -592,15 +606,15 @@
                 <h2 class="modal-title">Generate AI Profile</h2>
                 <p class="modal-subtitle">Powered by Kimi AI via Cloudflare Workers</p>
             </div>
-            <button class="modal-close" onclick="closeCreateModal()">✕</button>
+            <button class="modal-close" onclick="closeCreateModal()" aria-label="Close profile creation dialog" title="Close">✕</button>
         </div>
 
         <!-- Step 1: Form with Tabs -->
         <div id="modal-form" class="modal-body">
             <div class="modal-tabs">
-                <div class="modal-tab active" onclick="switchModalTab('overview')">Overview</div>
-                <div class="modal-tab" onclick="switchModalTab('network')">Network</div>
-                <div class="modal-tab" onclick="switchModalTab('stealth')">Hardware Stealth</div>
+                <button type="button" class="modal-tab active" onclick="switchModalTab('overview', this)">Overview</button>
+                <button type="button" class="modal-tab" onclick="switchModalTab('network', this)">Network</button>
+                <button type="button" class="modal-tab" onclick="switchModalTab('stealth', this)">Fingerprint Settings</button>
             </div>
 
             <!-- Tab Content: Overview -->
@@ -616,6 +630,19 @@
                         <option value="ecommerce">🛒 E-Commerce (Strict Stealth)</option>
                         <option value="social">📱 Social Media (Balanced)</option>
                         <option value="research">🔍 Research (Fast, Auto-Assign Proxy)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Profile PIN (Optional) 🔒</label>
+                    <input type="password" id="new-profile-pin" class="form-input" placeholder="Lock this profile with a PIN" autocomplete="new-password">
+                    <div class="form-hint">Leave blank to allow launching without a PIN.</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Privacy Mode</label>
+                    <select id="new-privacy-mode" class="form-input">
+                        <option value="standard">Standard — Full spoofing + extensions</option>
+                        <option value="strict">Strict — No extensions / warming / service workers</option>
+                        <option value="ephemeral">Ephemeral — Strict + wipe data on close</option>
                     </select>
                 </div>
                 <div class="form-row">
@@ -635,29 +662,29 @@
                     <div class="kimi-icon">🤖</div>
                     <div>
                         <strong>Powered by Kimi AI</strong>
-                        <p>A unique, highly consistent browser fingerprint will be generated.</p>
+                        <p>A coherent, host-matched browser profile will be generated from a realistic device class.</p>
                     </div>
                 </div>
             </div>
 
             <!-- Tab Content: Network -->
-            <div id="tab-network" class="tab-content" style="display:none;">
+            <div id="tab-network" class="tab-content">
                 <div class="form-group">
-                    <label class="form-label">Proxy <span style="color:var(--text-muted);font-weight:400;">(Leave empty for auto-assign)</span></label>
-                    <input type="text" id="new-profile-proxy" class="form-input mono" placeholder="ip:port or ip:port:user:pass">
+                    <label class="form-label">Proxy <span style="color:var(--text-muted);font-weight:400;">(Leave empty for direct connection)</span></label>
+                    <input type="text" id="new-profile-proxy" class="form-input mono" placeholder="ip:port or ip:port:user:pass" data-secure="true" autocomplete="off" oninput="resetProxyTest('new-profile-proxy', 'new-proxy-test-result')">
+                    <button type="button" class="btn-ghost" style="margin-top:0.5rem;" onclick="testEnteredProxy('new-profile-proxy', 'new-proxy-test-result')">Test Connection</button>
+                    <div id="new-proxy-test-result" class="form-hint" aria-live="polite"></div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">WebRTC Behavior</label>
                     <select id="new-profile-webrtc" class="form-input">
-                        <option value="altered">Altered (Bind to Proxy IP)</option>
-                        <option value="disabled">Disabled (Max Stealth)</option>
-                        <option value="real">Real (No Spoof)</option>
+                        <option value="protected">Protected &mdash; Native Chromium IP Policy</option>
                     </select>
                 </div>
             </div>
 
             <!-- Tab Content: Stealth -->
-            <div id="tab-stealth" class="tab-content" style="display:none;">
+            <div id="tab-stealth" class="tab-content">
                 <div class="stealth-toggles" style="display:flex; flex-direction:column; gap:0.5rem; margin-top:0.5rem;">
                     <div class="toggle-row" onclick="toggleChip(document.getElementById('chip-canvas'),'canvas')" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02); padding:0.75rem; border-radius:6px;">
                         <span>🎨 Canvas Noise Injection</span>
@@ -730,11 +757,11 @@
         <div id="modal-success" class="modal-body" style="display:none;text-align:center;padding:2rem;">
             <div class="success-icon">✅</div>
             <h2 style="margin:1rem 0 0.5rem;">Profile Ready!</h2>
-            <p style="color:var(--text-muted);">Your zero-leak AI profile has been created successfully.</p>
+            <p style="color:var(--text-muted);">The backend created and validated your AI profile.</p>
             <div class="profile-preview" id="success-profile-preview"></div>
             <div class="modal-footer" style="justify-content:center;margin-top:1.5rem;">
                 <button class="btn-ghost" onclick="closeCreateModal()">Close</button>
-                <button class="btn-primary" onclick="launchNewProfile()">
+                <button class="btn-primary" id="launch-created-profile-btn" onclick="launchNewProfile()">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                     Launch Now
                 </button>
@@ -762,14 +789,14 @@
                 <h2 class="modal-title">Edit Profile Settings</h2>
                 <p class="modal-subtitle">Modify proxies and hardware stealth post-creation</p>
             </div>
-            <button class="modal-close" onclick="closeEditModal()">✕</button>
+            <button class="modal-close" onclick="closeEditModal()" aria-label="Close profile settings dialog" title="Close">✕</button>
         </div>
 
         <div id="edit-modal-form" class="modal-body">
             <div class="modal-tabs">
-                <div class="modal-tab active" onclick="switchEditModalTab('overview')" id="edit-tab-btn-overview">Overview</div>
-                <div class="modal-tab" onclick="switchEditModalTab('network')" id="edit-tab-btn-network">Network</div>
-                <div class="modal-tab" onclick="switchEditModalTab('stealth')" id="edit-tab-btn-stealth">Hardware Stealth</div>
+                <button type="button" class="modal-tab active" onclick="switchEditModalTab('overview')" id="edit-tab-btn-overview">Overview</button>
+                <button type="button" class="modal-tab" onclick="switchEditModalTab('network')" id="edit-tab-btn-network">Network</button>
+                <button type="button" class="modal-tab" onclick="switchEditModalTab('stealth')" id="edit-tab-btn-stealth">Hardware Stealth</button>
             </div>
 
             <!-- Tab Content: Overview -->
@@ -791,15 +818,23 @@
             <!-- Tab Content: Network -->
             <div id="edit-tab-network" class="tab-content" style="display:none;">
                 <div class="form-group">
-                    <label class="form-label">Proxy</label>
-                    <input type="text" id="edit-profile-proxy" class="form-input mono" placeholder="ip:port or ip:port:user:pass">
+                    <label class="form-label">Your Proxy</label>
+                    <input type="text" id="edit-profile-proxy" class="form-input mono" placeholder="ip:port or ip:port:user:pass" data-secure="true" autocomplete="off" oninput="resetProxyTest('edit-profile-proxy', 'edit-proxy-test-result', 'edit-proxy-connect-button')">
+                    <div class="proxy-connect-actions">
+                        <button type="button" id="edit-proxy-test-button" class="btn-ghost" onclick="testEnteredProxy('edit-profile-proxy', 'edit-proxy-test-result', 'edit-proxy-connect-button')">1. Test Proxy</button>
+                        <button type="button" id="edit-proxy-connect-button" class="btn-primary" onclick="connectEditedProxy()" disabled>2. Connect Tested Proxy</button>
+                    </div>
+                    <div id="edit-proxy-test-result" class="form-hint" aria-live="polite"></div>
+                    <label class="direct-connection-option">
+                        <input type="checkbox" id="edit-clear-proxy" onchange="toggleEditProxyRemoval()">
+                        Remove the saved proxy and use a direct connection
+                    </label>
+                    <div class="form-hint">Proxy changes apply on the next launch. Stop a running profile before changing its connection.</div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">WebRTC Behavior</label>
                     <select id="edit-profile-webrtc" class="form-input">
-                        <option value="altered">Altered (Bind to Proxy IP)</option>
-                        <option value="disabled">Disabled (Max Stealth)</option>
-                        <option value="real">Real (No Spoof)</option>
+                        <option value="protected">Protected &mdash; Native Chromium IP Policy</option>
                     </select>
                 </div>
             </div>
@@ -833,49 +868,6 @@
         </div>
     </div>
 </div>
-<!-- CREATE MACRO MODAL -->
-<div class="modal-overlay" id="macro-modal">
-    <div class="modal" style="max-width: 700px;">
-        <div class="modal-header">
-            <h2>Build Macro 🤖</h2>
-            <button class="btn-icon" onclick="closeMacroModal()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-        </div>
-        <div class="modal-body" style="padding: 1.5rem; max-height: 70vh; overflow-y: auto;">
-            <div class="form-group">
-                <label>Macro Name</label>
-                <input type="text" id="macro-name" placeholder="e.g. Amazon Farmer">
-            </div>
-            <div class="form-group">
-                <label>Description (Optional)</label>
-                <input type="text" id="macro-desc" placeholder="e.g. Navigates to Amazon and clicks products">
-            </div>
-            
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-top: 1.5rem; margin-bottom: 0.5rem;">
-                <label style="margin:0;">Automation Steps</label>
-                <select id="add-step-select" class="input-base" style="width: auto; padding: 0.25rem 0.5rem;" onchange="addMacroStep()">
-                    <option value="">+ Add Action...</option>
-                    <option value="goto">Navigate to URL</option>
-                    <option value="wait">Wait (Delay)</option>
-                    <option value="type">Type Text</option>
-                    <option value="click">Click Element</option>
-                    <option value="scroll">Scroll Page</option>
-                </select>
-            </div>
-            
-            <div id="macro-steps-container" style="display: flex; flex-direction: column; gap: 0.75rem; min-height: 100px; background: rgba(0,0,0,0.1); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 1rem;">
-                <div id="empty-steps-msg" style="text-align:center; color:var(--text-muted); margin: auto;">No steps added yet. Select an action above.</div>
-            </div>
-            
-            <div class="modal-footer" style="margin-top: 2rem;">
-                <button class="btn-ghost" onclick="closeMacroModal()">Cancel</button>
-                <button class="btn-primary btn-glow" onclick="saveMacro()">Save Macro</button>
-            </div>
-        </div>
-    </div>
-</div>
-
 <!-- RUN BULK MACRO MODAL -->
 <div class="modal-overlay" id="run-macro-modal">
     <div class="modal" style="max-width: 400px;">
@@ -915,7 +907,7 @@
             </p>
             <input type="hidden" id="cookie-profile-id">
             <textarea id="cookie-textarea" style="width: 100%; height: 250px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #a5b4fc; font-family: monospace; padding: 1rem; resize: vertical;" placeholder="Loading cookies..."></textarea>
-            
+
             <div class="modal-footer" style="margin-top: 1.5rem; justify-content: space-between;">
                 <div>
                     <button class="btn-ghost" onclick="copyCookies()">Copy to Clipboard</button>
@@ -923,6 +915,37 @@
                 <div style="display: flex; gap: 0.5rem;">
                     <button class="btn-ghost" onclick="closeCookieModal()">Cancel</button>
                     <button class="btn-primary" onclick="saveCookies()">Save & Import</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SET / VERIFY PIN MODAL -->
+<div class="modal-overlay" id="pin-modal">
+    <div class="modal" style="max-width: 400px;">
+        <div class="modal-header">
+            <h2 id="pin-modal-title">Set Profile PIN 🔒</h2>
+            <button class="btn-icon" onclick="closePinModal()" aria-label="Close PIN dialog" title="Close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body" style="padding: 1.5rem;">
+            <input type="hidden" id="pin-profile-id">
+            <div class="form-group">
+                <label>PIN</label>
+                <input type="password" id="pin-input" class="input-base" style="width:100%;" placeholder="Enter 4-128 character PIN" autocomplete="new-password">
+            </div>
+            <div class="form-group" id="pin-confirm-group">
+                <label>Confirm PIN</label>
+                <input type="password" id="pin-confirm" class="input-base" style="width:100%;" placeholder="Confirm PIN" autocomplete="new-password">
+            </div>
+            <div id="pin-error" style="color:var(--danger);font-size:0.85rem;min-height:1.2rem;"></div>
+            <div class="modal-footer" style="margin-top: 1.5rem; justify-content: space-between;">
+                <button class="btn-ghost stop" id="pin-remove-btn" onclick="clearProfilePin()">Remove PIN</button>
+                <div style="display:flex;gap:0.5rem;">
+                    <button class="btn-ghost" onclick="closePinModal()">Cancel</button>
+                    <button class="btn-primary" id="pin-save-btn" onclick="saveProfilePin()">Save PIN</button>
                 </div>
             </div>
         </div>
@@ -949,8 +972,18 @@
                 <textarea id="meta-notes" class="input-base" style="width: 100%; height: 100px; resize: vertical;" placeholder="Add custom notes here..."></textarea>
             </div>
             <div class="form-group">
-                <label>Pin Proxy (Optional)</label>
-                <input type="text" id="meta-proxy-pin" placeholder="http://ip:port:user:pass (Overrides Auto-Rotator)">
+                <label class="direct-connection-option">
+                    <input type="checkbox" id="meta-profile-pinned"> Pin this profile to the top of the list
+                </label>
+            </div>
+            <div class="form-group">
+                <label>Advanced Sticky Proxy (Optional)</label>
+                <input type="password" id="meta-proxy-pin" autocomplete="new-password" data-secure="true" placeholder="leave blank to keep the current pin unchanged" oninput="resetProxyTest('meta-proxy-pin', 'meta-proxy-test-result')">
+                <button type="button" class="btn-ghost" style="margin-top:0.5rem;" onclick="testEnteredProxy('meta-proxy-pin', 'meta-proxy-test-result')">Test Sticky Proxy</button>
+                <div id="meta-proxy-test-result" class="form-hint" aria-live="polite"></div>
+                <label style="margin-top:0.5rem;display:flex;gap:0.5rem;align-items:center;">
+                    <input type="checkbox" id="meta-clear-proxy-pin"> Clear the existing sticky proxy
+                </label>
             </div>
             <div class="modal-footer" style="margin-top: 1.5rem;">
                 <button class="btn-ghost" onclick="closeMetadataModal()">Cancel</button>
@@ -960,56 +993,11 @@
     </div>
 </div>
 
-<!-- FINGERPRINT EDITOR MODAL -->
-<div class="modal-overlay" id="fingerprint-modal">
-    <div class="modal" style="max-width: 600px;">
-        <div class="modal-header">
-            <h2>Advanced Fingerprint 🧬</h2>
-            <button class="btn-icon" onclick="closeFingerprintModal()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-        </div>
-        <div class="modal-body" style="padding: 1.5rem; max-height: 70vh; overflow-y: auto;">
-            <p style="margin-bottom: 1rem; color: var(--warning); font-size: 0.9rem;">⚠️ WARNING: Editing these raw values may cause the browser signature to fail bot detectors if they are mismatched. Only edit if you know what you are doing.</p>
-            <input type="hidden" id="fingerprint-profile-id">
-            
-            <div class="form-group">
-                <label>WebGL Vendor</label>
-                <input type="text" id="fp-webgl-vendor" class="input-base" style="width: 100%;">
-            </div>
-            <div class="form-group">
-                <label>WebGL Renderer</label>
-                <input type="text" id="fp-webgl-renderer" class="input-base" style="width: 100%;">
-            </div>
-            <div class="form-group">
-                <label>Canvas Seed (Hash)</label>
-                <input type="text" id="fp-canvas-seed" class="input-base" style="width: 100%;">
-            </div>
-            <div class="form-group">
-                <label>Audio Noise (Hash)</label>
-                <input type="text" id="fp-audio-noise" class="input-base" style="width: 100%;">
-            </div>
-            <div class="form-group" style="display:flex; gap:1rem;">
-                <div style="flex:1;">
-                    <label>Hardware Concurrency</label>
-                    <input type="number" id="fp-hardware-concurrency" class="input-base" style="width: 100%;">
-                </div>
-                <div style="flex:1;">
-                    <label>Device Memory (GB)</label>
-                    <input type="number" id="fp-device-memory" class="input-base" style="width: 100%;">
-                </div>
-            </div>
-            
-            <div class="modal-footer" style="margin-top: 1.5rem;">
-                <button class="btn-ghost" onclick="closeFingerprintModal()">Cancel</button>
-                <button class="btn-primary btn-glow" onclick="saveFingerprint()">Save Fingerprint</button>
-            </div>
-        </div>
-    </div>
-</div>
-
 <!-- TOAST CONTAINER -->
 <div class="toast-container" id="toast-container"></div>
+
+<!-- VIRTUAL KEYBOARD -->
+<div id="virtual-keyboard" class="virtual-keyboard" style="display:none;" role="dialog" aria-label="Virtual keyboard"></div>
 
 <!-- SCAN RESULTS MODAL -->
 <div class="modal-overlay" id="scan-modal">
@@ -1035,13 +1023,13 @@
                 </div>
                 <h3 id="scan-verdict" style="margin-bottom: 0.5rem;">Evaluating...</h3>
                 <p id="scan-reason" style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.4;"></p>
-                
+
                 <div style="margin-top: 1.5rem; text-align: left; background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px;">
                     <div style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.5rem; text-transform: uppercase;">Technical Breakdown</div>
                     <div id="scan-breakdown" style="font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.25rem;"></div>
                 </div>
             </div>
-            
+
             <div class="modal-footer" style="justify-content: center; margin-top: 2rem;">
                 <button class="btn-ghost" onclick="closeScanModal()">Dismiss</button>
             </div>
@@ -1054,7 +1042,7 @@
     <div class="modal glass-card" style="max-width:600px;">
         <div class="modal-header">
             <h2>Create Automation Macro</h2>
-            <button class="btn-icon" onclick="closeMacroModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            <button class="btn-icon" onclick="closeMacroModal()" aria-label="Close macro dialog" title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
         <div class="modal-body">
             <div class="form-group">
@@ -1065,7 +1053,7 @@
                 <label class="form-label">Description (Optional)</label>
                 <input type="text" class="form-input" id="new-macro-desc" placeholder="What does this macro do?">
             </div>
-            
+
             <h4 style="margin-bottom:0.5rem;color:var(--text);font-weight:600;">Macro Steps</h4>
             <div id="macro-steps-container" style="display:flex;flex-direction:column;gap:0.75rem;margin-bottom:1rem;max-height:300px;overflow-y:auto;padding-right:0.5rem;">
                 <!-- Steps injected here -->
@@ -1085,7 +1073,7 @@
     <div class="modal glass-card" style="max-width:500px;">
         <div class="modal-header">
             <h2>Schedule Cron Job</h2>
-            <button class="btn-icon" onclick="closeScheduleModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            <button class="btn-icon" onclick="closeScheduleModal()" aria-label="Close schedule dialog" title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
         <div class="modal-body">
             <div class="form-group">
@@ -1127,10 +1115,62 @@
             <input type="text" class="form-input step-selector" placeholder="URL or CSS Selector">
             <input type="text" class="form-input step-value" placeholder="Value (if typing/waiting)" style="display:none;">
         </div>
-        <button class="btn-secondary" style="padding:0.5rem;" onclick="this.closest('.macro-step').remove()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        <button class="btn-secondary" style="padding:0.5rem;" onclick="this.closest('.macro-step').remove()" aria-label="Remove macro step" title="Remove step"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
 </template>
 
-<script src="app.js?v=1.3"></script>
+<!-- MODAL: Fingerprint Surfaces -->
+<div class="modal" id="surfaces-modal" style="display:none;">
+    <div class="modal-content" style="max-width:800px;max-height:80vh;display:flex;flex-direction:column;">
+        <div class="modal-header">
+            <h3>🛡️ Anti-Detect Surface Inventory</h3>
+            <button class="modal-close" onclick="closeSurfacesModal()" aria-label="Close">×</button>
+        </div>
+        <div class="modal-body" style="overflow:auto;">
+            <div id="surfaces-score" style="margin-bottom:1rem;font-size:1.1rem;font-weight:700;"></div>
+            <table style="width:100%;border-collapse:collapse;font-size:0.8rem;">
+                <thead>
+                    <tr style="text-align:left;border-bottom:1px solid var(--border);">
+                        <th>Surface</th>
+                        <th>Category</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="surfaces-table-body"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: Per-Site API Access Log -->
+<div class="modal" id="access-log-modal" style="display:none;">
+    <div class="modal-content" style="max-width:800px;max-height:80vh;display:flex;flex-direction:column;">
+        <div class="modal-header">
+            <h3>📋 Per-Site API Access Log</h3>
+            <button class="modal-close" onclick="closeAccessLogModal()" aria-label="Close access log dialog" title="Close">×</button>
+        </div>
+        <div class="modal-body" style="overflow:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem;">
+                <p style="color:var(--text-muted);font-size:0.85rem;margin:0;">Tracked fingerprinting API calls per origin.</p>
+                <button class="btn-ghost stop" onclick="clearAccessLog()">🗑️ Clear Log</button>
+            </div>
+            <table class="access-log-table">
+                <thead>
+                    <tr>
+                        <th>Origin / Site</th>
+                        <th>APIs Accessed</th>
+                        <th>Last Access</th>
+                        <th>Calls</th>
+                    </tr>
+                </thead>
+                <tbody id="access-log-table-body">
+                    <tr><td colspan="4" style="text-align:center;">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="app.js?v=1.7"></script>
 </body>
 </html>

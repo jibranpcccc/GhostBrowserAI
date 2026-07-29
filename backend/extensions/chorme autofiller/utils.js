@@ -8,20 +8,20 @@ const AutoFillUtils = {
   jobs: ["Software Engineer", "Marketing Director", "Data Analyst", "Product Manager", "CEO", "Consultant", "Designer", "Content Creator", "Sales Executive", "Project Manager"],
   genders: ["Male", "Female"],
   securityAnswers: ["Shadow", "Buddy", "Smith", "Springfield", "Toyota", "Blue", "HighSchool"],
-  
+
   randInt: function(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; },
-  
+
   getFirstName: function() { return this.firstNames[this.randInt(0, this.firstNames.length - 1)]; },
   getLastName: function() { return this.lastNames[this.randInt(0, this.lastNames.length - 1)]; },
   getCompany: function() { return this.companies[this.randInt(0, this.companies.length - 1)]; },
   getJobTitle: function() { return this.jobs[this.randInt(0, this.jobs.length - 1)]; },
   getGender: function() { return this.genders[this.randInt(0, 1)]; },
   getSecurityAnswer: function() { return this.securityAnswers[this.randInt(0, this.securityAnswers.length - 1)]; },
-  
+
   getUsername: function(firstName, lastName) {
       return `${firstName.toLowerCase()}${lastName.toLowerCase()}${this.randInt(1000, 9999)}`;
   },
-  
+
   getPassword: function(length = 12) {
       const uppers = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
       const lowers = "abcdefghijklmnopqrstuvwxyz";
@@ -35,7 +35,7 @@ const AutoFillUtils = {
       for (let i = 4; i < length; i++) password += all.charAt(this.randInt(0, all.length - 1));
       return password.split('').sort(() => 0.5 - Math.random()).join('');
   },
-  
+
   getEmail: function(username, domain) {
       let emailDomain = domain && domain.trim() !== "" ? domain.trim() : `random${this.randInt(100,9999)}.com`;
       if (emailDomain.startsWith('@')) emailDomain = emailDomain.substring(1);
@@ -48,7 +48,7 @@ const AutoFillUtils = {
       const line = this.randInt(1000, 9999);
       return `${area}-${prefix}-${line}`;
   },
-  
+
   getAddress: function() {
       const num = this.randInt(100, 9999);
       const street = this.streets[this.randInt(0, this.streets.length - 1)];
@@ -72,13 +72,13 @@ const AutoFillUtils = {
           full: `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`
       };
   },
-  
+
   getWebsite: function(companyName) {
       if (!companyName) return "https://example.com";
       const base = companyName.toLowerCase().replace(/[^a-z0-9]/g, '');
       return `https://www.${base}.com`;
   },
-  
+
   getBio: function(job, company, city) {
       const bios = [
           `Passionate ${job} currently working at ${company}. Native to ${city} and always looking for new opportunities to learn and grow.`,
@@ -93,7 +93,7 @@ const AutoFillUtils = {
   // Handles {word1|word2} formatting, parsing from deepest nested first
   spinText: function(text) {
       if (!text) return "";
-      const regex = /{([^{}]*)}/g; 
+      const regex = /{([^{}]*)}/g;
       let result = text;
       while (regex.test(result)) {
           result = result.replace(regex, (match, contents) => {

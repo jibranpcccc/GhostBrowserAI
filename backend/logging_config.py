@@ -21,26 +21,26 @@ class JSONFormatter(logging.Formatter):
             log_obj["profile_id"] = record.profile_id
         if hasattr(record, "event_type"):
             log_obj["event_type"] = record.event_type
-            
+
         return json.dumps(log_obj)
 
 def get_logger(name="AntiDetect"):
     logger = logging.getLogger(name)
-    
+
     if not logger.handlers:
         logger.setLevel(logging.INFO)
-        
+
         # File handler (JSON)
         fh = logging.FileHandler(LOG_FILE)
         fh.setFormatter(JSONFormatter())
-        
+
         # Console handler (Standard)
         ch = logging.StreamHandler()
         ch.setFormatter(logging.Formatter('[%(levelname)s] %(module)s: %(message)s'))
-        
+
         logger.addHandler(fh)
         logger.addHandler(ch)
-        
+
     return logger
 
 logger = get_logger()

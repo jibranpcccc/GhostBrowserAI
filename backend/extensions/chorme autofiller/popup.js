@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const mappingsContainer = document.getElementById('mappingsContainer');
     const addMappingBtn = document.getElementById('addMapping');
-    
+
     const autoFillBtn = document.getElementById('autoFillBtn');
     const clearFormBtn = document.getElementById('clearFormBtn');
     const extractFormBtn = document.getElementById('extractFormBtn');
@@ -125,7 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
             bioSpintaxInput.value = currentConfig.bioSpintax || '';
             slowTypeInput.checked = currentConfig.slowType || false;
             typeSpeedInput.value = currentConfig.typeSpeed || 30;
-            
+
             if (currentConfig.customMappings && currentConfig.customMappings.length > 0) {
                 currentConfig.customMappings.forEach(mapping => addMappingRow(mapping.selector, mapping.type));
             } else {
@@ -184,7 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
             currentPersona.Bio = newBio;
             document.getElementById('p_Bio').value = newBio; // Update grid
             saveState(); // Commit to memory
-            
+
             spinBioBtn.textContent = 'Spun!';
             setTimeout(() => spinBioBtn.textContent = 'Spin', 1500);
         } else {
@@ -201,7 +201,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const addMappingRow = (selector = '', type = 'Email') => {
         const row = document.createElement('div');
         row.className = 'mapping-item';
-        
+
         const selInput = document.createElement('input');
         selInput.type = 'text';
         selInput.placeholder = '#id, .class';
@@ -422,10 +422,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (tab && tab.id) {
             await injectContentScript(tab.id);
-            chrome.tabs.sendMessage(tab.id, { 
-                action: "AUTO_FILL", 
-                persona: currentPersona, 
-                config: currentConfig 
+            chrome.tabs.sendMessage(tab.id, {
+                action: "AUTO_FILL",
+                persona: currentPersona,
+                config: currentConfig
             });
         }
     });

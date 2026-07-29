@@ -15,9 +15,10 @@ import asyncio
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
+from backend.auth import require_admin_token
 from backend.logging_config import logger
 from backend.browser_manager import active_browsers, is_profile_running
 
@@ -111,7 +112,7 @@ async def _execute_action(page, action: SyncActionRequest):
 # ---------------------------------------------------------------------------
 
 @router.post("/api/sync/start")
-def start_sync(req: SyncStartRequest):
+def start_sync(req: SyncStartRequest, _auth: None = Depends(require_admin_token)):
     global _sync_state
     if _sync_state:
         raise HTTPException(status_code=409, detail="A sync session is already active. Stop it first.")
@@ -128,7 +129,7 @@ def start_sync(req: SyncStartRequest):
 
 
 @router.post("/api/sync/stop")
-def stop_sync():
+def stop_sync(_auth: None = Depends(require_admin_token)):
     global _sync_state
     if not _sync_state:
         return {"status": "success", "message": "No active sync session."}
@@ -139,7 +140,7 @@ def stop_sync():
 
 
 @router.get("/api/sync/status")
-def sync_status():
+def sync_status(_auth: None = Depends(require_admin_token)):
     if not _sync_state:
         return {"active": False}
     running = [pid for pid in _sync_state["profile_ids"] if is_profile_running(pid)]
@@ -153,7 +154,7 @@ def sync_status():
 
 
 @router.post("/api/sync/action")
-async def broadcast_action(req: SyncActionRequest):
+async def broadcast_action(req: SyncActionRequest, _auth: None = Depends(require_admin_token)):
     if not _sync_state:
         raise HTTPException(status_code=400, detail="No active sync session. Call /api/sync/start first.")
 

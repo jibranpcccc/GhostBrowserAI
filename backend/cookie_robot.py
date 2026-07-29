@@ -20,7 +20,7 @@ import os
 import random
 import time
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Any
 
 PROFILES_DIR = os.path.join(os.path.dirname(__file__), "..", "profiles_data")
 
@@ -234,6 +234,7 @@ class CookieRobot:
                 await task
             except asyncio.CancelledError:
                 pass
+        self._tasks.pop(profile_id, None)
         self.status[profile_id] = {
             "state": "stopped",
             "profile_id": profile_id,
@@ -298,6 +299,7 @@ class CookieRobot:
                 return False
 
             page = active_browsers[profile_id]["page"]
+            warm_start = time.time()
 
         except Exception as e:
             self._set_status(profile_id, state="failed", error=f"Launch exception: {e}")
@@ -321,6 +323,7 @@ class CookieRobot:
 
                 # --- Human behavior simulation ---
                 await self._simulate_browsing(page, country)
+                await self._age_page(page)
 
                 # --- Collect cookies & localStorage ---
                 try:
@@ -359,6 +362,9 @@ class CookieRobot:
             self._update_status(profile_id,
                                 sites_visited=idx + 1,
                                 cookies_collected=cookies_total)
+
+        elapsed_minutes = round((time.time() - warm_start) / 60.0, 2) if 'warm_start' in dir() else 0.0
+        self._bump_age_state(profile_id, elapsed_minutes, num_sites)
 
         # --- Close browser ---
         try:
@@ -557,6 +563,104 @@ class CookieRobot:
         if profile_id not in self.status:
             self._set_status(profile_id)
         self.status[profile_id].setdefault("history", []).append(entry)
+
+
+    # ------------------------------------------------------------------
+    # Lightweight profile aging
+    # ------------------------------------------------------------------
+
+    async def _age_page(self, page):
+        """Tiny randomized background task: click an anchor, type in an input, or go back/forward.
+
+        Falls back to a harmless scroll + sleep when no anchors or inputs exist.
+        """
+        try:
+            action = random.choice(["click", "type", "back", "scroll"])
+            if action == "click":
+                clicked = await page.evaluate("""() => {
+                    const a = Array.from(document.querySelectorAll('a')).find(el => {
+                        const r = el.getBoundingClientRect();
+                        return r.width > 0 && r.height > 0 && el.href
+                            && !el.href.startsWith('javascript:')
+                            && !el.href.startsWith('mailto:');
+                    });
+                    if (a) { a.click(); return true; }
+                    return false;
+                }""")
+                if not clicked:
+                    await self._age_scroll(page)
+            elif action == "type":
+                typed = await page.evaluate("""() => {
+                    const input = Array.from(document.querySelectorAll('input, textarea')).find(el => {
+                        const t = el.type;
+                        return el.offsetWidth > 0 && el.offsetHeight > 0
+                            && !['hidden','submit','button','checkbox','radio','file','image'].includes(t);
+                    });
+                    if (input) {
+                        const words = ['news','weather','search','maps','shop','recipes','sports'];
+                        input.value = words[Math.floor(Math.random() * words.length)];
+                        input.dispatchEvent(new Event('input', {bubbles: true}));
+                        return true;
+                    }
+                    return false;
+                }""")
+                if not typed:
+                    await self._age_scroll(page)
+            elif action == "back":
+                try:
+                    await page.go_back(wait_until="domcontentloaded", timeout=5000)
+                except Exception:
+                    await self._age_scroll(page)
+            else:
+                await self._age_scroll(page)
+            await asyncio.sleep(random.uniform(0.4, 1.2))
+        except Exception as e:
+            print(f"[CookieRobot] Age task error: {e}")
+
+    async def _age_scroll(self, page):
+        try:
+            await page.evaluate("() => window.scrollBy(0, window.innerHeight * 0.4)")
+        except Exception:
+            pass
+
+    def _age_state_path(self, profile_id: str) -> str:
+        return os.path.join(PROFILES_DIR, profile_id, "age_state.json")
+
+    def _load_age_state(self, profile_id: str) -> dict:
+        path = self._age_state_path(profile_id)
+        if os.path.isfile(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        return {
+                            "total_warm_minutes": float(data.get("total_warm_minutes", 0)),
+                            "sites_visited_count": int(data.get("sites_visited_count", 0)),
+                            "last_warmed_at": data.get("last_warmed_at"),
+                        }
+            except Exception:
+                pass
+        return {
+            "total_warm_minutes": 0.0,
+            "sites_visited_count": 0,
+            "last_warmed_at": None,
+        }
+
+    def _save_age_state(self, profile_id: str, state: dict) -> None:
+        path = self._age_state_path(profile_id)
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(state, f)
+        except Exception as e:
+            print(f"[CookieRobot] Failed to save age state for {profile_id}: {e}")
+
+    def _bump_age_state(self, profile_id: str, minutes: float, sites: int) -> None:
+        state = self._load_age_state(profile_id)
+        state["total_warm_minutes"] = round(state["total_warm_minutes"] + minutes, 2)
+        state["sites_visited_count"] += sites
+        state["last_warmed_at"] = datetime.now(timezone.utc).isoformat()
+        self._save_age_state(profile_id, state)
 
 
 # Singleton instance

@@ -1,0 +1,57 @@
+# graphify ignore rules for Desktop/1 workspace
+# Skip dependency / build / cache folders
+node_modules/
+.venv/
+venv/
+env/
+__pycache__/
+.cache/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Skip version control
+.git/
+.gitignore
+
+# Skip heavy media and generated artifacts
+videos/
+generated_images/
+best_images/
+best_generated_images/
+uploads/
+profiles/
+data/
+cookies/
+downloads/
+screenshots/
+recordings/
+*.mp4
+*.mov
+*.mp3
+*.wav
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.pdf
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Skip local database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Skip large log/output files
+*.log
+logs/
+
+# Skip graphify's own output so we don't recurse
+graphify-out/

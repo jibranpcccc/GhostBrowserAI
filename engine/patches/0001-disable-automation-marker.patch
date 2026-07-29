@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: GhostBrowser Engineering <eng@ghostbrowser.com>
+Date: Sun, 26 Jul 2026 00:00:00 +0000
+Subject: [PATCH] Mask navigator.webdriver at the renderer source level
+
+Stock Chromium exposes navigator.webdriver=true whenever the browser is
+launched under automation control (--enable-automation, DevTools remote
+debugging, etc.). This patch removes the runtime signal at the source
+level so anti-automation scripts cannot use it as a deterministic marker.
+---
+ third_party/blink/renderer/core/frame/navigator.cc | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/third_party/blink/renderer/core/frame/navigator.cc b/third_party/blink/renderer/core/frame/navigator.cc
+index 1234abcd..5678efab 100644
+--- a/third_party/blink/renderer/core/frame/navigator.cc
++++ b/third_party/blink/renderer/core/frame/navigator.cc
+@@ -95,7 +95,9 @@ String Navigator::platform() const {
+ }
+ 
+ bool Navigator::webdriver() const {
+-  return GetExecutionContext()->GetNavigatorUserAgent().webdriver;
++  // GhostBrowser: never advertise the automation marker through the
++  // navigator.webdriver property, regardless of command-line flags.
++  return false;
+ }
+ 
+ }  // namespace blink
+-- 
+2.40.0

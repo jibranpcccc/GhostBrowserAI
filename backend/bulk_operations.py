@@ -16,11 +16,13 @@ import asyncio
 from typing import List, Optional
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel, field_validator
 
+from backend.auth import require_admin_token
 from backend.logging_config import logger
 from backend.profile_manager import profile_manager
+from backend.profile_creator import profile_creator
 from backend.browser_manager import launch_profile, close_profile, is_profile_running
 
 router = APIRouter(tags=["bulk-operations"])
@@ -28,6 +30,60 @@ router = APIRouter(tags=["bulk-operations"])
 # Concurrency limits — prevent resource exhaustion
 _LAUNCH_SEM = asyncio.Semaphore(8)
 _CREATE_SEM = asyncio.Semaphore(8)
+
+
+def bulk_tag_profiles(profile_ids: List[str], tags: List[str]):
+    """Add tags to multiple profiles in one call."""
+    results = []
+    success_count = 0
+    for pid in profile_ids:
+        profile = profile_manager.get_profile(pid)
+        if not profile:
+            results.append({"profile_id": pid, "status": "error", "message": "Not found"})
+            continue
+        ok = profile_manager.add_tags(pid, tags)
+        if ok:
+            results.append({"profile_id": pid, "status": "success", "tags": profile_manager.get_profile(pid).get("tags", [])})
+            success_count += 1
+        else:
+            results.append({"profile_id": pid, "status": "error", "message": "Update failed"})
+
+    logger.info(f"Bulk tag: {success_count}/{len(profile_ids)} profiles updated")
+    return {
+        "status": "success",
+        "message": f"Tagged {success_count} out of {len(profile_ids)} profiles",
+        "total": len(profile_ids),
+        "succeeded": success_count,
+        "failed": len(profile_ids) - success_count,
+        "results": results,
+    }
+
+
+def bulk_untag_profiles(profile_ids: List[str], tags: List[str]):
+    """Remove tags from multiple profiles in one call."""
+    results = []
+    success_count = 0
+    for pid in profile_ids:
+        profile = profile_manager.get_profile(pid)
+        if not profile:
+            results.append({"profile_id": pid, "status": "error", "message": "Not found"})
+            continue
+        ok = profile_manager.remove_tags(pid, tags)
+        if ok:
+            results.append({"profile_id": pid, "status": "success", "tags": profile_manager.get_profile(pid).get("tags", [])})
+            success_count += 1
+        else:
+            results.append({"profile_id": pid, "status": "error", "message": "Update failed"})
+
+    logger.info(f"Bulk untag: {success_count}/{len(profile_ids)} profiles updated")
+    return {
+        "status": "success",
+        "message": f"Untagged {success_count} out of {len(profile_ids)} profiles",
+        "total": len(profile_ids),
+        "succeeded": success_count,
+        "failed": len(profile_ids) - success_count,
+        "results": results,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -42,14 +98,48 @@ class BulkCreateRequest(BaseModel):
     locale: Optional[str] = None
     advanced: Optional[dict] = None
 
+    @field_validator("base_name")
+    @classmethod
+    def _validate_base_name(cls, v):
+        v = v.strip() if isinstance(v, str) else ""
+        if not v:
+            raise ValueError("base_name cannot be empty")
+        if len(v) > 120:
+            raise ValueError("base_name must be 120 characters or less")
+        return v
+
 
 class BulkProfileIdsRequest(BaseModel):
     profile_ids: List[str]
+
+    @field_validator("profile_ids")
+    @classmethod
+    def _validate_profile_ids(cls, v):
+        # Deduplicate while preserving order
+        seen = set()
+        deduped = []
+        for pid in v:
+            if not pid or not pid.strip():
+                raise ValueError("profile_ids cannot contain empty values")
+            pid = pid.strip()
+            if pid not in seen:
+                seen.add(pid)
+                deduped.append(pid)
+        if not deduped:
+            raise ValueError("At least one profile_id is required")
+        if len(deduped) > 100:
+            raise ValueError("Maximum 100 profile_ids allowed per request")
+        return deduped
 
 
 class BulkAssignFolderRequest(BaseModel):
     profile_ids: List[str]
     folder_id: Optional[str] = None
+
+    @field_validator("profile_ids")
+    @classmethod
+    def _validate_profile_ids(cls, v):
+        return BulkProfileIdsRequest._validate_profile_ids.__func__(cls, v)
 
 
 # ---------------------------------------------------------------------------
@@ -57,24 +147,38 @@ class BulkAssignFolderRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 @router.post("/api/profiles/bulk/create")
-async def bulk_create_profiles(req: BulkCreateRequest):
-    """Create N profiles concurrently (does NOT use the Kimi AI pipeline)."""
+async def bulk_create_profiles(req: BulkCreateRequest, _auth: None = Depends(require_admin_token)):
+    """Create profiles through the same strict Kimi pipeline as single-create."""
     count = max(1, min(req.count, 100))  # cap at 100
 
     async def create_one(i: int):
         name = f"{req.base_name}_{i + 1}"
         async with _CREATE_SEM:
             try:
-                profile = profile_manager.create_profile(
+                advanced_ui = dict(req.advanced or {})
+                if req.timezone:
+                    advanced_ui["timezone"] = req.timezone
+                if req.locale:
+                    advanced_ui["locale"] = req.locale
+                result = await profile_creator.create_zero_leak_profile(
                     name=name,
                     proxy=req.proxy,
-                    timezone=req.timezone,
-                    locale=req.locale,
-                    advanced=req.advanced,
+                    advanced_ui=advanced_ui,
+                    skip_warming=True,
                 )
+                if result.get("status") != "success":
+                    return {
+                        "index": i,
+                        "name": name,
+                        "status": "error",
+                        "code": result.get("code", "CREATE_FAILED"),
+                        "message": result.get("message", "Strict Kimi creation failed"),
+                    }
+                profile = result["profile"]
                 return {"index": i, "name": name, "status": "success", "profile_id": profile["id"]}
             except Exception as exc:
-                return {"index": i, "name": name, "status": "error", "message": str(exc)}
+                logger.error("Bulk strict profile creation failed for one item: %s", type(exc).__name__)
+                return {"index": i, "name": name, "status": "error", "message": "Profile creation failed"}
 
     tasks = [create_one(i) for i in range(count)]
     results = await asyncio.gather(*tasks)
@@ -83,7 +187,7 @@ async def bulk_create_profiles(req: BulkCreateRequest):
     logger.info(f"Bulk create: {success_count}/{count} profiles created")
 
     return {
-        "status": "success",
+        "status": "success" if success_count == count else ("partial" if success_count else "error"),
         "message": f"Created {success_count} out of {count} profiles",
         "total": count,
         "succeeded": success_count,
@@ -93,7 +197,7 @@ async def bulk_create_profiles(req: BulkCreateRequest):
 
 
 @router.post("/api/profiles/bulk/launch")
-async def bulk_launch_profiles(req: BulkProfileIdsRequest):
+async def bulk_launch_profiles(req: BulkProfileIdsRequest, _auth: None = Depends(require_admin_token)):
     """Launch multiple profiles concurrently."""
     if not req.profile_ids:
         raise HTTPException(status_code=400, detail="At least one profile_id is required")
@@ -123,7 +227,7 @@ async def bulk_launch_profiles(req: BulkProfileIdsRequest):
 
 
 @router.post("/api/profiles/bulk/close")
-async def bulk_close_profiles(req: BulkProfileIdsRequest):
+async def bulk_close_profiles(req: BulkProfileIdsRequest, _auth: None = Depends(require_admin_token)):
     """Close multiple profiles concurrently."""
     if not req.profile_ids:
         raise HTTPException(status_code=400, detail="At least one profile_id is required")
@@ -152,7 +256,7 @@ async def bulk_close_profiles(req: BulkProfileIdsRequest):
 
 
 @router.post("/api/profiles/bulk/delete")
-async def bulk_delete_profiles(req: BulkProfileIdsRequest):
+async def bulk_delete_profiles(req: BulkProfileIdsRequest, _auth: None = Depends(require_admin_token)):
     """Delete multiple profiles — closes running browsers first, then deletes."""
     if not req.profile_ids:
         raise HTTPException(status_code=400, detail="At least one profile_id is required")
@@ -189,7 +293,7 @@ async def bulk_delete_profiles(req: BulkProfileIdsRequest):
 
 
 @router.post("/api/profiles/bulk/assign-folder")
-def bulk_assign_folder(req: BulkAssignFolderRequest):
+def bulk_assign_folder(req: BulkAssignFolderRequest, _auth: None = Depends(require_admin_token)):
     """Assign multiple profiles to a folder in one call."""
     if not req.profile_ids:
         raise HTTPException(status_code=400, detail="At least one profile_id is required")

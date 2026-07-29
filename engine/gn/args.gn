@@ -1,0 +1,58 @@
+# GhostBrowser Chromium engine GN args
+# Reasonable defaults for a security / anti-detect oriented Release build.
+
+# Produce an official, statically linked binary instead of a component build.
+is_official_build = true
+is_component_build = false
+is_debug = false
+
+# Strip debug symbols to a minimal level to keep binary size reasonable while
+# preserving enough information for crash reporting and profiling.
+symbol_level = 1
+
+# Faster, modern linkers.
+use_lld = true
+
+# Disable NaCl (Native Client) to remove an otherwise-visible plugin surface and
+# reduce attack surface / build time.
+enable_nacl = false
+
+# Treat the build as Chromium-branded so that internal APIs and update checks
+# behave like a standard release build.
+is_chrome_branded = false
+
+# Keep proprietary codecs enabled for broad media compatibility.
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
+
+# Enable the V8 snapshot and ICU data bundling for deterministic startup and
+# fewer runtime dependencies.
+use_v8_context_snapshot = true
+icu_use_data_file = true
+
+# Do not install any bundled extensions, default search provider metadata, or
+# bundled background apps. These are fingerprinting surfaces we control via
+# runtime policy instead.
+enable_background_contents = false
+enable_google_branded_build = false
+enable_hangout_services_extension = false
+enable_print_preview = true
+enable_reading_list = false
+enable_remoting = false
+enable_reporting = true
+safe_browsing_mode = 1
+
+# Optimize for binary size and performance.
+enable_iterator_debugging = false
+optimize_webui = true
+
+# Use system Python and Node tooling bundled with depot_tools rather than
+# relying on host packages where possible.
+use_sysroot = false
+
+# Disable WebRTC logging uploader; we keep WebRTC functional but prevent it
+# from phoning home with diagnostic data.
+enable_webrtc = true
+
+# Windows-specific defaults (ignored on other platforms).
+treat_warnings_as_errors = false

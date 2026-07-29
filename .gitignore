@@ -11,3 +11,24 @@ build/
 *.spec
 GhostBrowser.zip
 *.corrupted.*.json
+scratch/
+# Cloudflare account credentials (plaintext + secure store) — never commit
+cloudflare_accounts.priority.txt
+cloudflare_accounts.txt
+api_data/cloudflare_accounts.secure.json
+baselines/local/
+backend/*.db
+backend/scraped_proxies.json
+*.db
+*.ghost
+server_*.log
+run_tests_full.log
+_*.py
+_*.ps1
+release-manifest.json
+.DS_Store
+graphify-out/
+.playwright-mcp/
+inspection-dashboard.png
+test*.txt
+test_ps1.ps1

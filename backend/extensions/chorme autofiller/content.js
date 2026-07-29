@@ -10,21 +10,21 @@ if (!window._autoFillerInjected) {
             const extractedPersona = extractForm();
             sendResponse({ persona: extractedPersona });
         }
-        return true; 
+        return true;
     });
 
     const dispatchEvents = (el) => {
         // Safe dispatching. Input triggers React updates. Change triggers Vue/Legacy.
         el.dispatchEvent(new Event('input', { bubbles: true }));
-        // Only trigger 'change' on selects, or inputs where React explicitly relies on it. 
-        // We avoid firing generic change on everything if possible to prevent legacy refreshes, 
+        // Only trigger 'change' on selects, or inputs where React explicitly relies on it.
+        // We avoid firing generic change on everything if possible to prevent legacy refreshes,
         // but practically many frameworks require it.
         el.dispatchEvent(new Event('change', { bubbles: true }));
     };
 
     const fillElement = async (el, value, slowType = false, speed = 30) => {
         if (!el || el.disabled || el.readOnly || el.type === 'hidden') return;
-        
+
         // Handle Checkboxes natively
         if (el.type === 'checkbox') {
             if (!el.checked && String(value).toLowerCase() === 'true') {
@@ -35,7 +35,7 @@ if (!window._autoFillerInjected) {
             return;
         }
 
-        // Handle Radios 
+        // Handle Radios
         if (el.type === 'radio') {
             if (el.value && String(el.value).toLowerCase() === String(value).toLowerCase()) {
                 el.checked = true;
@@ -66,20 +66,20 @@ if (!window._autoFillerInjected) {
              dispatchEvents(el);
              if (slowType) await new Promise(r => setTimeout(r, Math.random() * speed * 2 + speed * 2));
              return;
-        } 
+        }
 
         // Handling standard inputs & textareas natively for React
         // This avoids just doing el.value = value causing React to miss the update entirely
         try {
             const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
             const nativeTextareaValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
-            
+
             const setter = el.tagName === 'TEXTAREA' ? nativeTextareaValueSetter : nativeInputValueSetter;
 
             if (slowType) {
                 if (setter) setter.call(el, ""); else el.value = "";
                 el.dispatchEvent(new Event('input', { bubbles: true }));
-                
+
                 let strVal = String(value);
                 for (let i = 0; i < strVal.length; i++) {
                     const currentVal = strVal.substring(0, i + 1);
@@ -88,7 +88,7 @@ if (!window._autoFillerInjected) {
                     await new Promise(r => setTimeout(r, Math.random() * speed + speed * 0.5)); // Delay between chars
                 }
                 await new Promise(r => setTimeout(r, Math.random() * speed * 2 + speed)); // Delay after field
-            } else {            
+            } else {
                 if (setter) setter.call(el, value);
                 else el.value = value;
                 // Dispatch input after native setter
@@ -106,7 +106,7 @@ if (!window._autoFillerInjected) {
                     await new Promise(r => setTimeout(r, Math.random() * speed + speed * 0.5));
                 }
                 await new Promise(r => setTimeout(r, Math.random() * speed * 2 + speed));
-            } else {                
+            } else {
                 el.value = value;
                 dispatchEvents(el);
             }
@@ -117,7 +117,7 @@ if (!window._autoFillerInjected) {
         const inputs = document.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="image"]):not([type="file"])');
         const textareas = document.querySelectorAll('textarea');
         const selects = document.querySelectorAll('select');
-        
+
         [...inputs, ...textareas].forEach(input => {
             if (input.type === 'checkbox' || input.type === 'radio') {
                 if (input.checked) { input.checked = false; dispatchEvents(input); }
@@ -141,7 +141,7 @@ if (!window._autoFillerInjected) {
             } else if (input.tagName === 'SELECT') {
                 if (input.selectedIndex >= 0) val = input.options[input.selectedIndex].text;
             }
-            
+
             if (!val || String(val).trim() === "") return;
 
             const attributesStr = [

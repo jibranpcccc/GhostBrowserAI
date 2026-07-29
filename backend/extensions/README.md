@@ -1,6 +1,6 @@
 # Browser Extensions Directory
 
-This folder is dynamically scanned by the Browser Manager when a Playwright profile is launched. 
+This folder is dynamically scanned by the Browser Manager when a Playwright profile is launched.
 
 ## How to add Extensions
 1. Download the `.crx` file or zip of the extension (e.g., a Captcha Solver).

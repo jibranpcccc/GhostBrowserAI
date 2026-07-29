@@ -29,7 +29,7 @@ class SystemMonitor:
                 self.cpu_usage = psutil.cpu_percent(interval=None)
                 mem = psutil.virtual_memory()
                 self.ram_usage = mem.percent
-                
+
                 # Count Chromium processes
                 chromium_count = 0
                 for proc in psutil.process_iter(['name']):
@@ -41,19 +41,9 @@ class SystemMonitor:
                 if self.ram_usage >= self.max_ram_threshold:
                     await self._emergency_memory_release()
 
-                # Run Fingerprint Evolver daily
-                now = time.time()
-                if now - getattr(self, 'last_evolve_time', 0) > 86400: # 24 hours
-                    from backend.fingerprint_evolver import fingerprint_evolver
-                    from backend.profile_manager import profile_manager
-                    print("[SystemMonitor] Triggering daily profile evolution (aging)...")
-                    for p in profile_manager.list_profiles():
-                        fingerprint_evolver.evolve_profile(p["id"])
-                    self.last_evolve_time = now
-
             except Exception as e:
                 print(f"[SystemMonitor] Error in monitoring loop: {e}")
-                
+
             await asyncio.sleep(10)
 
     async def _emergency_memory_release(self):
@@ -63,17 +53,17 @@ class SystemMonitor:
         print(f"[SystemMonitor] CRITICAL: RAM at {self.ram_usage}%. Initiating Emergency Release!")
         if not active_browsers:
             return
-            
+
         from backend.profile_rotator import rotator
         # Find oldest profile
         oldest_profile_id = None
         oldest_time = time.time()
-        
+
         for pid, start_time in rotator.profile_session_times.items():
             if start_time < oldest_time:
                 oldest_time = start_time
                 oldest_profile_id = pid
-                
+
         if oldest_profile_id:
             print(f"[SystemMonitor] Emergency killing oldest profile: {oldest_profile_id}")
             await close_profile(oldest_profile_id)

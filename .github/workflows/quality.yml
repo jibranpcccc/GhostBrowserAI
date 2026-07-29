@@ -1,0 +1,109 @@
+name: GhostBrowser quality gates
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  windows-regression:
+    name: Windows regression
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Verify clean checkout
+        shell: pwsh
+        run: |
+          git diff --check
+          if (git status --porcelain) {
+            Write-Error "Working tree is dirty or contains untracked candidate files."
+            exit 1
+          }
+      - name: Install Chromium for Playwright
+        run: python -m playwright install chromium
+      - name: Check trailing whitespace
+        run: git diff --check
+      - name: Compile check
+        run: python -m compileall -q backend tests
+      - name: Chromium compatibility
+        run: python scripts/check_chromium_compat.py
+      - name: Credential pattern scan
+        run: python scripts/check_credentials.py
+      - name: Release audit
+        run: python scripts/release_audit.py --skip-dist
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+      - name: Pytest
+        run: python -m pytest -q --timeout=60
+      - name: QA suite
+        run: python qa_test_suite.py
+      - name: Run tests runner
+        run: python tests/run_tests.py
+
+  detection-smoke:
+    name: Detection smoke
+    runs-on: windows-latest
+    needs: windows-regression
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Verify clean checkout
+        shell: pwsh
+        run: |
+          git diff --check
+          if (git status --porcelain) {
+            Write-Error "Working tree is dirty or contains untracked candidate files."
+            exit 1
+          }
+      - name: Install Chromium for Playwright
+        run: python -m playwright install chromium
+      - name: Detection check
+        run: python scripts/detection_check.py --temp --skip-network
+
+  isolation-smoke:
+    name: Isolation smoke
+    runs-on: windows-latest
+    needs: windows-regression
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Verify clean checkout
+        shell: pwsh
+        run: |
+          git diff --check
+          if (git status --porcelain) {
+            Write-Error "Working tree is dirty or contains untracked candidate files."
+            exit 1
+          }
+      - name: Install Chromium for Playwright
+        run: python -m playwright install chromium
+      - name: Isolation check
+        run: |
+          python scripts/isolation_check.py --headless | Tee-Object -FilePath isolation_result.json
+          $status = python -c "import json; print(json.load(open('isolation_result.json'))['status'])"
+          if ($status -ne 'passed') { Write-Host "isolation status: $status"; exit 1 }
+        shell: pwsh

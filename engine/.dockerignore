@@ -1,0 +1,17 @@
+# Build outputs and Chromium source tree must never be baked into the image.
+src/
+out/
+.depot_tools/
+.cache/
+ccache/
+
+# Local Python and OS artifacts.
+__pycache__/
+*.py[cod]
+*.so
+*.log
+.DS_Store
+Thumbs.db
+
+# Git metadata.git/
+.gitignore

@@ -50,11 +50,11 @@
         * { transition: background-color 0.2s, color 0.2s, border-color 0.2s; }
 
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; width: 460px; margin: 0; padding: 0; background: var(--bg); color: var(--text); }
-        
+
         .header { background: var(--accent); color: #ffffff; padding: 14px 16px; font-weight: 600; font-size: 16px; letter-spacing: 0.5px; display: flex; justify-content: space-between; align-items: center; }
         .header-title { display: flex; align-items: center; gap: 8px; }
         .header-actions { display: flex; gap: 6px; align-items: center; }
-        
+
         .theme-toggle { background: rgba(255,255,255,0.2); border: none; color: white; cursor: pointer; padding: 4px 8px; border-radius: 4px; font-size: 14px; width: auto; box-shadow: none; }
         .theme-toggle:hover { background: rgba(255,255,255,0.35); opacity: 1; }
 
@@ -62,21 +62,21 @@
         .container::-webkit-scrollbar { width: 5px; }
         .container::-webkit-scrollbar-track { background: transparent; }
         .container::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-        
+
         .section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; box-shadow: 0 1px 3px var(--shadow); }
         .section-title { font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px; letter-spacing: 0.5px; display: flex; justify-content: space-between; align-items: center;}
-        
+
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .grid-full { grid-column: 1 / -1; }
         .grid-third { grid-template-columns: 1fr 1fr 1fr; }
-        
+
         .input-group { display: flex; flex-direction: column; gap: 3px; position: relative;}
         .input-group label { display: flex; justify-content: space-between; align-items: center; }
         label { font-size: 11px; font-weight: 600; color: var(--text-label); }
 
         input[type="text"], input[type="number"], select, textarea { width: 100%; box-sizing: border-box; padding: 7px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; outline: none; transition: border 0.15s, background 0.2s; background: var(--input-bg); color: var(--text); font-family: inherit;}
         input[type="text"]:focus, input[type="number"]:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(26,115,232,0.15); }
-        
+
         .persona-field { background: var(--persona-bg) !important; border: 1px dashed var(--border) !important; }
         .persona-field:focus { background: var(--input-bg) !important; border: 1px solid var(--accent) !important; }
 
@@ -86,7 +86,7 @@
         button { background: var(--accent); color: #ffffff; border: none; padding: 9px; border-radius: 4px; font-weight: 600; cursor: pointer; transition: opacity 0.2s, transform 0.1s, background 0.2s; font-size: 13px; width: 100%; box-shadow: 0 1px 2px var(--shadow); }
         button:hover { opacity: 0.9; }
         button:active { transform: translateY(1px); box-shadow: none; }
-        
+
         .btn-green { background: var(--green); }
         .btn-outline { background: transparent; border: 1px solid var(--accent); color: var(--accent); padding: 5px 10px; font-size: 11px; width: auto; box-shadow: none; }
         .btn-outline:hover { background: var(--bg-hover); }
@@ -95,13 +95,13 @@
         .btn-amber { background: #f59e0b; }
 
         .btn-row { display: flex; gap: 8px; }
-        
+
         .mapping-box { margin-bottom: 8px; }
         .mapping-item { display: flex; gap: 6px; margin-bottom: 8px; align-items: center; }
         .mapping-item input { flex: 2; }
         .mapping-item select { flex: 1.5; }
         .del-btn { flex: 0 0 28px; width: 28px; padding: 7px 0; font-size: 11px; }
-        
+
         hr { border: 0; height: 1px; background: var(--border); margin: 0; }
 
         /* Profile Selector */
@@ -143,7 +143,7 @@
         </div>
     </div>
     <div class="container">
-        
+
         <!-- Action Bar -->
         <div class="btn-row">
             <button id="clearFormBtn" class="btn-red" style="flex: 1;" title="Clears page forms">Clear</button>
@@ -200,12 +200,12 @@
                 Current Persona
                 <button id="generatePersonaBtn" class="btn-outline">🎲 Roll New</button>
             </div>
-            
+
             <div class="grid" id="personaEditor">
                 <div class="input-group"><label>First Name</label><input type="text" id="p_FirstName" class="persona-field" data-key="FirstName"></div>
                 <div class="input-group"><label>Last Name</label><input type="text" id="p_LastName" class="persona-field" data-key="LastName"></div>
                 <div class="input-group"><label>Username</label><input type="text" id="p_Username" class="persona-field" data-key="Username"></div>
-                
+
                 <div class="input-group">
                     <label>Password <button class="copy-btn" data-target="p_Password" title="Copy to clipboard">📋</button></label>
                     <input type="text" id="p_Password" class="persona-field" data-key="Password">
@@ -214,7 +214,7 @@
                     <label>Email <button class="copy-btn" data-target="p_Email" title="Copy to clipboard">📋</button></label>
                     <input type="text" id="p_Email" class="persona-field" data-key="Email">
                 </div>
-                
+
                 <div class="input-group"><label>Gender</label><input type="text" id="p_Gender" class="persona-field" data-key="Gender"></div>
                 <div class="input-group"><label>Security Answer</label><input type="text" id="p_SecurityAnswer" class="persona-field" data-key="SecurityAnswer"></div>
 
@@ -244,7 +244,7 @@
                 <div class="input-group"><label>Phone</label><input type="text" id="p_Phone" class="persona-field" data-key="Phone"></div>
                 <div class="input-group"><label>Company</label><input type="text" id="p_Company" class="persona-field" data-key="Company"></div>
                 <div class="input-group grid-full"><label>Street</label><input type="text" id="p_Street" class="persona-field" data-key="Street"></div>
-                
+
                 <div class="input-group"><label>City</label><input type="text" id="p_City" class="persona-field" data-key="City"></div>
                 <div class="input-group"><label>State</label><input type="text" id="p_State" class="persona-field" data-key="State"></div>
                 <div class="input-group"><label>Zip</label><input type="text" id="p_Zip" class="persona-field" data-key="Zip"></div>
@@ -256,7 +256,7 @@
         <!-- Configuration -->
         <div class="section">
             <div class="section-title">Settings</div>
-            
+
             <div class="grid">
                 <div class="input-group">
                     <label>Catch-all Domain</label>
@@ -281,7 +281,7 @@
 
     <!-- Toast Notification -->
     <div class="toast" id="toast"></div>
-    
+
     <script src="utils.js"></script>
     <script src="popup.js"></script>
 </body>

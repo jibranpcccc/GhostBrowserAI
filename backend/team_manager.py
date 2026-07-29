@@ -8,12 +8,13 @@ import json
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Any
 from enum import Enum
+from typing import Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel, EmailStr, Field
 
+from backend.auth import require_admin_token
 from backend.config import get_data_dir
 from backend.logging_config import logger
 
@@ -23,7 +24,6 @@ from backend.logging_config import logger
 TEAM_DATA_FILE = os.path.join(get_data_dir("profiles_data"), "team_data.json")
 LOCKED_PROFILES_FILE = os.path.join(get_data_dir("profiles_data"), "locked_profiles.json")
 
-# Ensure parent directory exists
 os.makedirs(os.path.dirname(TEAM_DATA_FILE), exist_ok=True)
 
 
@@ -37,7 +37,6 @@ class Role(str, Enum):
     VIEWER = "viewer"
 
 
-# Permission matrix: role -> set of allowed actions
 PERMISSIONS: Dict[Role, set] = {
     Role.ADMIN: {
         "create_profile", "edit_profile", "delete_profile", "launch_profile",
@@ -58,32 +57,40 @@ PERMISSIONS: Dict[Role, set] = {
 
 
 # ---------------------------------------------------------------------------
-# Pydantic models for API
+# Generic JSON persistence
 # ---------------------------------------------------------------------------
-class TeamMemberModel(BaseModel):
+def _load_json(path: str, default):
+    if not os.path.exists(path):
+        return default
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except json.JSONDecodeError as exc:
+        logger.error(f"Failed to load JSON from {path}: {exc}")
+        return default
+
+
+def _save_json(path: str, data) -> bool:
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4)
+        return True
+    except OSError as exc:
+        logger.error(f"Failed to save JSON to {path}: {exc}")
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Pydantic models
+# ---------------------------------------------------------------------------
+class TeamMember(BaseModel):
     name: str
     email: str
     role: str = "viewer"
-
-
-class UpdateRoleModel(BaseModel):
-    role: str
-
-
-# ---------------------------------------------------------------------------
-# TeamMember domain object
-# ---------------------------------------------------------------------------
-class TeamMember:
-    """Represents a single team member with identity, role and metadata."""
-
-    def __init__(self, name: str, email: str, role: str = "viewer",
-                 member_id: Optional[str] = None,
-                 created_at: Optional[str] = None):
-        self.id = member_id or str(uuid.uuid4())
-        self.name = name
-        self.email = email
-        self.role = role
-        self.created_at = created_at or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    )
 
     @property
     def role_enum(self) -> Optional[Role]:
@@ -92,176 +99,127 @@ class TeamMember:
         except ValueError:
             return None
 
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "id": self.id,
-            "name": self.name,
-            "email": self.email,
-            "role": self.role,
-            "created_at": self.created_at,
-        }
 
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "TeamMember":
-        return cls(
-            name=data.get("name", ""),
-            email=data.get("email", ""),
-            role=data.get("role", "viewer"),
-            member_id=data.get("id"),
-            created_at=data.get("created_at"),
-        )
+class TeamMemberModel(BaseModel):
+    name: str
+    email: EmailStr
+    role: str = "viewer"
+
+
+class UpdateRoleModel(BaseModel):
+    role: str
 
 
 # ---------------------------------------------------------------------------
-# TeamManager — persistence & business logic
+# Module state
 # ---------------------------------------------------------------------------
-class TeamManager:
-    """Manages team members, roles, permissions and profile locking."""
+_members: Dict[str, TeamMember] = {
+    mid: TeamMember(**mdata)
+    for mid, mdata in _load_json(TEAM_DATA_FILE, {"members": {}}).get("members", {}).items()
+}
+_locked_profiles: Dict[str, str] = _load_json(LOCKED_PROFILES_FILE, {})
 
-    def __init__(self):
-        self._members: Dict[str, TeamMember] = {}
-        self._locked_profiles: Dict[str, str] = {}  # profile_id -> locked_by member_id
-        self._load()
 
-    # -- persistence --------------------------------------------------------
-    def _load(self):
-        if os.path.exists(TEAM_DATA_FILE):
-            try:
-                with open(TEAM_DATA_FILE, "r") as f:
-                    raw = json.load(f)
-                self._members = {
-                    mid: TeamMember.from_dict(mdata)
-                    for mid, mdata in raw.get("members", {}).items()
-                }
-            except (json.JSONDecodeError, KeyError) as exc:
-                logger.error(f"Failed to load team data: {exc}")
-                self._members = {}
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+def _validate_role(role: str) -> str:
+    if role not in Role._value2member_map_:
+        raise ValueError(f"Invalid role: {role}")
+    return role
 
-        if os.path.exists(LOCKED_PROFILES_FILE):
-            try:
-                with open(LOCKED_PROFILES_FILE, "r") as f:
-                    self._locked_profiles = json.load(f)
-            except json.JSONDecodeError as exc:
-                logger.error(f"Failed to load locked profiles: {exc}")
-                self._locked_profiles = {}
 
-    def _save_members(self):
-        data = {"members": {mid: m.to_dict() for mid, m in self._members.items()}}
-        try:
-            with open(TEAM_DATA_FILE, "w") as f:
-                json.dump(data, f, indent=4)
-        except OSError as exc:
-            logger.error(f"Failed to save team data: {exc}")
+def _save_members() -> None:
+    _save_json(TEAM_DATA_FILE, {"members": {mid: m.model_dump() for mid, m in _members.items()}})
 
-    def _save_locked(self):
-        try:
-            with open(LOCKED_PROFILES_FILE, "w") as f:
-                json.dump(self._locked_profiles, f, indent=4)
-        except OSError as exc:
-            logger.error(f"Failed to save locked profiles: {exc}")
 
-    # -- member CRUD --------------------------------------------------------
-    def add_member(self, name: str, email: str, role: str = "viewer") -> TeamMember:
-        if role not in [r.value for r in Role]:
-            raise ValueError(f"Invalid role: {role}")
-        # SECURITY FIX: Sanitize name and email to prevent stored XSS
-        import html, re
-        safe_name = html.escape(str(name).strip(), quote=True)[:100]
-        safe_email = html.escape(str(email).strip(), quote=True)[:200]
-        # Validate email format
-        if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', safe_email):
-            raise ValueError(f"Invalid email format: {safe_email}")
-        member = TeamMember(name=safe_name, email=safe_email, role=role)
-        self._members[member.id] = member
-        self._save_members()
-        logger.info(f"Team member added: {member.email} ({role})")
-        return member
+# ---------------------------------------------------------------------------
+# Member CRUD
+# ---------------------------------------------------------------------------
+def _add_member(name: str, email: str, role: str = "viewer") -> TeamMember:
+    _validate_role(role)
+    member = TeamMember(name=name.strip()[:100], email=str(email).strip(), role=role)
+    _members[member.id] = member
+    _save_members()
+    logger.info(f"Team member added: {member.email} ({role})")
+    return member
 
-    def get_member(self, member_id: str) -> Optional[TeamMember]:
-        return self._members.get(member_id)
 
-    def list_members(self) -> List[TeamMember]:
-        return list(self._members.values())
+def _get_member(member_id: str) -> Optional[TeamMember]:
+    return _members.get(member_id)
 
-    def update_role(self, member_id: str, new_role: str) -> TeamMember:
-        if new_role not in [r.value for r in Role]:
-            raise ValueError(f"Invalid role: {new_role}")
-        member = self._members.get(member_id)
-        if not member:
-            raise KeyError(f"Member not found: {member_id}")
-        member.role = new_role
-        self._save_members()
-        logger.info(f"Member {member_id} role changed to {new_role}")
-        return member
 
-    def remove_member(self, member_id: str) -> bool:
-        if member_id not in self._members:
-            return False
-        del self._members[member_id]
-        # Remove any locks held by this member
-        to_remove = [pid for pid, lock_by in self._locked_profiles.items()
-                     if lock_by == member_id]
-        for pid in to_remove:
-            del self._locked_profiles[pid]
-        self._save_members()
-        self._save_locked()
-        logger.info(f"Team member removed: {member_id}")
-        return True
+def _list_members() -> List[TeamMember]:
+    return list(_members.values())
 
-    # -- permissions --------------------------------------------------------
-    def check_permission(self, member_id: str, action: str) -> bool:
-        """Return True if *member_id* is allowed to perform *action*."""
-        member = self._members.get(member_id)
-        if not member:
-            return False
-        role_enum = member.role_enum
-        if not role_enum:
-            return False
-        return action in PERMISSIONS.get(role_enum, set())
 
-    # -- profile locking ----------------------------------------------------
-    def lock_profile(self, profile_id: str, member_id: str) -> bool:
-        """Lock a profile so only *member_id* can use it. Returns True on success."""
-        member = self._members.get(member_id)
-        if not member:
-            raise KeyError(f"Member not found: {member_id}")
-        if not self.check_permission(member_id, "lock_profile"):
-            raise PermissionError(f"Member {member_id} does not have lock permission")
-        if profile_id in self._locked_profiles and self._locked_profiles[profile_id] != member_id:
-            # Already locked by someone else
-            return False
-        self._locked_profiles[profile_id] = member_id
-        self._save_locked()
-        logger.info(f"Profile {profile_id} locked by {member_id}")
-        return True
+def _update_role(member_id: str, new_role: str) -> TeamMember:
+    _validate_role(new_role)
+    member = _members.get(member_id)
+    if not member:
+        raise KeyError(f"Member not found: {member_id}")
+    member.role = new_role
+    _save_members()
+    logger.info(f"Member {member_id} role changed to {new_role}")
+    return member
 
-    def unlock_profile(self, profile_id: str, member_id: str) -> bool:
-        """Unlock a profile. Only the locker or an admin can unlock."""
-        locked_by = self._locked_profiles.get(profile_id)
-        if locked_by is None:
-            return True  # Already unlocked
-        if locked_by == member_id:
-            del self._locked_profiles[profile_id]
-            self._save_locked()
-            logger.info(f"Profile {profile_id} unlocked by {member_id}")
-            return True
-        # Admin can force-unlock
-        if self.check_permission(member_id, "manage_team"):
-            del self._locked_profiles[profile_id]
-            self._save_locked()
-            logger.info(f"Profile {profile_id} force-unlocked by admin {member_id}")
-            return True
+
+def _remove_member(member_id: str) -> bool:
+    if member_id not in _members:
         return False
-
-    def get_locked_profiles(self) -> Dict[str, str]:
-        """Return mapping of profile_id -> member_id for locked profiles."""
-        return dict(self._locked_profiles)
+    del _members[member_id]
+    for pid in [pid for pid, lock_by in _locked_profiles.items() if lock_by == member_id]:
+        del _locked_profiles[pid]
+    _save_members()
+    _save_json(LOCKED_PROFILES_FILE, _locked_profiles)
+    logger.info(f"Team member removed: {member_id}")
+    return True
 
 
 # ---------------------------------------------------------------------------
-# Singleton instance
+# Permissions
 # ---------------------------------------------------------------------------
-team_manager = TeamManager()
+def _check_permission(member_id: str, action: str) -> bool:
+    member = _members.get(member_id)
+    if not member:
+        return False
+    role_enum = member.role_enum
+    if not role_enum:
+        return False
+    return action in PERMISSIONS.get(role_enum, set())
+
+
+# ---------------------------------------------------------------------------
+# Profile locking
+# ---------------------------------------------------------------------------
+def _lock_profile(profile_id: str, member_id: str) -> bool:
+    member = _members.get(member_id)
+    if not member:
+        raise KeyError(f"Member not found: {member_id}")
+    if not _check_permission(member_id, "lock_profile"):
+        raise PermissionError(f"Member {member_id} does not have lock permission")
+    if profile_id in _locked_profiles and _locked_profiles[profile_id] != member_id:
+        return False
+    _locked_profiles[profile_id] = member_id
+    _save_json(LOCKED_PROFILES_FILE, _locked_profiles)
+    logger.info(f"Profile {profile_id} locked by {member_id}")
+    return True
+
+
+def _unlock_profile(profile_id: str, member_id: str) -> bool:
+    locked_by = _locked_profiles.get(profile_id)
+    if locked_by is None:
+        return True
+    if locked_by == member_id or _check_permission(member_id, "manage_team"):
+        del _locked_profiles[profile_id]
+        _save_json(LOCKED_PROFILES_FILE, _locked_profiles)
+        logger.info(f"Profile {profile_id} unlocked by {member_id}")
+        return True
+    return False
+
+
+def _get_locked_profiles() -> Dict[str, str]:
+    return dict(_locked_profiles)
 
 
 # ---------------------------------------------------------------------------
@@ -271,29 +229,27 @@ router = APIRouter(prefix="/api/team", tags=["team"])
 
 
 @router.post("/members")
-def add_member(payload: TeamMemberModel):
+def add_member(payload: TeamMemberModel, _auth: None = Depends(require_admin_token)):
     """Add a new team member."""
     try:
-        member = team_manager.add_member(
-            name=payload.name, email=payload.email, role=payload.role
-        )
-        return member.to_dict()
+        member = _add_member(name=payload.name, email=payload.email, role=payload.role)
+        return member.model_dump()
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.get("/members")
-def list_members():
+def list_members(_auth: None = Depends(require_admin_token)):
     """List all team members."""
-    return [m.to_dict() for m in team_manager.list_members()]
+    return [m.model_dump() for m in _list_members()]
 
 
 @router.put("/members/{member_id}/role")
-def update_member_role(member_id: str, payload: UpdateRoleModel):
+def update_member_role(member_id: str, payload: UpdateRoleModel, _auth: None = Depends(require_admin_token)):
     """Change a member's role."""
     try:
-        member = team_manager.update_role(member_id, payload.role)
-        return member.to_dict()
+        member = _update_role(member_id, payload.role)
+        return member.model_dump()
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except KeyError as exc:
@@ -301,18 +257,18 @@ def update_member_role(member_id: str, payload: UpdateRoleModel):
 
 
 @router.delete("/members/{member_id}")
-def remove_member(member_id: str):
+def remove_member(member_id: str, _auth: None = Depends(require_admin_token)):
     """Remove a team member."""
-    removed = team_manager.remove_member(member_id)
+    removed = _remove_member(member_id)
     if not removed:
         raise HTTPException(status_code=404, detail="Member not found")
     return {"status": "removed", "id": member_id}
 
 
 @router.get("/members/{member_id}/permissions")
-def get_permissions(member_id: str):
+def get_permissions(member_id: str, _auth: None = Depends(require_admin_token)):
     """Return the set of allowed actions for a member."""
-    member = team_manager.get_member(member_id)
+    member = _get_member(member_id)
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
     role_enum = member.role_enum
@@ -321,10 +277,10 @@ def get_permissions(member_id: str):
 
 
 @router.post("/profiles/{profile_id}/lock")
-def lock_profile(profile_id: str, member_id: str = ""):
+def lock_profile(profile_id: str, member_id: str = "", _auth: None = Depends(require_admin_token)):
     """Lock a profile to a specific member."""
     try:
-        success = team_manager.lock_profile(profile_id, member_id)
+        success = _lock_profile(profile_id, member_id)
         if not success:
             raise HTTPException(status_code=409, detail="Profile already locked by another member")
         return {"status": "locked", "profile_id": profile_id, "locked_by": member_id}
@@ -335,15 +291,15 @@ def lock_profile(profile_id: str, member_id: str = ""):
 
 
 @router.post("/profiles/{profile_id}/unlock")
-def unlock_profile(profile_id: str, member_id: str = ""):
+def unlock_profile(profile_id: str, member_id: str = "", _auth: None = Depends(require_admin_token)):
     """Unlock a profile."""
-    success = team_manager.unlock_profile(profile_id, member_id)
+    success = _unlock_profile(profile_id, member_id)
     if not success:
         raise HTTPException(status_code=403, detail="You do not have permission to unlock this profile")
     return {"status": "unlocked", "profile_id": profile_id}
 
 
 @router.get("/profiles/locked")
-def get_locked_profiles():
+def get_locked_profiles(_auth: None = Depends(require_admin_token)):
     """List all locked profiles."""
-    return team_manager.get_locked_profiles()
+    return _get_locked_profiles()

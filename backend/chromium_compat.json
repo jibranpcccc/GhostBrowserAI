@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "approved_chromium_majors": [149],
+  "minimum_playwright_version": "1.61.0",
+  "required_checks": [
+    "qa_test_suite.py",
+    "tests/run_tests.py",
+    "tests/test_runtime_surface_coherence.py"
+  ]
+}

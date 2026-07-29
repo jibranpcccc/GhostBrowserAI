@@ -15,10 +15,10 @@ chrome.commands.onCommand.addListener(async (command) => {
             const currentConfig = result.config || {};
 
             if (command === "quick-autofill") {
-                chrome.tabs.sendMessage(tab.id, { 
-                    action: "AUTO_FILL", 
-                    persona: currentPersona, 
-                    config: currentConfig 
+                chrome.tabs.sendMessage(tab.id, {
+                    action: "AUTO_FILL",
+                    persona: currentPersona,
+                    config: currentConfig
                 });
             } else if (command === "quick-extract") {
                 chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_FORM" }, (response) => {

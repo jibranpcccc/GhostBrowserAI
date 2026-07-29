@@ -25,16 +25,16 @@ class AIAutoValidator:
 
         # Step 1: Technical checks (fast)
         technical_result = await self._run_technical_checks(profile, fingerprint)
-        
+
         # Step 2: AI Analysis using Moonshot Kimi
         ai_analysis = await self._get_kimi_analysis(profile_id, fingerprint, technical_result)
-        
+
         # Step 3: Final scoring and decision
         final_result = self._calculate_final_score(technical_result, ai_analysis)
-        
+
         # Step 4: Log everything
         self._log_validation(profile_id, final_result)
-        
+
         return final_result
 
     async def _run_technical_checks(self, profile: dict, fingerprint: dict) -> dict:
@@ -46,9 +46,6 @@ class AIAutoValidator:
 
         issues = leak_result.get("issues", []) + coherence_result.get("issues", [])
 
-        # --- Font fingerprint check: detect if fonts match OS ---
-        font_issues = self._check_font_consistency(fingerprint)
-        issues.extend(font_issues)
 
         # --- Permissions API check: Notification.permission ---
         perm_issues = self._check_permissions_consistency(fingerprint)
@@ -56,52 +53,11 @@ class AIAutoValidator:
 
         return {
             "profile_id": profile["id"],
-            "leak_score": 100 if leak_result.get("passed") else 50, # Fake scoring since scan returns passed boolean
+            "leak_score": leak_result.get("score", 0),
             "coherence_score": coherence_result.get("score", 0),
             "issues": issues
         }
 
-    def _check_font_consistency(self, fingerprint: dict) -> list:
-        """
-        Check that the fingerprint's font list is plausible for the claimed OS.
-
-        Windows systems should have Windows-only fonts (Segoe UI, Calibri, etc.)
-        Mac systems should have Mac-only fonts (Helvetica Neue, San Francisco, etc.)
-        Missing these is a red flag for fingerprinting scripts.
-        """
-        issues = []
-        os_name = (fingerprint.get("os") or "").lower()
-        fonts = fingerprint.get("fonts", [])
-        fonts_lower = [f.lower() for f in fonts] if isinstance(fonts, list) else []
-
-        if not fonts_lower:
-            # No font list provided — skip check (not all profiles include this)
-            return issues
-
-        # Expected Windows fonts
-        win_fonts = ["segoe ui", "calibri", "arial", "times new roman", "tahoma", "consolas"]
-        # Expected Mac fonts
-        mac_fonts = ["helvetica neue", "san francisco", "sf pro", "geneva", "monaco", "chicago"]
-
-        if os_name == "windows":
-            missing_win = [f for f in win_fonts if f not in fonts_lower]
-            if missing_win:
-                issues.append(f"Font fingerprint missing expected Windows fonts: {missing_win}")
-            # Mac-only fonts on Windows = anomaly
-            mac_present = [f for f in mac_fonts if f in fonts_lower]
-            if mac_present:
-                issues.append(f"Mac-only fonts detected on Windows fingerprint: {mac_present}")
-
-        elif os_name in ("mac", "macos", "darwin"):
-            missing_mac = [f for f in mac_fonts if f not in fonts_lower]
-            if missing_mac:
-                issues.append(f"Font fingerprint missing expected Mac fonts: {missing_mac}")
-            # Windows-only fonts on Mac = anomaly
-            win_present = [f for f in win_fonts if f in fonts_lower]
-            if win_present:
-                issues.append(f"Windows-only fonts detected on Mac fingerprint: {win_present}")
-
-        return issues
 
     def _check_permissions_consistency(self, fingerprint: dict) -> list:
         """
@@ -116,7 +72,7 @@ class AIAutoValidator:
         perm = fingerprint.get("notification_permission", "").lower()
 
         if not perm:
-            # No permission info — skip check
+            issues.append("Notification permission state is missing or empty")
             return issues
 
         if perm == "granted":
@@ -157,13 +113,16 @@ UA: {compact_fp.get('userAgent','')[:80]}
 Coherence score: {technical_result.get('coherence_score',0)}/100
 Known issues: {technical_result.get('issues',[])}
 
-Evaluate this browser fingerprint for anti-detect QUALITY. A score of 100 means the fingerprint is perfectly coherent and will NOT be detected as a bot. A score of 0 means it will definitely be flagged as a bot. Higher score = better quality = safer to use.
+Evaluate this browser fingerprint only for internal consistency and declared privacy-policy compliance. A high score means the supplied fields are coherent; it does not predict whether any third party will classify the browser or user.
 
 Output ONLY this JSON object, nothing else:
 {{"ai_score": 85, "detected_issues": [], "recommendations": ["Add proxy"], "overall_verdict": "Good", "reasoning": "Profile coherent."}}"""
 
+        technical_fallback_score = int(
+            (technical_result.get("leak_score", 0) + technical_result.get("coherence_score", 0)) / 2
+        )
         fallback_result = {
-            "ai_score": 60,
+            "ai_score": technical_fallback_score,
             "detected_issues": [],
             "recommendations": [],
             "overall_verdict": "Acceptable",
@@ -173,7 +132,10 @@ Output ONLY this JSON object, nothing else:
 
         # PRIMARY: Use Hermes Racing Proxy (434 accounts, fast)
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            # This is a secondary opinion after deterministic checks have
+            # already passed. Never let an unavailable local racing service
+            # hold profile creation for half a minute.
+            async with httpx.AsyncClient(timeout=2.0) as client:
                 response = await client.post(
                     "http://127.0.0.1:8005/v1/chat/completions",
                     headers={"Content-Type": "application/json"},
@@ -227,19 +189,6 @@ Output ONLY this JSON object, nothing else:
                 ai_result.setdefault("recommendations", [])
                 ai_result.setdefault("reasoning", "")
 
-                # SMART SCORE BOOST: If AI gave a low score (<50) but reasoning text
-                # contains positive qualifiers ("Good", "coherent", "safe", "clean",
-                # "consistent", "valid"), boost the score to 70 — the AI's reasoning
-                # contradicts its numeric output, likely a model calibration issue.
-                current_score = ai_result.get("ai_score", 75)
-                reasoning_lower = str(ai_result.get("reasoning", "")).lower()
-                positive_keywords = ["good", "coherent", "safe", "clean", "consistent", "valid", "plausible"]
-                if current_score < 50 and any(kw in reasoning_lower for kw in positive_keywords):
-                    print(f"[AutoValidator] 🔧 Boosting AI score from {current_score} → 70 "
-                          f"(reasoning says positive but score was <50)")
-                    ai_result["ai_score"] = 70
-                    ai_result["score_boosted"] = True
-
                 print(f"[AutoValidator] ✅ AI validation via Racing Proxy — Score: {ai_result.get('ai_score')}, Verdict: {ai_result.get('overall_verdict')}")
                 return ai_result
             else:
@@ -253,7 +202,10 @@ Output ONLY this JSON object, nothing else:
 
         # FALLBACK: Technical checks already passed — accept with warning
         print("[AutoValidator] Using fallback scoring (technical checks still ran).")
-        fallback_result["detected_issues"] = ["AI analysis failed - using fallback"]
+        # The secondary AI opinion is optional. Deterministic technical checks
+        # remain authoritative when the local racing service is unavailable.
+        fallback_result["detected_issues"] = []
+        fallback_result["recommendations"] = ["Secondary AI analysis was unavailable"]
         return fallback_result
 
     def _calculate_final_score(self, technical: dict, ai: dict) -> dict:
@@ -267,7 +219,7 @@ Output ONLY this JSON object, nothing else:
         avg_technical = (technical["leak_score"] + technical["coherence_score"]) / 2
 
         final_score = int(
-            (avg_technical * tech_weight) + 
+            (avg_technical * tech_weight) +
             (ai["ai_score"] * ai_weight)
         )
 

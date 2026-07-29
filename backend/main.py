@@ -1,14 +1,19 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, List, Dict, Any
+from urllib.parse import urlparse
 import uvicorn
+import base64
+import json
 import os
 import sys
 import asyncio
 import logging
+import re
+import hmac
 
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
@@ -16,18 +21,21 @@ if sys.platform == 'win32':
 from backend.profile_manager import profile_manager
 from backend.browser_manager import launch_profile, close_profile, is_profile_running, active_browsers, get_profile_cookies, set_profile_cookies
 from backend.macro_manager import macro_manager
-from backend.macro_runner import MacroRunner
+from backend.macro_runner import run_macro_bulk
 from backend.config import get_data_dir
 from backend.scheduler_manager import SchedulerManager
 # H4+H5 FIX: Move system_monitor import to top of file (was at line 569, after its first use in lifespan)
 from backend.system_monitor import system_monitor
 
-# --- Agent 1: New API Routers ---
-from backend.api_automation import router as api_automation_router
+# --- API Routers ---
 from backend.synchronizer import router as synchronizer_router
-from backend.rpa_recorder import router as rpa_recorder_router
 from backend.profile_folders import router as profile_folders_router
 from backend.bulk_operations import router as bulk_operations_router
+from backend.cloud_sync import cloud_sync_manager, CloudSyncClient, _validate_sync_id, _get_remote_sync_client
+from backend.auth import require_admin_token
+from backend.update_manager import router as update_manager_router
+from backend.sbom import router as sbom_router
+from backend.detection_score import router as detection_score_router
 
 scheduler_manager = SchedulerManager(
     browser_manager=None,
@@ -40,7 +48,6 @@ async def lifespan(app: FastAPI):
     # Startup
     import backend.browser_manager as bm
     scheduler_manager.browser_manager = bm
-    scheduler_manager.runner.browser_manager = bm
     await system_monitor.start()
     scheduler_manager.start()
     yield
@@ -69,13 +76,61 @@ _ghost_logger = logging.getLogger("ghostbrowser")
 @app.middleware("http")
 async def log_500_errors(request, call_next):
     response = await call_next(request)
-    if response.status_code >= 500:
+    # Only log actual unhandled 5xx, not expected 503 auth-configuration failures
+    if response.status_code >= 500 and response.status_code != 503:
         _ghost_logger.error(
             "500-error | path=%s | method=%s",
             request.url.path,
             request.method,
         )
     return response
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+    return response
+
+# --- CSRF double-submit protection ---
+_CSRF_UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+_CSRF_PUBLIC_ALLOWLIST = frozenset({"/api/system/health", "/api/system/csrf-token"})
+
+
+def _validate_csrf(request: Request) -> bool:
+    cookie_token = request.cookies.get("XSRF-TOKEN", "")
+    header_token = request.headers.get("X-XSRF-Token", "")
+    if not cookie_token or not header_token:
+        return False
+    return hmac.compare_digest(cookie_token, header_token)
+
+
+@app.middleware("http")
+async def csrf_protection_middleware(request: Request, call_next):
+    if (
+        request.method in _CSRF_UNSAFE_METHODS
+        and request.url.path.startswith("/api/")
+        and request.url.path not in _CSRF_PUBLIC_ALLOWLIST
+    ):
+        if not _validate_csrf(request):
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "CSRF token missing or invalid"},
+            )
+    response = await call_next(request)
+    return response
+
+from fastapi.responses import JSONResponse
+import traceback
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    """Catch all unhandled exceptions and return a safe generic 500 response."""
+    _ghost_logger.error("Unhandled exception: %s", traceback.format_exc())
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
@@ -101,6 +156,8 @@ class AdvancedSettingsModel(BaseModel):
     canvas_noise: bool = True
     webgl_noise: bool = True
     audio_noise: bool = True
+    privacy_mode: str = "standard"
+    block_service_workers: bool = False
     headless: bool = False
 
 class CreateProfileModel(BaseModel):
@@ -111,30 +168,68 @@ class CreateProfileModel(BaseModel):
     locale: Optional[str] = None
     advanced: Optional[AdvancedSettingsModel] = None
 
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, v):
+        v = v.strip() if isinstance(v, str) else ""
+        if not v:
+            raise ValueError("name cannot be empty")
+        if len(v) > 120:
+            raise ValueError("name must be 120 characters or less")
+        return v
+
+class ProfileProxyUpdateRequest(BaseModel):
+    proxy_string: Optional[str] = None
+    clear_proxy: bool = False
+
+class EditProfileModel(BaseModel):
+    name: str
+    proxy: Optional[ProxyModel] = None
+    proxy_string: Optional[str] = None
+    timezone: Optional[str] = None
+    locale: Optional[str] = None
+    advanced: Optional[AdvancedSettingsModel] = None
+
 def parse_proxy_string(proxy_str: str) -> Optional[dict]:
-    if not proxy_str: return None
-    parts = proxy_str.split(':')
-    if len(parts) == 2:
-        return {"server": f"http://{parts[0]}:{parts[1]}"}
-    elif len(parts) == 4:
-        return {
-            "server": f"http://{parts[0]}:{parts[1]}",
-            "username": parts[2],
-            "password": parts[3]
-        }
-    return None
+    """Parse a proxy string for internal use (credentials are preserved)."""
+    if not proxy_str or not proxy_str.strip():
+        return None
+    parts = proxy_str.strip().split(':')
+    if len(parts) not in (2, 4):
+        return None
+    server = f"http://{parts[0]}:{parts[1]}"
+    parsed = urlparse(server)
+    if parsed.scheme not in {"http", "https", "socks4", "socks5"} or not parsed.hostname:
+        return None
+    result: dict = {"server": server}
+    if len(parts) == 4:
+        username = parts[2].strip()
+        password = parts[3].strip()
+        if not username:
+            return None
+        result["username"] = username
+        result["password"] = password
+    return result
+
+
+def parse_proxy_string_safe(proxy_str: str) -> Optional[dict]:
+    """Parse a proxy string for API responses (credentials are redacted)."""
+    parsed = parse_proxy_string(proxy_str)
+    if not parsed:
+        return None
+    return {"server": parsed["server"], "authenticated": bool(parsed.get("username"))}
 
 from backend.profile_creator import profile_creator
 
 @app.post("/api/profiles")
-async def create_profile(data: CreateProfileModel):
+async def create_profile(data: CreateProfileModel, _auth: None = Depends(require_admin_token)):
     """
     Creates a Zero-Leak profile using the full Kimi AI → Coherence → LeakScan pipeline.
     NO profile is ever created without Kimi AI successfully generating the fingerprint.
     """
     async with _profile_create_sem:
         proxy_dict = data.proxy.model_dump() if data.proxy else parse_proxy_string(data.proxy_string)
-    
+
     # Run the full Zero-Leak Orchestrator
     advanced_dict = data.advanced.model_dump() if data.advanced else None
     result = await profile_creator.create_zero_leak_profile(
@@ -142,15 +237,15 @@ async def create_profile(data: CreateProfileModel):
         proxy=proxy_dict,
         advanced_ui=advanced_dict
     )
-    
+
     if result["status"] == "error":
         code = result.get("code", "CREATION_FAILED")
         raise HTTPException(status_code=503 if code == "KIMI_UNAVAILABLE" else 400, detail=result["message"])
-    
+
     return result["profile"]
 
 @app.post("/api/profiles/generate")
-async def generate_profile(data: CreateProfileModel):
+async def generate_profile(data: CreateProfileModel, _auth: None = Depends(require_admin_token)):
     """Alias for POST /api/profiles — triggers full Kimi AI zero-leak creation."""
     return await create_profile(data)
 
@@ -160,14 +255,19 @@ class BulkCreateProfileModel(BaseModel):
     proxy: Optional[dict] = None
     advanced: Optional[dict] = None
 
+    @field_validator("count")
+    @classmethod
+    def cap_count(cls, v):
+        return max(1, min(v, 50))
+
 @app.post("/api/profiles/generate/bulk")
-async def generate_bulk_profiles(data: BulkCreateProfileModel):
+async def generate_bulk_profiles(data: BulkCreateProfileModel, _auth: None = Depends(require_admin_token)):
     """Generate multiple profiles concurrently via Kimi AI, with concurrency limits."""
     count = min(data.count, 50) # Cap at 50 to prevent overload
-    
+
     # Limit to 8 concurrent creations to prevent Playwright leak scanner from melting the CPU
     sem = asyncio.Semaphore(8)
-    
+
     async def create_single(i):
         name = f"{data.base_name}_{i+1}"
         from backend.profile_creator import ProfileCreationOrchestrator
@@ -177,12 +277,12 @@ async def generate_bulk_profiles(data: BulkCreateProfileModel):
                 return await orchestrator.create_zero_leak_profile(name, data.proxy, data.advanced)
         except Exception as e:
             return {"status": "error", "message": str(e), "name": name}
-            
+
     tasks = [create_single(i) for i in range(count)]
     results = await asyncio.gather(*tasks)
-    
+
     success_count = sum(1 for r in results if r.get("status") == "success")
-    
+
     return {
         "status": "success",
         "message": f"Successfully created {success_count} out of {count} profiles",
@@ -190,45 +290,45 @@ async def generate_bulk_profiles(data: BulkCreateProfileModel):
     }
 
 @app.get("/api/profiles")
-def list_profiles():
+def list_profiles(_auth: None = Depends(require_admin_token)):
     profiles = profile_manager.list_profiles()
     for p in profiles:
         p["status"] = "Running" if is_profile_running(p["id"]) else "Stopped"
     return profiles
 
 @app.post("/api/profiles/{profile_id}/clone")
-async def clone_profile(profile_id: str):
+async def clone_profile(profile_id: str, _auth: None = Depends(require_admin_token)):
     """Smart Duplicate a profile: Re-runs Kimi AI to generate a fresh, unique fingerprint but copies metadata, proxy, and tags."""
     original = profile_manager.get_profile(profile_id)
     if not original:
         raise HTTPException(status_code=404, detail="Original profile not found")
-        
+
     name = original.get("name", "Unknown") + " (Clone)"
     proxy = original.get("proxy")
     advanced = original.get("advanced", {})
-    
+
     from backend.profile_creator import ProfileCreationOrchestrator
     orchestrator = ProfileCreationOrchestrator()
     result = await orchestrator.create_zero_leak_profile(name, proxy, advanced)
-    
+
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
-        
+
     new_profile = result["profile"]
-    
+
     # Copy tags and notes
     updates = {}
     if original.get("tags"): updates["tags"] = original.get("tags")
     if original.get("notes"): updates["notes"] = original.get("notes")
     if original.get("proxy_pin"): updates["proxy_pin"] = original.get("proxy_pin")
-    
+
     if updates:
         profile_manager.update_profile(new_profile["id"], updates)
-        
+
     return {"status": "success", "profile": profile_manager.get_profile(new_profile["id"])}
 
 @app.delete("/api/profiles/{profile_id}")
-async def delete_profile(profile_id: str):
+async def delete_profile(profile_id: str, _auth: None = Depends(require_admin_token)):
     await close_profile(profile_id)
     success = profile_manager.delete_profile(profile_id)
     if not success:
@@ -239,10 +339,10 @@ class RenameRequest(BaseModel):
     name: str
 
 @app.patch("/api/profiles/{profile_id}/rename")
-async def rename_profile(profile_id: str, req: RenameRequest):
+async def rename_profile(profile_id: str, req: RenameRequest, _auth: None = Depends(require_admin_token)):
     if not req.name or not req.name.strip():
         raise HTTPException(status_code=400, detail="Invalid name")
-    
+
     success = profile_manager.rename_profile(profile_id, req.name.strip())
     if not success:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -254,7 +354,7 @@ class UpdateMetadataRequest(BaseModel):
     proxy_pin: Optional[str] = None
 
 @app.patch("/api/profiles/{profile_id}/metadata")
-async def update_metadata(profile_id: str, req: UpdateMetadataRequest):
+async def update_metadata(profile_id: str, req: UpdateMetadataRequest, _auth: None = Depends(require_admin_token)):
     updates = {}
     if req.tags is not None: updates["tags"] = req.tags
     if req.notes is not None: updates["notes"] = req.notes
@@ -265,15 +365,15 @@ async def update_metadata(profile_id: str, req: UpdateMetadataRequest):
     return {"status": "success"}
 
 @app.put("/api/profiles/{profile_id}")
-async def edit_profile(profile_id: str, data: CreateProfileModel):
+async def edit_profile(profile_id: str, data: EditProfileModel, _auth: None = Depends(require_admin_token)):
     """Full update for a profile's settings, proxy, and fingerprint."""
     profile = profile_manager.get_profile(profile_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
-        
+
     proxy_dict = data.proxy.model_dump() if data.proxy else parse_proxy_string(data.proxy_string)
-    advanced_dict = data.advanced.model_dump() if data.advanced else {}
-    
+    advanced_dict = data.advanced.model_dump() if data.advanced else None
+
     updates = {
         "name": data.name,
         "proxy": proxy_dict,
@@ -281,41 +381,81 @@ async def edit_profile(profile_id: str, data: CreateProfileModel):
         "locale": data.locale,
         "advanced": advanced_dict
     }
-    
+
     # Remove None values so we don't accidentally wipe out stuff
     updates = {k: v for k, v in updates.items() if v is not None}
-    
+
     success = profile_manager.update_profile(profile_id, updates)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to save profile edits")
-        
+
     return {"status": "success", "message": "Profile updated successfully"}
 
+async def update_profile_proxy(profile_id: str, req: ProfileProxyUpdateRequest):
+    """Test and update a profile's proxy without leaking credentials."""
+    profile = profile_manager.get_profile(profile_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    if req.clear_proxy:
+        profile_manager.update_profile(profile_id, {"proxy": None})
+        return {"status": "success", "proxy": None}
+    if not req.proxy_string:
+        raise HTTPException(status_code=422, detail="proxy_string is required")
+    proxy_dict = parse_proxy_string(req.proxy_string)
+    if not proxy_dict:
+        raise HTTPException(status_code=422, detail="Invalid proxy string")
+    is_healthy = await proxy_manager.check_proxy_health(proxy_dict, record_failure=False)
+    if not is_healthy:
+        raise HTTPException(status_code=502, detail="Proxy health check failed")
+    profile_manager.update_profile(profile_id, {"proxy": proxy_dict})
+    return {"status": "success", "proxy": parse_proxy_string_safe(req.proxy_string)}
+
+
+def _redact_sensitive_api_data(data):
+    """Recursively remove proxy credentials from API responses."""
+    if isinstance(data, dict):
+        redacted = {}
+        had_credential = False
+        for key, value in data.items():
+            if key == "proxy_pin":
+                continue
+            if key in ("username", "password"):
+                had_credential = True
+                continue
+            redacted[key] = _redact_sensitive_api_data(value)
+        if had_credential and "server" in data:
+            redacted["authenticated"] = True
+        return redacted
+    if isinstance(data, list):
+        return [_redact_sensitive_api_data(item) for item in data]
+    return data
+
+
 @app.get("/api/profiles/{profile_id}/fingerprint")
-async def get_fingerprint(profile_id: str):
+async def get_fingerprint(profile_id: str, _auth: None = Depends(require_admin_token)):
     profile = profile_manager.get_profile(profile_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
     return profile.get("advanced", {})
 
 @app.get("/api/profiles/{profile_id}/scan")
-async def scan_profile(profile_id: str):
+async def scan_profile(profile_id: str, _auth: None = Depends(require_admin_token)):
     profile = profile_manager.get_profile(profile_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
-        
+
     fingerprint = profile.get("advanced", {})
     from backend.ai_auto_validator import AIAutoValidator
     validator = AIAutoValidator()
     result = await validator.validate_profile(profile, fingerprint)
-    
+
     return {"status": "success", "scan": result}
 
 class UpdateFingerprintRequest(BaseModel):
     advanced: dict
 
 @app.patch("/api/profiles/{profile_id}/fingerprint")
-async def update_fingerprint(profile_id: str, req: UpdateFingerprintRequest):
+async def update_fingerprint(profile_id: str, req: UpdateFingerprintRequest, _auth: None = Depends(require_admin_token)):
     success = profile_manager.update_profile(profile_id, {"advanced": req.advanced})
     if not success:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -327,32 +467,46 @@ class ScheduleRequest(BaseModel):
     cron: str
 
 @app.get("/api/macros/schedule")
-def list_schedules():
+def list_schedules(_auth: None = Depends(require_admin_token)):
     return scheduler_manager.list_schedules()
 
 @app.post("/api/macros/schedule")
-def create_schedule(req: ScheduleRequest):
+def create_schedule(req: ScheduleRequest, _auth: None = Depends(require_admin_token)):
     return scheduler_manager.add_schedule(req.macro_id, req.profile_ids, req.cron)
 
 @app.delete("/api/macros/schedule/{job_id}")
-def delete_schedule(job_id: str):
+def delete_schedule(job_id: str, _auth: None = Depends(require_admin_token)):
     success = scheduler_manager.delete_schedule(job_id)
     if not success:
         raise HTTPException(status_code=404, detail="Schedule not found")
     return {"status": "success"}
 
 @app.get("/api/profiles/{profile_id}/cookies")
-async def get_cookies_api(profile_id: str):
+async def get_cookies_api(profile_id: str, _auth: None = Depends(require_admin_token)):
     res = await get_profile_cookies(profile_id)
     if res.get("status") == "error":
         raise HTTPException(status_code=400, detail=res.get("message"))
     return res
 
+MAX_COOKIE_COUNT = 5000
+MAX_COOKIE_JSON_BYTES = 2 * 1024 * 1024
+
+
 class CookieImportRequest(BaseModel):
     cookies: List[Dict[str, Any]]
 
+    @field_validator("cookies")
+    @classmethod
+    def _validate_cookie_payload(cls, v):
+        if len(v) > MAX_COOKIE_COUNT:
+            raise ValueError(f"Too many cookies (max {MAX_COOKIE_COUNT})")
+        payload_size = len(json.dumps(v).encode("utf-8"))
+        if payload_size > MAX_COOKIE_JSON_BYTES:
+            raise ValueError(f"Cookie payload too large (max {MAX_COOKIE_JSON_BYTES // 1024 // 1024}MB)")
+        return v
+
 @app.post("/api/profiles/{profile_id}/cookies")
-async def set_cookies_api(profile_id: str, req: CookieImportRequest):
+async def set_cookies_api(profile_id: str, req: CookieImportRequest, _auth: None = Depends(require_admin_token)):
     res = await set_profile_cookies(profile_id, req.cookies)
     if res.get("status") == "error":
         raise HTTPException(status_code=400, detail=res.get("message"))
@@ -365,21 +519,21 @@ class MacroCreateRequest(BaseModel):
     steps: list
 
 @app.get("/api/macros")
-def list_macros():
+def list_macros(_auth: None = Depends(require_admin_token)):
     return macro_manager.list_macros()
 
 @app.post("/api/macros")
-def create_macro(req: MacroCreateRequest):
+def create_macro(req: MacroCreateRequest, _auth: None = Depends(require_admin_token)):
     if not req.name.strip() or not req.steps:
         raise HTTPException(status_code=400, detail="Name and steps are required")
     return macro_manager.create_macro(req.name.strip(), req.description, req.steps)
 
 @app.delete("/api/macros/{macro_id}")
-def delete_macro(macro_id: str):
+def delete_macro(macro_id: str, _auth: None = Depends(require_admin_token)):
     return {"status": "success"} if macro_manager.delete_macro(macro_id) else {"status": "error"}
 
 @app.get("/api/proxies/titan")
-def get_titan_proxies():
+def get_titan_proxies(_auth: None = Depends(require_admin_token)):
     """Fetches the top proxies from the Titan proxy database"""
     import backend.db as db
     proxies = db.get_best_proxies(limit=100)
@@ -390,26 +544,33 @@ class BulkMacroRunRequest(BaseModel):
     macro_id: str
 
 @app.post("/api/macros/run/bulk")
-async def run_bulk_macro(req: BulkMacroRunRequest):
+async def run_bulk_macro(req: BulkMacroRunRequest, _auth: None = Depends(require_admin_token)):
     macro = macro_manager.get_macro(req.macro_id)
     if not macro:
         raise HTTPException(status_code=404, detail="Macro not found")
-        
+
     # Launch in background
-    asyncio.create_task(MacroRunner.run_macro_bulk(req.profile_ids, macro))
+    asyncio.create_task(run_macro_bulk(req.profile_ids, macro))
     return {"status": "success", "message": f"Macro {macro['name']} started on {len(req.profile_ids)} profiles"}
 
 # --- End Macros API ---
 
 @app.post("/api/profiles/{profile_id}/launch")
-async def launch_profile_api(profile_id: str):
-    res = await launch_profile(profile_id)
-    if res["status"] == "error":
-        raise HTTPException(status_code=400, detail=res["message"])
+async def launch_profile_api(profile_id: str, _auth: None = Depends(require_admin_token)):
+    try:
+        res = await launch_profile(profile_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _ghost_logger.exception("launch_profile_api unhandled error for profile %s", profile_id)
+        raise HTTPException(status_code=500, detail="Internal launch error") from exc
+
+    if res.get("status") == "error":
+        raise HTTPException(status_code=400, detail=res.get("message"))
     return res
 
 @app.post("/api/profiles/{profile_id}/close")
-async def close_profile_api(profile_id: str):
+async def close_profile_api(profile_id: str, _auth: None = Depends(require_admin_token)):
     res = await close_profile(profile_id)
     if res["status"] == "error":
         raise HTTPException(status_code=400, detail=res["message"])
@@ -418,8 +579,18 @@ async def close_profile_api(profile_id: str):
 class CookieDataModel(BaseModel):
     cookies: list
 
+    @field_validator("cookies")
+    @classmethod
+    def _validate_cookie_payload(cls, v):
+        if len(v) > MAX_COOKIE_COUNT:
+            raise ValueError(f"Too many cookies (max {MAX_COOKIE_COUNT})")
+        payload_size = len(json.dumps(v).encode("utf-8"))
+        if payload_size > MAX_COOKIE_JSON_BYTES:
+            raise ValueError(f"Cookie payload too large (max {MAX_COOKIE_JSON_BYTES // 1024 // 1024}MB)")
+        return v
+
 @app.post("/api/profiles/{profile_id}/cookies/import")
-async def import_cookies(profile_id: str, data: CookieDataModel):
+async def import_cookies(profile_id: str, data: CookieDataModel, _auth: None = Depends(require_admin_token)):
     if profile_id not in active_browsers:
         raise HTTPException(status_code=400, detail="Profile must be running to import cookies.")
     browser_data = active_browsers[profile_id]
@@ -431,7 +602,7 @@ async def import_cookies(profile_id: str, data: CookieDataModel):
         raise HTTPException(status_code=400, detail=f"Failed to import cookies: {e}")
 
 @app.get("/api/profiles/{profile_id}/cookies/export")
-async def export_cookies(profile_id: str):
+async def export_cookies(profile_id: str, _auth: None = Depends(require_admin_token)):
     if profile_id not in active_browsers:
         raise HTTPException(status_code=400, detail="Profile must be running to export cookies.")
     browser_data = active_browsers[profile_id]
@@ -448,18 +619,18 @@ class RotatorConfigModel(BaseModel):
     max_concurrent: int = 15
 
 @app.post("/api/rotator/start")
-async def start_rotator(config: RotatorConfigModel):
+async def start_rotator(config: RotatorConfigModel, _auth: None = Depends(require_admin_token)):
     rotator.max_concurrent = config.max_concurrent
     await rotator.start()
     return {"status": "success", "message": f"Rotator started with max {config.max_concurrent} profiles."}
 
 @app.post("/api/rotator/stop")
-def stop_rotator():
+def stop_rotator(_auth: None = Depends(require_admin_token)):
     rotator.stop()
     return {"status": "success", "message": "Rotator stopped."}
 
 @app.get("/api/rotator/status")
-def get_rotator_status():
+def get_rotator_status(_auth: None = Depends(require_admin_token)):
     import time
     active_times = {pid: round(time.time() - st, 1) for pid, st in rotator.profile_session_times.items()}
     return {
@@ -472,11 +643,11 @@ def get_rotator_status():
 from backend.cloudflare_manager import cloudflare_manager
 
 @app.get("/api/cloudflare/status")
-def get_cloudflare_status():
+def get_cloudflare_status(_auth: None = Depends(require_admin_token)):
     """Returns health status of all Cloudflare AI accounts in the pool."""
     # Reload from file each time so new accounts appear immediately
     cloudflare_manager.load_accounts()
-    
+
     return {
         "total_accounts": cloudflare_manager.total_accounts,
         "healthy_count": cloudflare_manager.healthy_count,
@@ -485,31 +656,41 @@ def get_cloudflare_status():
         "accounts": cloudflare_manager.get_all_status()
     }
 
+def _redact_cloudflare_error(message: Any) -> str:
+    """Remove credential-like values before returning Cloudflare error details."""
+    text = str(message)
+    # Drop any Authorization Bearer token that may appear in raw responses/exceptions.
+    text = re.sub(r"Bearer\s+\S+", "Bearer <redacted>", text, flags=re.IGNORECASE)
+    # Redact Cloudflare account IDs (32-character hex) when embedded in URL paths.
+    text = re.sub(r"/accounts/[0-9a-f]{32}/", "/accounts/<redacted>/", text, flags=re.IGNORECASE)
+    return text
+
+
 @app.post("/api/cloudflare/test")
-async def test_cloudflare_account():
+async def test_cloudflare_account(_auth: None = Depends(require_admin_token)):
     """
     Makes a REAL test call to Cloudflare Workers AI to verify credentials work.
     Returns success/failure with detailed diagnosis.
     """
     import httpx
     cloudflare_manager.load_accounts()
-    
+
     if not cloudflare_manager.accounts:
         return {
             "status": "error",
             "message": "No accounts loaded. Add real accounts to cloudflare_accounts.txt",
             "format": "ACCOUNT_ID:API_TOKEN (one per line)"
         }
-    
+
     account = cloudflare_manager.get_account()
     if not account:
         return {"status": "error", "message": "All accounts on cooldown."}
-    
+
     account_id = account["account_id"]
     token = account["token"]
     model = "@cf/moonshotai/kimi-k2.7-code"
     url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model}"
-    
+
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(
@@ -517,7 +698,7 @@ async def test_cloudflare_account():
                 headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
                 json={"messages": [{"role": "user", "content": "Reply with: OK"}]}
             )
-            
+
         if response.status_code == 200:
             data = response.json()
             if data.get("success"):
@@ -530,7 +711,7 @@ async def test_cloudflare_account():
             else:
                 return {
                     "status": "error",
-                    "message": f"API returned success=false: {data.get('errors')}",
+                    "message": f"API returned success=false: {_redact_cloudflare_error(data.get('errors'))}",
                     "http_code": 200
                 }
         elif response.status_code == 401:
@@ -557,25 +738,25 @@ async def test_cloudflare_account():
         else:
             return {
                 "status": "error",
-                "message": f"HTTP {response.status_code}: {response.text[:200]}",
+                "message": f"HTTP {response.status_code}: {_redact_cloudflare_error(response.text[:200])}",
                 "http_code": response.status_code
             }
     except Exception as e:
-        return {"status": "error", "message": f"Connection failed: {str(e)}"}
+        return {"status": "error", "message": f"Connection failed: {_redact_cloudflare_error(e)}"}
 from backend.proxy_manager import proxy_manager
 
 class AddProxiesModel(BaseModel):
     proxies: list[ProxyModel]
 
 @app.post("/api/proxies")
-def add_proxies(data: AddProxiesModel):
+def add_proxies(data: AddProxiesModel, _auth: None = Depends(require_admin_token)):
     # Convert Pydantic models to dicts
     proxy_dicts = [p.model_dump() for p in data.proxies]
     added = proxy_manager.add_proxies(proxy_dicts)
     return {"status": "success", "added": added}
 
 @app.get("/api/proxies")
-def get_proxies():
+def get_proxies(_auth: None = Depends(require_admin_token)):
     # Merge manager proxies with the free pool for the UI
     try:
         import json
@@ -588,20 +769,20 @@ def get_proxies():
 
 class ScrapeConfigModel(BaseModel):
     target_count: int = 20
-    
+
 @app.post("/api/proxies/scrape")
-async def scrape_free_proxies(config: ScrapeConfigModel):
+async def scrape_free_proxies(config: ScrapeConfigModel, _auth: None = Depends(require_admin_token)):
     from backend.proxy_scraper import proxy_scraper
     # Run it asynchronously so we don't block the server fully, but we wait for it to return
     added = await proxy_scraper.run_scraper(target_count=config.target_count)
-    
+
     # Reload proxy manager so it picks up the new proxies
     proxy_manager._load_proxies()
     return {"status": "success", "message": f"Scraped and validated {added} free proxies"}
 
 # H2 FIX: Add missing POST /api/proxies/test endpoint that frontend app.js calls
 @app.post("/api/proxies/test")
-async def test_all_proxies():
+async def test_all_proxies(_auth: None = Depends(require_admin_token)):
     """Run health checks on all active proxies and return results."""
     import asyncio
     proxies = proxy_manager._get_active_proxies()
@@ -643,9 +824,9 @@ def get_system_health():
 from backend.config import get_data_dir, get_bundled_dir
 
 @app.get("/api/metrics")
-def get_metrics():
+def get_metrics(_auth: None = Depends(require_admin_token)):
     import json
-    
+
     # Count total quarantined
     quarantine_meta = os.path.join(get_data_dir("quarantined_profiles"), "quarantine_meta.json")
     quarantine_count = 0
@@ -655,7 +836,7 @@ def get_metrics():
                 quarantine_count = len(json.load(f))
         except Exception:
             pass
-            
+
     # Count total anomalies logged
     log_file = os.path.join(get_data_dir("logs"), "app.log")
     anomaly_count = 0
@@ -688,40 +869,88 @@ class CookieRobotStartModel(BaseModel):
     max_sites: int = 20
 
 @app.post("/api/cookie-robot/start")
-async def cookie_robot_start(data: CookieRobotStartModel):
+async def cookie_robot_start(data: CookieRobotStartModel, _auth: None = Depends(require_admin_token)):
     """Start cookie warming for one or more profiles."""
     result = await cookie_robot.start_warming(data.profile_ids, data.min_sites, data.max_sites)
     return result
 
 @app.get("/api/cookie-robot/status/{profile_id}")
-def cookie_robot_status(profile_id: str):
+def cookie_robot_status(profile_id: str, _auth: None = Depends(require_admin_token)):
     """Get cookie warming status for a specific profile."""
     return cookie_robot.get_status(profile_id)
 
 @app.get("/api/cookie-robot/status")
-def cookie_robot_all_status():
+def cookie_robot_all_status(_auth: None = Depends(require_admin_token)):
     """Get cookie warming status for all profiles."""
     return cookie_robot.get_all_status()
 
 @app.post("/api/cookie-robot/stop/{profile_id}")
-async def cookie_robot_stop(profile_id: str):
+async def cookie_robot_stop(profile_id: str, _auth: None = Depends(require_admin_token)):
     """Stop a running cookie warming task for a profile."""
     return await cookie_robot.stop_warming(profile_id)
 
-# --- Register new API routers (Agent 1) ---
-app.include_router(api_automation_router)
-app.include_router(synchronizer_router)
-app.include_router(rpa_recorder_router)
-app.include_router(profile_folders_router)
-app.include_router(bulk_operations_router)
+@app.get("/api/system/csrf-token")
+async def csrf_token():
+    from fastapi.responses import JSONResponse
+    import secrets
+    token = secrets.token_hex(32)
+    response = JSONResponse({"token": token})
+    response.set_cookie(key="XSRF-TOKEN", value=token, samesite="strict", httponly=False)
+    return response
 
-# --- Register Agent 4 routers (team, profile transfer, api keys) ---
+@app.get("/api/system/network/tcpip")
+async def get_tcpip_manager(_auth: None = Depends(require_admin_token)):
+    from backend.tcpip_manager import get_manager
+    mgr = get_manager()
+    if mgr is None:
+        return {"enabled": False}
+    return {
+        "enabled": mgr.enable,
+        "dns_host": mgr.dns_host,
+        "dns_port": mgr.dns_port,
+        "proxy_relay_port": mgr.proxy_relay_port,
+        "drop_aaaa": mgr.drop_aaaa,
+        "upstream_proxy": mgr.upstream_proxy,
+    }
+
+class LegacyRemoteSyncRequest(BaseModel):
+    passphrase: str
+
+
+@app.post("/api/profiles/{profile_id}/sync/remote")
+async def legacy_remote_sync(profile_id: str, req: LegacyRemoteSyncRequest, _auth: None = Depends(require_admin_token)):
+    """Legacy one-click remote backup endpoint for a single profile."""
+    try:
+        archive_bytes = cloud_sync_manager.export_profile(profile_id, req.passphrase)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    archive_b64 = base64.b64encode(archive_bytes).decode("utf-8")
+    client = _get_remote_sync_client()
+    try:
+        result = await asyncio.to_thread(client.upload_profile, profile_id, archive_b64)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {"remote": result}
+
+
+# --- API Routers ---
 from backend.team_manager import router as team_router
 from backend.profile_transfer import router as profile_transfer_router
 from backend.api_keys import router as api_keys_router
+from backend.cloud_sync import router as cloud_sync_router
+
+app.include_router(synchronizer_router)
+app.include_router(profile_folders_router)
+app.include_router(bulk_operations_router)
 app.include_router(team_router)
 app.include_router(profile_transfer_router)
 app.include_router(api_keys_router)
+app.include_router(cloud_sync_router)
+app.include_router(update_manager_router)
+app.include_router(sbom_router)
+app.include_router(detection_score_router)
 
 # Mount frontend
 frontend_dir = get_bundled_dir("frontend")

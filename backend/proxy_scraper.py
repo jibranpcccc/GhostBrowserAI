@@ -17,7 +17,7 @@ class ProxyScraper:
             "https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt"
         ]
         self.working_proxies = []
-        
+
     async def fetch_source(self, client: httpx.AsyncClient, url: str) -> list:
         try:
             resp = await client.get(url, timeout=10.0)
@@ -56,29 +56,29 @@ class ProxyScraper:
         logger.info("Starting Auto-Scraper for free proxies...")
         self.working_proxies = []
         raw_proxies = set()
-        
+
         async with httpx.AsyncClient(timeout=10.0) as client:
             tasks = [self.fetch_source(client, url) for url in self.sources]
             results = await asyncio.gather(*tasks)
             for res in results:
                 raw_proxies.update(res)
-                
+
         logger.info(f"Scraped {len(raw_proxies)} raw proxy candidates. Starting validation...")
-        
+
         # Test them in batches to not blow up memory
         raw_proxies = list(raw_proxies)
         random.shuffle(raw_proxies) # Try random ones
-        
+
         batch_size = 150
         async with httpx.AsyncClient() as client:
             for i in range(0, len(raw_proxies), batch_size):
                 if len(self.working_proxies) >= target_count:
                     break
-                    
+
                 batch = raw_proxies[i:i+batch_size]
                 check_tasks = [self.check_proxy(p, client) for p in batch]
                 await asyncio.gather(*check_tasks)
-                
+
                 logger.info(f"Tested {i+len(batch)}... Found {len(self.working_proxies)} working so far.")
 
         if self.working_proxies:
@@ -94,13 +94,13 @@ class ProxyScraper:
                 with open(PROXY_STORE_FILE, "r") as f:
                     existing = json.load(f)
             except Exception: pass
-            
+
         # Keep non-free proxies, and append new free ones
         merged = [p for p in existing if p.get("type") != "free_scraped"]
         merged.extend(self.working_proxies)
-        
+
         os.makedirs(os.path.dirname(PROXY_STORE_FILE), exist_ok=True)
         with open(PROXY_STORE_FILE, "w") as f:
             json.dump(merged, f, indent=4)
-            
+
 proxy_scraper = ProxyScraper()

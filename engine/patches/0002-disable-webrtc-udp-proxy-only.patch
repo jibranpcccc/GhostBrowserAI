@@ -1,0 +1,34 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: GhostBrowser Engineering <eng@ghostbrowser.com>
+Date: Sun, 26 Jul 2026 00:00:00 +0000
+Subject: [PATCH] Default WebRTC IP policy to proxy-only UDP
+
+By default Chromium lets WebRTC discover and send UDP to local/host IPs.
+For profiles that are routed through a proxy, that can leak the real
+network path. This change makes the default WebRTC IP handling policy
+'disable_non_proxied_udp' at the source level so media traffic stays
+inside the configured proxy transport unless explicitly overridden.
+
+Runtime command-line flags such as --force-webrtc-ip-handling-policy
+continue to be respected when supplied by the caller.
+---
+ content/browser/media/webrtc/webrtc_ip_handling.cc | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/content/browser/media/webrtc/webrtc_ip_handling.cc b/content/browser/media/webrtc/webrtc_ip_handling.cc
+index 9abc1234..defg5678 100644
+--- a/content/browser/media/webrtc/webrtc_ip_handling.cc
++++ b/content/browser/media/webrtc/webrtc_ip_handling.cc
+@@ -30,7 +30,9 @@ const char kDisableNonProxiedUdp[] = "disable_non_proxied_udp";
+ }  // namespace
+
+ WebRtcIpHandlingPolicy GetWebRtcIpHandlingPolicy(const base::CommandLine& cmd_line) {
+-  const char* default_policy = kDefault;
++  // GhostBrowser: proxy-routed UDP is the safe default. The caller can still
++  // request a different policy with --force-webrtc-ip-handling-policy.
++  const char* default_policy = kDisableNonProxiedUdp;
+   if (cmd_line.HasSwitch(switches::kForceWebRtcIPHandlingPolicy)) {
+     const std::string policy_value =
+         cmd_line.GetSwitchValueASCII(switches::kForceWebRtcIPHandlingPolicy);
+-- 
+2.40.0
