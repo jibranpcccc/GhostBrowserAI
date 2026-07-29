@@ -24,10 +24,11 @@ import hmac
 import json
 import os
 import shutil
+import stat
 import tempfile
 import time
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional
 import ipaddress
 from urllib.error import HTTPError, URLError
@@ -41,10 +42,8 @@ from backend.auth import require_admin_token
 
 try:
     from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import (
-        Ed25519PublicKey,
-        InvalidSignature,
-    )
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    from cryptography.exceptions import InvalidSignature
     HAS_CRYPTOGRAPHY = True
 except Exception:  # pragma: no cover - optional dependency
     HAS_CRYPTOGRAPHY = False
@@ -65,6 +64,11 @@ MAX_UPDATE_BYTES = 200 * 1024 * 1024
 
 #: Maximum number of HTTP redirects to follow when downloading updates.
 MAX_UPDATE_REDIRECTS = 3
+
+# Successful signature verifications are persisted separately from the archive.
+# Applying an update requires an entry bound to both its canonical path and hash,
+# so replacing an already verified file invalidates the authorization.
+VERIFICATION_RECORD_FILE = "verified_updates.json"
 
 
 def _normalize_version(version: str) -> str:
@@ -222,15 +226,48 @@ def _sanitize_filename(value: str) -> str:
     return "".join(c for c in value.replace(":", "_").replace("/", "_") if c.isalnum() or c in "._-").strip() or "unknown"
 
 
+def _validate_zip_member(member: zipfile.ZipInfo) -> PurePosixPath:
+    """Reject archive entries that cannot be safely materialized as regular files."""
+    member_path = PurePosixPath(member.filename)
+    mode = member.external_attr >> 16
+    file_type = stat.S_IFMT(mode)
+    # ZIP uses POSIX paths, but reject Windows separators too because they become
+    # path separators when extracted on Windows.
+    if (
+        not member.filename
+        or "\\" in member.filename
+        or member_path.is_absolute()
+        or any(part in {"", ".", ".."} for part in member_path.parts)
+        or (member_path.parts and ":" in member_path.parts[0])
+        or stat.S_ISLNK(mode)
+        or (file_type not in (0, stat.S_IFREG, stat.S_IFDIR))
+    ):
+        raise ValueError(f"Unsafe or unsupported ZIP member: {member.filename!r}")
+    return member_path
+
+
 def _extract_archive(archive_path: str, dest_dir: Path) -> Path:
     """Extract a .zip archive into ``dest_dir`` and return the extraction root."""
     path = Path(archive_path)
     if not path.exists():
         raise FileNotFoundError(f"Archive not found: {archive_path}")
     dest_dir.mkdir(parents=True, exist_ok=True)
+    destination_root = dest_dir.resolve()
     if zipfile.is_zipfile(path):
         with zipfile.ZipFile(path, "r") as zf:
-            zf.extractall(dest_dir)
+            for member in zf.infolist():
+                member_path = _validate_zip_member(member)
+                target = (destination_root / Path(*member_path.parts)).resolve()
+                try:
+                    target.relative_to(destination_root)
+                except ValueError as exc:
+                    raise ValueError(f"ZIP member escapes staging directory: {member.filename!r}") from exc
+                if member.is_dir():
+                    target.mkdir(parents=True, exist_ok=True)
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(member, "r") as source, open(target, "xb") as output:
+                    shutil.copyfileobj(source, output)
     else:
         raise ValueError("Only .zip archives are supported for auto-apply")
 
@@ -272,6 +309,8 @@ def apply_update(
     archive = Path(archive_path)
     if not archive.exists():
         raise FileNotFoundError(f"Update archive not found: {archive_path}")
+
+    _require_verified_archive(archive)
 
     version = _extract_version_from_archive(archive)
     if not _auto_update_allowed() and not confirmation_token:
@@ -351,10 +390,10 @@ def _extract_version_from_archive(archive: Path) -> str:
     try:
         with tempfile.TemporaryDirectory() as td:
             with zipfile.ZipFile(archive, "r") as zf:
-                for name in zf.namelist():
-                    if name.endswith("manifest.json"):
-                        zf.extract(name, td)
-                        manifest = json.loads(Path(td, name).read_text(encoding="utf-8"))
+                for member in zf.infolist():
+                    member_path = _validate_zip_member(member)
+                    if member_path.name == "manifest.json" and not member.is_dir():
+                        manifest = json.loads(zf.read(member).decode("utf-8"))
                         return str(manifest.get("version", "unknown")).strip()
     except Exception:
         pass
@@ -494,6 +533,12 @@ class _LimitedRedirectHandler(HTTPRedirectHandler):
 
     max_redirections = MAX_UPDATE_REDIRECTS
 
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # urllib otherwise follows redirects without giving the original URL
+        # validator an opportunity to inspect the destination.
+        _validate_download_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
 
 def _download_url(url: str, timeout: Optional[int] = None) -> bytes:
     """Download ``url`` and return raw bytes; raise on HTTP errors."""
@@ -535,6 +580,47 @@ def _artifact_paths(version: str, url: str) -> Dict[str, Path]:
         "sig": base.with_suffix(ext + ".sig"),
         "sha256": base.with_suffix(ext + ".sha256"),
     }
+
+
+def _verification_record_path() -> Path:
+    return _update_download_dir() / VERIFICATION_RECORD_FILE
+
+
+def _load_verification_records() -> list[dict[str, str]]:
+    path = _verification_record_path()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def _persist_verified_archive(archive: Path, digest: str) -> None:
+    path = _verification_record_path()
+    canonical = str(archive.resolve())
+    records = [r for r in _load_verification_records()
+               if isinstance(r, dict) and r.get("archive_path") != canonical]
+    records.append({"archive_path": canonical, "digest": digest, "method": "ed25519"})
+    temp_path = path.with_suffix(".tmp")
+    temp_path.write_text(json.dumps(records), encoding="utf-8")
+    os.replace(temp_path, path)
+
+
+def _require_verified_archive(archive: Path) -> None:
+    """Require a prior Ed25519 verification matching this exact archive bytes."""
+    if not os.environ.get("GHOSTBROWSER_UPDATE_SIGNING_KEY", "").strip():
+        raise RuntimeError("A pinned Ed25519 update signing key is required before applying updates")
+    digest = _file_sha256(archive)
+    canonical = str(archive.resolve())
+    for record in _load_verification_records():
+        if (
+            isinstance(record, dict)
+            and record.get("archive_path") == canonical
+            and record.get("digest") == digest
+            and record.get("method") == "ed25519"
+        ):
+            return
+    raise RuntimeError("Update archive has not passed persisted Ed25519 verification")
 
 
 def _sanitize_filename(value: str) -> str:
@@ -637,7 +723,10 @@ def verify_signature(
             if "BEGIN PUBLIC KEY" in signing_key:
                 public_key = serialization.load_pem_public_key(signing_key.encode())
             else:
-                raw = base64.b64decode(signing_key) if len(signing_key) > 64 else bytes.fromhex(signing_key)
+                try:
+                    raw = bytes.fromhex(signing_key)
+                except ValueError:
+                    raw = base64.b64decode(signing_key, validate=True)
                 public_key = Ed25519PublicKey.from_public_bytes(raw)
             if not isinstance(public_key, Ed25519PublicKey):
                 raise TypeError("Configured signing key is not Ed25519")
@@ -650,12 +739,14 @@ def verify_signature(
                     "digest": digest,
                 }
             public_key.verify(sig_file.read_bytes(), path.read_bytes())
-            return {
+            result = {
                 "verified": True,
                 "message": "Ed25519 signature valid",
                 "method": "ed25519",
                 "digest": digest,
             }
+            _persist_verified_archive(path, digest)
+            return result
         except InvalidSignature:
             return {"verified": False, "message": "Invalid Ed25519 signature", "method": "ed25519", "digest": digest}
         except Exception as exc:  # pragma: no cover

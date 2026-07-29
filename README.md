@@ -61,7 +61,7 @@ The API is available at `http://127.0.0.1:8000`; its interactive schema is at
 - `backend/` — FastAPI application, profile management, browser automation, proxy handling, fingerprint spoofing, security hardening, scanners, and encrypted storage.
 - `frontend/` — static HTML/CSS/JS management UI.
 - `scripts/` — CLI utilities for scanners, isolation checks, detection checks, backup/restore, DNS capture, and release audits.
-- `docs/` — usage guide (`USAGE.md`), threat model (`THREAT_MODEL.md`), and planned features (`ROADMAP.md`).
+- `docs/` — usage guide (`USAGE.md`) and privacy/threat model (`PRIVACY_MODEL.md`).
 
 ---
 
@@ -71,7 +71,7 @@ The API is available at `http://127.0.0.1:8000`; its interactive schema is at
 - Proxy kill-switch prevents direct-connection fallback when a proxy fails.
 - CSRF double-submit cookie/header validation is implemented for unsafe methods (`POST`, `PUT`, `PATCH`, `DELETE`). The frontend obtains a CSRF token from `GET /api/system/csrf-token` and sends it as `X-XSRF-Token` header.
 - Content Security Policy and additional security headers are set by FastAPI middleware.
-- Profile data is encrypted at rest with per-profile Fernet keys; backup archives use AES-256-GCM.
+- Profile metadata is encrypted at rest with one file-based Fernet master key (`profiles_data/.master.key`) shared by local profiles; backup archives use passphrase-derived AES-256-GCM. Cloudflare credentials use the Windows DPAPI credential store when available.
 - No OS-level keystroke interception; the virtual keyboard is a UI-layer mitigation.
 
 ### Administrative API authentication
@@ -106,9 +106,9 @@ See `docs/USAGE.md` for detailed workflows.
 
 ---
 
-## Roadmap
+## Release capabilities and remaining work
 
-Planned infrastructure is tracked in `docs/ROADMAP.md`. Current goals include encrypted cloud sync, a TUF-style signed update system, reproducible builds, and extended font metric spoofing.
+Encrypted local and remote profile sync is implemented in `backend/cloud_sync.py`; archives are encrypted client-side before upload. The repository also includes GitHub update checks, signed-download verification, staged apply/rollback support, and an SBOM endpoint. Operators remain responsible for deploying the remote sync service and update distribution. Reproducible builds, a TUF-style metadata system, and broader font-metric consistency remain future work.
 
 ---
 

@@ -4,7 +4,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from pydantic import BaseModel, field_validator
 from typing import Optional, List, Dict, Any
-from urllib.parse import urlparse
 import uvicorn
 import base64
 import json
@@ -19,7 +18,7 @@ if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 from backend.profile_manager import profile_manager
-from backend.browser_manager import launch_profile, close_profile, is_profile_running, active_browsers, get_profile_cookies, set_profile_cookies
+from backend.browser_manager import launch_profile, close_profile, is_profile_running, active_browsers, get_profile_cookies, set_profile_cookies, parse_proxy_string
 from backend.macro_manager import macro_manager
 from backend.macro_runner import run_macro_bulk
 from backend.config import get_data_dir
@@ -167,6 +166,7 @@ class CreateProfileModel(BaseModel):
     timezone: Optional[str] = None
     locale: Optional[str] = None
     advanced: Optional[AdvancedSettingsModel] = None
+    pin: Optional[str] = None
 
     @field_validator("name")
     @classmethod
@@ -190,32 +190,11 @@ class EditProfileModel(BaseModel):
     locale: Optional[str] = None
     advanced: Optional[AdvancedSettingsModel] = None
 
-def parse_proxy_string(proxy_str: str) -> Optional[dict]:
-    """Parse a proxy string for internal use (credentials are preserved)."""
-    if not proxy_str or not proxy_str.strip():
-        return None
-    parts = proxy_str.strip().split(':')
-    if len(parts) not in (2, 4):
-        return None
-    server = f"http://{parts[0]}:{parts[1]}"
-    parsed = urlparse(server)
-    if parsed.scheme not in {"http", "https", "socks4", "socks5"} or not parsed.hostname:
-        return None
-    result: dict = {"server": server}
-    if len(parts) == 4:
-        username = parts[2].strip()
-        password = parts[3].strip()
-        if not username:
-            return None
-        result["username"] = username
-        result["password"] = password
-    return result
-
-
 def parse_proxy_string_safe(proxy_str: str) -> Optional[dict]:
     """Parse a proxy string for API responses (credentials are redacted)."""
-    parsed = parse_proxy_string(proxy_str)
-    if not parsed:
+    try:
+        parsed = parse_proxy_string(proxy_str)
+    except ValueError:
         return None
     return {"server": parsed["server"], "authenticated": bool(parsed.get("username"))}
 
@@ -228,21 +207,18 @@ async def create_profile(data: CreateProfileModel, _auth: None = Depends(require
     NO profile is ever created without Kimi AI successfully generating the fingerprint.
     """
     async with _profile_create_sem:
-        proxy_dict = data.proxy.model_dump() if data.proxy else parse_proxy_string(data.proxy_string)
-
-    # Run the full Zero-Leak Orchestrator
-    advanced_dict = data.advanced.model_dump() if data.advanced else None
-    result = await profile_creator.create_zero_leak_profile(
-        name=data.name,
-        proxy=proxy_dict,
-        advanced_ui=advanced_dict
-    )
+        try:
+            proxy_dict = data.proxy.model_dump() if data.proxy else (parse_proxy_string(data.proxy_string) if data.proxy_string else None)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        advanced_dict = data.advanced.model_dump() if data.advanced else None
+        result = await profile_creator.create_zero_leak_profile(name=data.name, proxy=proxy_dict, advanced_ui=advanced_dict, pin=data.pin)
 
     if result["status"] == "error":
         code = result.get("code", "CREATION_FAILED")
         raise HTTPException(status_code=503 if code == "KIMI_UNAVAILABLE" else 400, detail=result["message"])
 
-    return result["profile"]
+    return _redact_sensitive_api_data(result["profile"])
 
 @app.post("/api/profiles/generate")
 async def generate_profile(data: CreateProfileModel, _auth: None = Depends(require_admin_token)):
@@ -253,7 +229,9 @@ class BulkCreateProfileModel(BaseModel):
     base_name: str
     count: int = 5
     proxy: Optional[dict] = None
+    proxy_string: Optional[str] = None
     advanced: Optional[dict] = None
+    pin: Optional[str] = None
 
     @field_validator("count")
     @classmethod
@@ -265,16 +243,16 @@ async def generate_bulk_profiles(data: BulkCreateProfileModel, _auth: None = Dep
     """Generate multiple profiles concurrently via Kimi AI, with concurrency limits."""
     count = min(data.count, 50) # Cap at 50 to prevent overload
 
-    # Limit to 8 concurrent creations to prevent Playwright leak scanner from melting the CPU
-    sem = asyncio.Semaphore(8)
+    try:
+        proxy = data.proxy if data.proxy is not None else (parse_proxy_string(data.proxy_string) if data.proxy_string else None)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     async def create_single(i):
         name = f"{data.base_name}_{i+1}"
-        from backend.profile_creator import ProfileCreationOrchestrator
-        orchestrator = ProfileCreationOrchestrator()
         try:
-            async with sem:
-                return await orchestrator.create_zero_leak_profile(name, data.proxy, data.advanced)
+            async with _profile_create_sem:
+                return await profile_creator.create_zero_leak_profile(name=name, proxy=proxy, advanced_ui=data.advanced, pin=data.pin)
         except Exception as e:
             return {"status": "error", "message": str(e), "name": name}
 
@@ -283,18 +261,18 @@ async def generate_bulk_profiles(data: BulkCreateProfileModel, _auth: None = Dep
 
     success_count = sum(1 for r in results if r.get("status") == "success")
 
-    return {
+    return _redact_sensitive_api_data({
         "status": "success",
         "message": f"Successfully created {success_count} out of {count} profiles",
         "results": results
-    }
+    })
 
 @app.get("/api/profiles")
 def list_profiles(_auth: None = Depends(require_admin_token)):
     profiles = profile_manager.list_profiles()
     for p in profiles:
         p["status"] = "Running" if is_profile_running(p["id"]) else "Stopped"
-    return profiles
+    return _redact_sensitive_api_data(profiles)
 
 @app.post("/api/profiles/{profile_id}/clone")
 async def clone_profile(profile_id: str, _auth: None = Depends(require_admin_token)):
@@ -307,9 +285,7 @@ async def clone_profile(profile_id: str, _auth: None = Depends(require_admin_tok
     proxy = original.get("proxy")
     advanced = original.get("advanced", {})
 
-    from backend.profile_creator import ProfileCreationOrchestrator
-    orchestrator = ProfileCreationOrchestrator()
-    result = await orchestrator.create_zero_leak_profile(name, proxy, advanced)
+    result = await profile_creator.create_zero_leak_profile(name=name, proxy=proxy, advanced_ui=advanced)
 
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
@@ -325,7 +301,9 @@ async def clone_profile(profile_id: str, _auth: None = Depends(require_admin_tok
     if updates:
         profile_manager.update_profile(new_profile["id"], updates)
 
-    return {"status": "success", "profile": profile_manager.get_profile(new_profile["id"])}
+    return _redact_sensitive_api_data({
+        "status": "success", "profile": profile_manager.get_profile(new_profile["id"])
+    })
 
 @app.delete("/api/profiles/{profile_id}")
 async def delete_profile(profile_id: str, _auth: None = Depends(require_admin_token)):
@@ -352,6 +330,8 @@ class UpdateMetadataRequest(BaseModel):
     tags: Optional[List[str]] = None
     notes: Optional[str] = None
     proxy_pin: Optional[str] = None
+    pinned: Optional[bool] = None
+    clear_proxy_pin: bool = False
 
 @app.patch("/api/profiles/{profile_id}/metadata")
 async def update_metadata(profile_id: str, req: UpdateMetadataRequest, _auth: None = Depends(require_admin_token)):
@@ -359,6 +339,8 @@ async def update_metadata(profile_id: str, req: UpdateMetadataRequest, _auth: No
     if req.tags is not None: updates["tags"] = req.tags
     if req.notes is not None: updates["notes"] = req.notes
     if req.proxy_pin is not None: updates["proxy_pin"] = req.proxy_pin
+    if req.pinned is not None: updates["pinned"] = req.pinned
+    if req.clear_proxy_pin: updates["proxy_pin"] = None
     success = profile_manager.update_profile(profile_id, updates)
     if not success:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -371,7 +353,12 @@ async def edit_profile(profile_id: str, data: EditProfileModel, _auth: None = De
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
 
-    proxy_dict = data.proxy.model_dump() if data.proxy else parse_proxy_string(data.proxy_string)
+    try:
+        proxy_dict = data.proxy.model_dump() if data.proxy else (
+            parse_proxy_string(data.proxy_string) if data.proxy_string else None
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     advanced_dict = data.advanced.model_dump() if data.advanced else None
 
     updates = {
@@ -391,7 +378,8 @@ async def edit_profile(profile_id: str, data: EditProfileModel, _auth: None = De
 
     return {"status": "success", "message": "Profile updated successfully"}
 
-async def update_profile_proxy(profile_id: str, req: ProfileProxyUpdateRequest):
+@app.patch("/api/profiles/{profile_id}/proxy")
+async def update_profile_proxy(profile_id: str, req: ProfileProxyUpdateRequest, _auth: None = Depends(require_admin_token)):
     """Test and update a profile's proxy without leaking credentials."""
     profile = profile_manager.get_profile(profile_id)
     if not profile:
@@ -401,14 +389,86 @@ async def update_profile_proxy(profile_id: str, req: ProfileProxyUpdateRequest):
         return {"status": "success", "proxy": None}
     if not req.proxy_string:
         raise HTTPException(status_code=422, detail="proxy_string is required")
-    proxy_dict = parse_proxy_string(req.proxy_string)
-    if not proxy_dict:
-        raise HTTPException(status_code=422, detail="Invalid proxy string")
+    try:
+        proxy_dict = parse_proxy_string(req.proxy_string)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     is_healthy = await proxy_manager.check_proxy_health(proxy_dict, record_failure=False)
     if not is_healthy:
         raise HTTPException(status_code=502, detail="Proxy health check failed")
     profile_manager.update_profile(profile_id, {"proxy": proxy_dict})
     return {"status": "success", "proxy": parse_proxy_string_safe(req.proxy_string)}
+
+
+class ProxyConnectionTestRequest(BaseModel):
+    proxy_string: str
+
+
+@app.post("/api/proxies/test-connection")
+async def test_proxy_connection(req: ProxyConnectionTestRequest, _auth: None = Depends(require_admin_token)):
+    try:
+        proxy = parse_proxy_string(req.proxy_string)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not await proxy_manager.check_proxy_health(proxy, record_failure=False):
+        raise HTTPException(status_code=502, detail="Proxy health check failed")
+    return {"status": "success", "message": "Proxy connection verified", "proxy": parse_proxy_string_safe(req.proxy_string)}
+
+
+class PrivacyModeRequest(BaseModel):
+    privacy_mode: str
+
+
+@app.patch("/api/profiles/{profile_id}/privacy-mode")
+async def update_privacy_mode(profile_id: str, req: PrivacyModeRequest, _auth: None = Depends(require_admin_token)):
+    mode = req.privacy_mode.strip().lower()
+    if mode not in {"standard", "strict", "ephemeral", "high"}:
+        raise HTTPException(status_code=422, detail="Invalid privacy mode")
+    if not profile_manager.update_profile(profile_id, {"advanced": {"privacy_mode": mode}}):
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return {"status": "success", "privacy_mode": mode}
+
+
+class ProfileTagsRequest(BaseModel):
+    add: List[str] = []
+    remove: List[str] = []
+
+
+@app.patch("/api/profiles/{profile_id}/tags")
+async def update_profile_tags(profile_id: str, req: ProfileTagsRequest, _auth: None = Depends(require_admin_token)):
+    if not profile_manager.get_profile(profile_id):
+        raise HTTPException(status_code=404, detail="Profile not found")
+    try:
+        profile_manager.add_tags(profile_id, req.add)
+        profile_manager.remove_tags(profile_id, req.remove)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"status": "success"}
+
+
+class ProfilePinRequest(BaseModel):
+    pin: str
+
+
+@app.post("/api/profiles/{profile_id}/pin/set")
+async def set_profile_pin(profile_id: str, req: ProfilePinRequest, _auth: None = Depends(require_admin_token)):
+    if not profile_manager.set_profile_pin(profile_id, req.pin):
+        raise HTTPException(status_code=404, detail="Profile not found or invalid PIN")
+    return {"status": "success"}
+
+
+@app.post("/api/profiles/{profile_id}/pin/verify")
+async def verify_profile_pin(profile_id: str, req: ProfilePinRequest, _auth: None = Depends(require_admin_token)):
+    if not profile_manager.get_profile(profile_id):
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return {"verified": profile_manager.verify_profile_pin(profile_id, req.pin)}
+
+
+@app.delete("/api/profiles/{profile_id}/pin")
+async def delete_profile_pin(profile_id: str, _auth: None = Depends(require_admin_token)):
+    if not profile_manager.clear_profile_pin(profile_id):
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return {"status": "success"}
 
 
 def _redact_sensitive_api_data(data):
@@ -417,14 +477,23 @@ def _redact_sensitive_api_data(data):
         redacted = {}
         had_credential = False
         for key, value in data.items():
-            if key == "proxy_pin":
+            if key in ("proxy_pin", "pin_hash"):
                 continue
             if key in ("username", "password"):
                 had_credential = True
                 continue
             redacted[key] = _redact_sensitive_api_data(value)
+        if "server" in data and isinstance(data["server"], str):
+            safe_proxy = redact_proxy_record(data)
+            if safe_proxy["server"]:
+                redacted["server"] = safe_proxy["server"]
+            had_credential = had_credential or safe_proxy["authenticated"]
         if had_credential and "server" in data:
             redacted["authenticated"] = True
+        if "pin_hash" in data:
+            redacted["has_pin"] = True
+        if data.get("proxy_pin"):
+            redacted["has_pinned_proxy"] = True
         return redacted
     if isinstance(data, list):
         return [_redact_sensitive_api_data(item) for item in data]
@@ -436,7 +505,7 @@ async def get_fingerprint(profile_id: str, _auth: None = Depends(require_admin_t
     profile = profile_manager.get_profile(profile_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
-    return profile.get("advanced", {})
+    return _redact_sensitive_api_data(profile.get("advanced", {}))
 
 @app.get("/api/profiles/{profile_id}/scan")
 async def scan_profile(profile_id: str, _auth: None = Depends(require_admin_token)):
@@ -449,7 +518,7 @@ async def scan_profile(profile_id: str, _auth: None = Depends(require_admin_toke
     validator = AIAutoValidator()
     result = await validator.validate_profile(profile, fingerprint)
 
-    return {"status": "success", "scan": result}
+    return _redact_sensitive_api_data({"status": "success", "scan": result})
 
 class UpdateFingerprintRequest(BaseModel):
     advanced: dict
@@ -537,7 +606,7 @@ def get_titan_proxies(_auth: None = Depends(require_admin_token)):
     """Fetches the top proxies from the Titan proxy database"""
     import backend.db as db
     proxies = db.get_best_proxies(limit=100)
-    return {"status": "success", "proxies": proxies}
+    return _redact_sensitive_api_data({"status": "success", "proxies": proxies})
 
 class BulkMacroRunRequest(BaseModel):
     profile_ids: List[str]
@@ -555,10 +624,14 @@ async def run_bulk_macro(req: BulkMacroRunRequest, _auth: None = Depends(require
 
 # --- End Macros API ---
 
+class LaunchProfileRequest(BaseModel):
+    pin: Optional[str] = None
+
+
 @app.post("/api/profiles/{profile_id}/launch")
-async def launch_profile_api(profile_id: str, _auth: None = Depends(require_admin_token)):
+async def launch_profile_api(profile_id: str, req: LaunchProfileRequest = None, _auth: None = Depends(require_admin_token)):
     try:
-        res = await launch_profile(profile_id)
+        res = await launch_profile(profile_id, pin=req.pin) if req and req.pin else await launch_profile(profile_id)
     except HTTPException:
         raise
     except Exception as exc:
@@ -743,7 +816,7 @@ async def test_cloudflare_account(_auth: None = Depends(require_admin_token)):
             }
     except Exception as e:
         return {"status": "error", "message": f"Connection failed: {_redact_cloudflare_error(e)}"}
-from backend.proxy_manager import proxy_manager
+from backend.proxy_manager import proxy_manager, redact_proxy_record
 
 class AddProxiesModel(BaseModel):
     proxies: list[ProxyModel]
@@ -763,9 +836,9 @@ def get_proxies(_auth: None = Depends(require_admin_token)):
         pool_file = os.path.join(os.path.dirname(__file__), "..", "profiles_data", "proxy_pool.json")
         if os.path.exists(pool_file):
             with open(pool_file, "r") as f:
-                return json.load(f)
+                return _redact_sensitive_api_data(json.load(f))
     except Exception: pass
-    return proxy_manager._get_active_proxies()
+    return _redact_sensitive_api_data(proxy_manager._get_active_proxies())
 
 class ScrapeConfigModel(BaseModel):
     target_count: int = 20
@@ -820,6 +893,19 @@ async def test_all_proxies(_auth: None = Depends(require_admin_token)):
 @app.get("/api/system/health")
 def get_system_health():
     return system_monitor.get_health()
+
+
+@app.get("/api/sites/access-log")
+def get_site_access_log(_auth: None = Depends(require_admin_token)):
+    from backend.api_access_logger import get_site_log
+    return {"sites": get_site_log()}
+
+
+@app.delete("/api/sites/access-log")
+def clear_site_access_log(_auth: None = Depends(require_admin_token)):
+    from backend.api_access_logger import clear_site_log
+    clear_site_log()
+    return {"status": "success"}
 
 from backend.config import get_data_dir, get_bundled_dir
 

@@ -110,9 +110,9 @@ This plan maps the feature request against the current codebase. Items are marke
 | Sandbox/site isolation enabled | **DONE** | Upstream Chromium defaults kept; we do not disable sandbox for stealth. |
 | CSRF/XSRF protection | **DONE** | Double-submit cookie/header validation via FastAPI middleware for `POST`, `PUT`, `PATCH`, `DELETE`; frontend obtains token from `GET /api/system/csrf-token` and sends it as `X-XSRF-Token` header. |
 | Kill switch | **DONE** | Proxy kill switch. |
-| Threat model document | **DONE** | `docs/THREAT_MODEL.md` added. |
+| Privacy/threat model document | **DONE** | `docs/PRIVACY_MODEL.md` is the canonical model. |
 | Usage documentation | **DONE** | `docs/USAGE.md` added. |
-| Signed updates | **PARTIAL** | GitHub release checker done; download/verify/apply remain stubs. |
+| Signed updates | **DONE** | GitHub checks, download verification, staged apply, and rollback are implemented. |
 | Reproducible builds / SBOM | **DONE** | `backend/sbom.py` serves CycloneDX-ish SBOM. |
 | CSP / security headers | **DONE** | FastAPI middleware adds CSP, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, X-Frame-Options. |
 | Per-site API access log | **DONE** | `backend/api_access_logger.py` + JS binding + REST endpoints. |

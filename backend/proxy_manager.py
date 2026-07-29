@@ -70,6 +70,25 @@ COUNTRY_TO_LOCALE = {
     "IE": ("en-IE", "Europe/Dublin"),
 }
 
+DEFAULT_PROXY_HEALTH_URL = "https://ip-api.com/json/?fields=status,query"
+DEFAULT_PROXY_HEALTH_TIMEOUT = 5.0
+
+
+def _proxy_health_settings() -> tuple[str, float]:
+    """Return the HTTPS exit-IP endpoint and timeout used for proxy checks."""
+    endpoint = os.environ.get(
+        "GHOSTBROWSER_PROXY_HEALTH_URL", DEFAULT_PROXY_HEALTH_URL
+    ).strip()
+    try:
+        timeout = float(
+            os.environ.get(
+                "GHOSTBROWSER_PROXY_HEALTH_TIMEOUT", str(DEFAULT_PROXY_HEALTH_TIMEOUT)
+            )
+        )
+    except ValueError:
+        timeout = DEFAULT_PROXY_HEALTH_TIMEOUT
+    return endpoint, timeout if timeout > 0 else DEFAULT_PROXY_HEALTH_TIMEOUT
+
 
 def _parse_proxy_record(proxy: dict) -> dict:
     """Normalize a proxy without ever returning credentials in its server URL."""
@@ -376,14 +395,31 @@ class ProxyManager:
 
     async def check_proxy_health(self, proxy: dict, record_failure: bool = True) -> bool:
         """
-        Pings ip-api.com through the proxy to verify it is alive.
-        Auth credentials are embedded in the proxy URL for SOCKS transports.
+        Verify an HTTPS request exits through the proxy with a public IP address.
+
+        ``ip-api.com`` returns ``{"status": "success", "query": "<exit-ip>"}``
+        for a successful request. Validating ``query`` proves that the request
+        reached the endpoint through an actual public proxy exit rather than
+        merely establishing a TCP connection to the proxy listener.
         """
         server = proxy["server"]
+        endpoint, timeout = _proxy_health_settings()
+        parsed_endpoint = urlsplit(endpoint)
+        if parsed_endpoint.scheme.lower() != "https" or not parsed_endpoint.hostname:
+            logger.warning("Proxy health endpoint must use HTTPS")
+            return False
         try:
-            async with _client_for_proxy(proxy, timeout=5.0) as client:
-                response = await client.get("http://ip-api.com/json/?fields=status")
-                return response.status_code == 200
+            async with _client_for_proxy(proxy, timeout=timeout) as client:
+                response = await client.get(endpoint)
+            if response.status_code != 200:
+                raise RuntimeError(f"health endpoint returned HTTP {response.status_code}")
+            data = response.json()
+            if not isinstance(data, dict) or data.get("status") != "success":
+                raise ValueError("health endpoint returned an invalid status schema")
+            exit_ip = data.get("query")
+            if not isinstance(exit_ip, str) or not ipaddress.ip_address(exit_ip).is_global:
+                raise ValueError("health endpoint did not report a public proxy exit IP")
+            return True
         except Exception:
             logger.warning("Proxy health check failed")
             if record_failure:

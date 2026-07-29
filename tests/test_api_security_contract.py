@@ -6,6 +6,7 @@ dependencies.  Public routes must exactly match the documented allowlist.
 from __future__ import annotations
 
 import os
+from unittest.mock import patch
 from unittest import TestCase
 
 from fastapi.testclient import TestClient
@@ -120,3 +121,27 @@ class ApiSecurityContractTests(TestCase):
             headers={"X-Admin-Token": "test-contract-token"},
         )
         self.assertEqual(resp.status_code, 200)
+
+    def test_proxy_credentials_never_appear_in_profile_or_proxy_responses(self):
+        secret_proxy = {
+            "server": "http://url-user-secret:url-password-secret@proxy.example:8080",
+            "username": "proxy-user-secret",
+            "password": "proxy-password-secret",
+        }
+        profile = {"id": "profile-1", "proxy": secret_proxy, "proxy_pin": "1234"}
+        headers = {"X-Admin-Token": "test-contract-token"}
+        with patch("backend.main.profile_manager.list_profiles", return_value=[profile]), \
+             patch("backend.main.proxy_manager._get_active_proxies", return_value=[secret_proxy]), \
+             patch("os.path.exists", return_value=False):
+            responses = [
+                self.client.get("/api/profiles", headers=headers),
+                self.client.get("/api/proxies", headers=headers),
+            ]
+        for response in responses:
+            self.assertEqual(response.status_code, 200)
+            body = response.text
+            self.assertNotIn("proxy-user-secret", body)
+            self.assertNotIn("proxy-password-secret", body)
+            self.assertNotIn("url-user-secret", body)
+            self.assertNotIn("url-password-secret", body)
+            self.assertNotIn('"proxy_pin"', body)

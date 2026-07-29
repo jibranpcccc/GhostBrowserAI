@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, patch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from fastapi import HTTPException
+from cryptography.fernet import Fernet
 
 import backend.main as main_module
 from backend.main import EditProfileModel, ProfileProxyUpdateRequest
@@ -18,6 +19,28 @@ from backend.proxy_manager import proxy_manager
 
 
 class ProfileDisplayMetadataTests(unittest.TestCase):
+    def test_legacy_plaintext_key_is_migrated_to_dpapi_blob(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            ProfileManager, "_protect_key_dpapi", side_effect=lambda key: b"dpapi:" + key
+        ), patch.object(
+            ProfileManager, "_unprotect_key_dpapi", side_effect=lambda key: key.removeprefix(b"dpapi:")
+        ):
+            legacy_key = Fernet.generate_key()
+            legacy_path = os.path.join(directory, ".master.key")
+            with open(legacy_path, "wb") as key_file:
+                key_file.write(legacy_key)
+            manager = ProfileManager(override_dir=directory)
+            protected_path = os.path.join(directory, ".master.key.dpapi")
+            self.assertFalse(os.path.exists(legacy_path))
+            with open(protected_path, "rb") as protected_file:
+                self.assertEqual(protected_file.read(), b"dpapi:" + legacy_key)
+            self.assertEqual(manager.cipher.decrypt(manager.cipher.encrypt(b"migration-check")), b"migration-check")
+
+    def test_key_initialization_fails_closed_off_windows(self):
+        with tempfile.TemporaryDirectory() as directory, patch("backend.profile_manager.sys.platform", "linux"):
+            with self.assertRaisesRegex(RuntimeError, "Windows DPAPI"):
+                ProfileManager(override_dir=directory)
+
     def test_colors_are_unique_and_pin_order_persists(self):
         with tempfile.TemporaryDirectory() as directory, patch(
             "backend.config.get_installed_chromium_version", return_value="131.0.0.0"

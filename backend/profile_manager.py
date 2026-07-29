@@ -7,7 +7,9 @@ import hmac
 import secrets
 from datetime import datetime
 import shutil
-import stat
+import sys
+import ctypes
+from ctypes import wintypes
 from cryptography.fernet import Fernet, InvalidToken
 from backend.config import get_data_dir
 from backend.proxy_manager import guess_locale_timezone
@@ -43,6 +45,7 @@ def _verify_pin_hash(pin: str, pin_hash: str) -> bool:
 
 PROFILES_DIR = get_data_dir("profiles_data")
 KEY_FILE = os.path.join(PROFILES_DIR, ".master.key")
+DPAPI_KEY_FILE = os.path.join(PROFILES_DIR, ".master.key.dpapi")
 
 PROFILE_COLOR_PALETTE = (
     "#6366F1", "#EC4899", "#14B8A6", "#F59E0B", "#8B5CF6", "#22C55E",
@@ -99,6 +102,7 @@ class ProfileManager:
             self.PROFILES_DIR = PROFILES_DIR
             self.metadata_file = os.path.join(PROFILES_DIR, "profiles_meta.json")
             self.key_file = KEY_FILE
+        self.dpapi_key_file = os.path.join(self.PROFILES_DIR, ".master.key.dpapi")
 
         os.makedirs(self.PROFILES_DIR, exist_ok=True)
         self._init_crypto()
@@ -167,18 +171,69 @@ class ProfileManager:
                 return color
 
     def _init_crypto(self):
-        if not os.path.exists(self.key_file):
-            key = Fernet.generate_key()
-            with open(self.key_file, "wb") as f:
-                f.write(key)
+        if sys.platform != "win32":
+            raise RuntimeError("Profile encryption requires Windows DPAPI; refusing unprotected key storage")
+
+        if os.path.exists(self.dpapi_key_file):
+            with open(self.dpapi_key_file, "rb") as key_file:
+                key = self._unprotect_key_dpapi(key_file.read())
+        elif os.path.exists(self.key_file):
+            # One-time migration of legacy plaintext Fernet keys. Do not remove
+            # the old key until the protected replacement is durably written.
+            with open(self.key_file, "rb") as key_file:
+                key = key_file.read()
+            protected = self._protect_key_dpapi(key)
+            self._write_protected_key(protected)
+            os.remove(self.key_file)
         else:
-            with open(self.key_file, "rb") as f:
-                key = f.read()
-        try:
-            os.chmod(self.key_file, stat.S_IRUSR | stat.S_IWUSR)
-        except OSError:
-            pass
+            key = Fernet.generate_key()
+            self._write_protected_key(self._protect_key_dpapi(key))
         self.cipher = Fernet(key)
+
+    def _write_protected_key(self, protected_key: bytes) -> None:
+        temporary = self.dpapi_key_file + ".tmp"
+        with open(temporary, "wb") as f:
+            f.write(protected_key)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary, self.dpapi_key_file)
+
+    @staticmethod
+    def _protect_key_dpapi(key: bytes) -> bytes:
+        return ProfileManager._crypt_protect_data(key, protect=True)
+
+    @staticmethod
+    def _unprotect_key_dpapi(protected_key: bytes) -> bytes:
+        return ProfileManager._crypt_protect_data(protected_key, protect=False)
+
+    @staticmethod
+    def _crypt_protect_data(data: bytes, protect: bool) -> bytes:
+        """Protect/unprotect bytes with the current Windows user's DPAPI key."""
+        if sys.platform != "win32":
+            raise RuntimeError("Windows DPAPI is unavailable on this platform")
+
+        class DATA_BLOB(ctypes.Structure):
+            _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_byte))]
+
+        raw = (ctypes.c_byte * len(data)).from_buffer_copy(data)
+        input_blob = DATA_BLOB(len(data), raw)
+        output_blob = DATA_BLOB()
+        crypt32 = ctypes.windll.crypt32
+        kernel32 = ctypes.windll.kernel32
+        if protect:
+            success = crypt32.CryptProtectData(
+                ctypes.byref(input_blob), None, None, None, None, 0, ctypes.byref(output_blob)
+            )
+        else:
+            success = crypt32.CryptUnprotectData(
+                ctypes.byref(input_blob), None, None, None, None, 0, ctypes.byref(output_blob)
+            )
+        if not success:
+            raise OSError("Windows DPAPI operation failed")
+        try:
+            return ctypes.string_at(output_blob.pbData, output_blob.cbData)
+        finally:
+            kernel32.LocalFree(output_blob.pbData)
 
     def _decrypt_json_field(self, value, fallback):
         if not isinstance(value, str) or not value.startswith("enc:"):

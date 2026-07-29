@@ -5,8 +5,11 @@ import os
 import shutil
 import tempfile
 import zipfile
+import stat
 from pathlib import Path
 from unittest import TestCase
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from backend.update_manager import (
     check_for_update,
@@ -57,10 +60,11 @@ class UpdateManagerTests(TestCase):
         self.assertTrue(verify_confirmation_token(result["confirmation_token"], "0.9.0"))
         self.assertFalse(verify_confirmation_token(result["confirmation_token"], "1.0.0"))
 
-    def test_apply_update_flow(self):
+    def test_apply_update_flow_after_persisted_ed25519_verification(self):
         os.environ["GHOSTBROWSER_INSTALL_DIR"] = str(self.temp_dir / "install")
         os.environ["GHOSTBROWSER_AUTO_UPDATE"] = "1"
-        install_dir = self.temp_dir / "install" / "ghostbrowser"
+        os.environ["GHOSTBROWSER_UPDATE_DOWNLOAD_DIR"] = str(self.temp_dir / "downloads")
+        install_dir = self.temp_dir / "install"
         install_dir.mkdir(parents=True)
         (install_dir / "manifest.json").write_text(json.dumps({"version": "0.0.1"}))
 
@@ -72,10 +76,48 @@ class UpdateManagerTests(TestCase):
         with zipfile.ZipFile(archive_path, "w") as zf:
             zf.writestr("manifest.json", new_file.read_text())
 
-        from backend.update_manager import apply_update
+        private_key = Ed25519PrivateKey.generate()
+        public_key = private_key.public_key().public_bytes(
+            serialization.Encoding.Raw, serialization.PublicFormat.Raw
+        )
+        os.environ["GHOSTBROWSER_UPDATE_SIGNING_KEY"] = public_key.hex()
+        signature_path = archive_path.with_suffix(".zip.sig")
+        signature_path.write_bytes(private_key.sign(archive_path.read_bytes()))
+
+        from backend.update_manager import apply_update, verify_signature
+        verification = verify_signature(str(archive_path), sig_path=str(signature_path))
+        self.assertTrue(verification["verified"])
         result = apply_update(str(archive_path))
         self.assertEqual(result["status"], "applied")
         self.assertEqual(result["version"], "0.9.0")
+
+    def test_extract_archive_rejects_zip_slip_and_symlink_members(self):
+        from backend.update_manager import _extract_archive
+        for name, mode in (("../escape.txt", None), ("/absolute.txt", None), ("link", stat.S_IFLNK | 0o777)):
+            with self.subTest(name=name):
+                archive = self.temp_dir / f"{len(name)}.zip"
+                with zipfile.ZipFile(archive, "w") as zf:
+                    info = zipfile.ZipInfo(name)
+                    if mode is not None:
+                        info.external_attr = mode << 16
+                    zf.writestr(info, "malicious")
+                with self.assertRaises(ValueError):
+                    _extract_archive(str(archive), self.temp_dir / f"stage-{len(name)}")
+
+    def test_apply_requires_persisted_ed25519_verification(self):
+        os.environ["GHOSTBROWSER_INSTALL_DIR"] = str(self.temp_dir / "install")
+        os.environ["GHOSTBROWSER_AUTO_UPDATE"] = "1"
+        archive = self.temp_dir / "update.zip"
+        with zipfile.ZipFile(archive, "w") as zf:
+            zf.writestr("manifest.json", json.dumps({"version": "0.9.0"}))
+        from backend.update_manager import apply_update
+        with self.assertRaisesRegex(RuntimeError, "pinned Ed25519"):
+            apply_update(str(archive))
+
+    def test_redirect_destinations_are_validated(self):
+        from backend.update_manager import _LimitedRedirectHandler
+        with self.assertRaisesRegex(RuntimeError, "Only HTTPS"):
+            _LimitedRedirectHandler().redirect_request(None, None, 302, "Found", None, "http://example.test/update.zip")
 
     def test_apply_update_requires_confirmation_or_env(self):
         os.environ["GHOSTBROWSER_INSTALL_DIR"] = str(self.temp_dir / "install")

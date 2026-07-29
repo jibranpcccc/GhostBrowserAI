@@ -98,7 +98,7 @@ class UiLauncherContracts(unittest.TestCase):
         self.assertNotIn("job_id", JS)
         self.assertNotIn("schedule-profile-select", JS)
         self.assertIn("escHtml(s.cron)", JS)
-        self.assertIn("inlineStringArg(s.id)", JS)
+        self.assertIn('data-action="delete-schedule"', JS)
         for name in ("startCookieRobotWarming", "startSyncSessionWrapper"):
             self.assertIn(f"function {name}", JS)
 
@@ -170,7 +170,7 @@ class UiLauncherContracts(unittest.TestCase):
         self.assertIn("safeProfileColor(p.color)", render_body)
         self.assertIn("profile-row-pinned", render_body)
         self.assertIn("p.pinned", render_body)
-        self.assertIn("toggleProfilePin", render_body)
+        self.assertIn('data-action="toggle-profile-pin"', render_body)
 
         test_body = function_body(JS, "testEnteredProxy")
         save_body = function_body(JS, "saveProfileEdits")

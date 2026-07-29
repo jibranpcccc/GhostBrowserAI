@@ -428,7 +428,6 @@ function renderProfiles(profiles) {
     grid.innerHTML = displayedProfiles.map(p => {
         const isRunning = p.status === 'Running';
         const id = String(p.id || '');
-        const idArg = inlineStringArg(id);
         const initials = escHtml((p.name || 'P').slice(0, 2).toUpperCase());
         const os = String(p.advanced?.os || p.os || '?');
         const osEmoji = os === 'Mac' ? '🍎' : '🪟';
@@ -445,17 +444,17 @@ function renderProfiles(profiles) {
 
         return `
             <tr id="card-${escAttr(id)}" class="profile-row ${p.pinned ? 'profile-row-pinned' : ''}" style="--profile-color:${profileColor}">
-                <td><input type="checkbox" class="profile-checkbox" value="${escAttr(id)}" onchange="updateBulkActions()"></td>
+                <td><input type="checkbox" class="profile-checkbox" value="${escAttr(id)}" data-action="update-bulk-actions"></td>
                 <td>
                     <div class="td-name">
                         <div class="profile-icon-wrapper">${initials}</div>
                         <div>
                             <div style="display: flex; align-items: center; gap: 4px;">
                                 ${escHtml(p.name)}
-                                <button class="btn-icon profile-pin-button ${p.pinned ? 'active' : ''}" onclick="toggleProfilePin(${idArg}, ${p.pinned ? 'false' : 'true'})" title="${pinTitle}" aria-label="${pinTitle}">
+                                <button class="btn-icon profile-pin-button ${p.pinned ? 'active' : ''}" data-action="toggle-profile-pin" data-profile-id="${escAttr(id)}" data-pinned="${p.pinned ? 'false' : 'true'}" title="${pinTitle}" aria-label="${pinTitle}">
                                     <svg width="13" height="13" viewBox="0 0 24 24" fill="${p.pinned ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M12 17v5M5 3h14l-3 7 3 4H5l3-4-3-7z"/></svg>
                                 </button>
-                                <button class="btn-icon profile-edit-button" onclick="openEditModal(${idArg})" title="Rename or edit profile settings" aria-label="Rename or edit profile settings">
+                                <button class="btn-icon profile-edit-button" data-action="open-edit-modal" data-profile-id="${escAttr(id)}" title="Rename or edit profile settings" aria-label="Rename or edit profile settings">
                                     ⚙️
                                 </button>
                             </div>
@@ -478,7 +477,7 @@ function renderProfiles(profiles) {
                 </td>
                 <td>
                     <span class="privacy-badge" title="Privacy mode: ${escHtml(privacyLabel)}">${escHtml(privacyBadge)}</span>
-                    <select class="privacy-select" onchange="setPrivacyMode(${idArg}, this.value)" title="Change privacy mode">
+                    <select class="privacy-select" data-action="set-privacy-mode" data-profile-id="${escAttr(id)}" title="Change privacy mode">
                         <option value="standard" ${privacyMode === 'standard' ? 'selected' : ''}>Standard</option>
                         <option value="strict" ${privacyMode === 'strict' ? 'selected' : ''}>Strict</option>
                         <option value="ephemeral" ${privacyMode === 'ephemeral' ? 'selected' : ''}>Ephemeral</option>
@@ -490,15 +489,15 @@ function renderProfiles(profiles) {
                 </td>
                 <td class="td-actions">
                     ${isRunning
-                        ? `<button class="btn-secondary btn-sm" onclick="stopProfile(${idArg})">⏹ Stop</button>`
-                        : `<button class="btn-primary btn-sm" onclick="launchProfile(${idArg})">▶ Launch</button>`}
-                    <button class="btn-secondary btn-sm" onclick="scanProfile(${idArg})" title="Scan Fingerprint Risk" aria-label="Scan fingerprint risk" style="padding: 0.25rem 0.5rem; color: var(--primary);">🛡️</button>
-                    <button class="btn-secondary btn-sm" onclick="openMetadataModal(${idArg})" title="Tags, notes and pinning" aria-label="Edit tags, notes and pinning" style="padding: 0.25rem 0.5rem;">🏷️</button>
-                    <button class="btn-secondary btn-sm" onclick="tagProfilePrompt(${idArg})" title="Quick tag" aria-label="Quick tag" style="padding: 0.25rem 0.5rem;">+ Tag</button>
-                    <button class="btn-secondary btn-sm" onclick="cloneProfile(${idArg})" title="Clone Profile" aria-label="Clone profile">🧬</button>
-                    <button class="btn-secondary btn-sm" onclick="openCookieModal(${idArg})" title="Manage Cookies" aria-label="Manage cookies">🍪</button>
-                    <button class="btn-secondary btn-sm" onclick="openSetPinModal(${idArg})" title="Set PIN" aria-label="Set PIN">🔒</button>
-                    <button class="btn-icon stop" onclick="deleteProfile(${idArg})" title="Delete Profile" aria-label="Delete profile">
+                        ? `<button class="btn-secondary btn-sm" data-action="stop-profile" data-profile-id="${escAttr(id)}">⏹ Stop</button>`
+                        : `<button class="btn-primary btn-sm" data-action="launch-profile" data-profile-id="${escAttr(id)}">▶ Launch</button>`}
+                    <button class="btn-secondary btn-sm" data-action="scan-profile" data-profile-id="${escAttr(id)}" title="Scan Fingerprint Risk" aria-label="Scan fingerprint risk" style="padding: 0.25rem 0.5rem; color: var(--primary);">🛡️</button>
+                    <button class="btn-secondary btn-sm" data-action="open-metadata-modal" data-profile-id="${escAttr(id)}" title="Tags, notes and pinning" aria-label="Edit tags, notes and pinning" style="padding: 0.25rem 0.5rem;">🏷️</button>
+                    <button class="btn-secondary btn-sm" data-action="tag-profile" data-profile-id="${escAttr(id)}" title="Quick tag" aria-label="Quick tag" style="padding: 0.25rem 0.5rem;">+ Tag</button>
+                    <button class="btn-secondary btn-sm" data-action="clone-profile" data-profile-id="${escAttr(id)}" title="Clone Profile" aria-label="Clone profile">🧬</button>
+                    <button class="btn-secondary btn-sm" data-action="open-cookie-modal" data-profile-id="${escAttr(id)}" title="Manage Cookies" aria-label="Manage cookies">🍪</button>
+                    <button class="btn-secondary btn-sm" data-action="open-set-pin-modal" data-profile-id="${escAttr(id)}" title="Set PIN" aria-label="Set PIN">🔒</button>
+                    <button class="btn-icon stop" data-action="delete-profile" data-profile-id="${escAttr(id)}" title="Delete Profile" aria-label="Delete profile">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
                     </button>
                 </td>
@@ -1292,7 +1291,7 @@ async function submitCreateProfile() {
     const proxyRaw = document.getElementById('new-profile-proxy').value.trim();
     if (proxyRaw && !proxyWasTested('new-profile-proxy')) {
         showToast('Test this exact proxy successfully before creating the profile.', 'warning');
-        switchModalTab('network', document.querySelector('#modal-form [onclick*="network"]'));
+        switchModalTab('network', document.querySelector('#modal-form .modal-tab:nth-child(2)'));
         return;
     }
     const count = parseInt(document.getElementById('new-profile-count').value) || 1;
@@ -1869,7 +1868,7 @@ async function fetchMacros() {
                 <td>${escHtml(m.description) || '-'}</td>
                 <td><span class="mono" style="background:rgba(255,255,255,0.1);padding:0.2rem 0.5rem;border-radius:4px;">${Array.isArray(m.steps) ? m.steps.length : 0} steps</span></td>
                 <td>
-                    <button class="btn-secondary" style="padding:0.25rem 0.5rem;font-size:0.8rem;border-color:var(--danger);color:var(--danger);" onclick="deleteMacro(${inlineStringArg(m.id)})">Delete</button>
+                    <button class="btn-secondary" style="padding:0.25rem 0.5rem;font-size:0.8rem;border-color:var(--danger);color:var(--danger);" data-action="delete-macro" data-macro-id="${escAttr(m.id)}">Delete</button>
                 </td>
             `;
             grid.appendChild(tr);
@@ -1900,7 +1899,7 @@ async function fetchSchedules() {
                 <td>${profileIds.includes('*') ? 'All Profiles' : profileIds.length + ' Profiles'}</td>
                 <td><span style="color:var(--success);">Active</span></td>
                 <td>
-                    <button class="btn-secondary" style="padding:0.25rem 0.5rem;font-size:0.8rem;border-color:var(--danger);color:var(--danger);" onclick="deleteSchedule(${inlineStringArg(s.id)})">Stop</button>
+                    <button class="btn-secondary" style="padding:0.25rem 0.5rem;font-size:0.8rem;border-color:var(--danger);color:var(--danger);" data-action="delete-schedule" data-schedule-id="${escAttr(s.id)}">Stop</button>
                 </td>
             `;
             grid.appendChild(tr);
@@ -2345,6 +2344,35 @@ function startPolling() {
 // INIT
 // =========================================================
 document.addEventListener('DOMContentLoaded', () => {
+    // Dynamic rows cannot use inline event attributes: the strict CSP permits
+    // scripts from this application but intentionally blocks unsafe-inline.
+    document.addEventListener('click', (event) => {
+        const control = event.target.closest('[data-action]');
+        if (!control) return;
+        const { action, profileId, macroId, scheduleId, pinned } = control.dataset;
+        const actions = {
+            'toggle-profile-pin': () => toggleProfilePin(profileId, pinned === 'true'),
+            'open-edit-modal': () => openEditModal(profileId),
+            'stop-profile': () => stopProfile(profileId),
+            'launch-profile': () => launchProfile(profileId),
+            'scan-profile': () => scanProfile(profileId),
+            'open-metadata-modal': () => openMetadataModal(profileId),
+            'tag-profile': () => tagProfilePrompt(profileId),
+            'clone-profile': () => cloneProfile(profileId),
+            'open-cookie-modal': () => openCookieModal(profileId),
+            'open-set-pin-modal': () => openSetPinModal(profileId),
+            'delete-profile': () => deleteProfile(profileId),
+            'delete-macro': () => deleteMacro(macroId),
+            'delete-schedule': () => deleteSchedule(scheduleId),
+        };
+        if (actions[action]) actions[action]();
+    });
+    document.addEventListener('change', (event) => {
+        const control = event.target.closest('[data-action]');
+        if (!control) return;
+        if (control.dataset.action === 'update-bulk-actions') updateBulkActions();
+        if (control.dataset.action === 'set-privacy-mode') setPrivacyMode(control.dataset.profileId, control.value);
+    });
     // Bind navigation in JavaScript as well as retaining the markup fallback.
     // This keeps sidebar controls functional in packaged and hardened runtimes
     // where inline event handlers may be disabled.

@@ -191,6 +191,7 @@ async def create_zero_leak_profile(
     advanced_ui: dict = None,
     skip_warming: bool = False,
     tags: list = None,
+    pin: str = None,
 ) -> dict:
     print(f"[Orchestrator] Starting Zero-Leak Creation for: {name}")
 
@@ -317,6 +318,7 @@ async def create_zero_leak_profile(
                 advanced=advanced,
                 behavior=fp.get("behavior", {}),
                 tags=tags,
+                pin=pin,
             )
             fp = sanitize_native_surface_fields(fp)
             final_profile["fingerprint"] = fp

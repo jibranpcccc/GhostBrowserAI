@@ -267,10 +267,10 @@ SURFACES: List[Dict] = [
         "notes": "SBOM endpoint parses requirements.txt; packaging script and build pipeline documented.",
     },
     {
-        "name": "Threat model document",
+        "name": "Privacy/threat model document",
         "category": "security",
         "status": "protected",
-        "notes": "docs/THREAT_MODEL.md exists.",
+        "notes": "docs/PRIVACY_MODEL.md is the canonical privacy and threat model.",
     },
 ]
 

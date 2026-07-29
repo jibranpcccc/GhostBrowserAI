@@ -15,6 +15,7 @@ from backend.engine_resolver import (
     get_chromium_executable_path,
     get_chromium_executable_path_async,
 )
+from backend.logging_config import logger
 
 active_browsers = {}
 profile_states = {}
@@ -196,7 +197,7 @@ def parse_proxy_string(proxy_str: str) -> dict:
         user = unquote(parsed.username) if parsed.username else None
         password = unquote(parsed.password) if parsed.password else None
 
-    if not host:
+    if not host or any(character.isspace() for character in host):
         raise ValueError("Invalid proxy host")
     if not port or not (1 <= port <= 65535):
         raise ValueError(f"Invalid proxy port: {port}")
@@ -512,7 +513,7 @@ def kill_process_tree(proc):
     import psutil
     try:
         try:
-            print(f"DEBUG KILL PROCESS: {proc.pid}")
+            logger.info("DEBUG KILL PROCESS: %s", proc.pid)
         except Exception:
             pass
 
@@ -523,7 +524,7 @@ def kill_process_tree(proc):
 
         for child in children:
             try:
-                print(f"DEBUG KILL CHILD PROCESS: {child.pid}")
+                logger.info("DEBUG KILL CHILD PROCESS: %s", child.pid)
                 child.terminate()
             except Exception:
                 pass
@@ -675,7 +676,10 @@ async def _proxy_health_loop(profile_id: str, proxy: dict):
             except Exception:
                 healthy = False
             if not healthy:
-                print(f"WARNING: proxy for profile {profile_id} is unhealthy; closing profile")
+                logger.warning(
+                    "WARNING: proxy for profile %s is unhealthy; closing profile",
+                    profile_id,
+                )
                 if profile_id in active_browsers:
                     await close_profile(profile_id)
                 return

@@ -27,21 +27,29 @@ GhostBrowser provides browser profile isolation for legitimate use cases such as
 
 ## Threat Model
 
-GhostBrowser is designed to protect against:
+### Trust boundaries and assets
 
-- **Cookie-based tracking** — Profile isolation prevents cross-profile cookie leaks
-- **Canvas/WebGL fingerprint correlation** — Per-profile noise seeds prevent canvas fingerprint correlation across profiles
-- **WebRTC IP leaks** — WebRTC is forced to proxy-only or disabled
-- **DNS leaks** — DNS prefetch and async DNS are disabled; DNS resolution goes through the configured proxy
-- **Automation detection via basic probes** — `navigator.webdriver`, CDP artifacts, `chrome.runtime`, and common DOM automation properties are hidden
-- **Data persistence leaks** — Separate IndexedDB, localStorage, sessionStorage, cache, and service worker scopes per profile
+The operator, Chromium, Playwright, the local OS, proxy providers, extensions, and the optional remote sync service are separate trust boundaries. Profile cookies, tokens, proxy credentials, fingerprint templates, browsing activity, local keys, and encrypted sync archives are sensitive assets. A compromised Playwright process, extension, unlocked host, or malicious proxy can access data within its boundary.
 
-GhostBrowser is NOT designed to protect against:
+### Mitigated threats
 
-- **Network-level fingerprinting** (TCP/IP stack, TLS cipher suites, HTTP/2 settings)
-- **Server-side behavioral analysis** (mouse movement patterns, scroll behavior, time-on-page)
-- **Account-based correlation** (login email, device registration, payment methods)
-- **IP-based geolocation and network attribution** (IP address reveals approximate location and ISP regardless of browser configuration)
+- **Cross-profile storage leakage** — each profile has a separate Chromium data directory.
+- **Direct-network fallback** — configured proxies are health-checked through an HTTPS exit-IP endpoint; QUIC, IPv6, DNS prefetch, and non-proxied WebRTC UDP paths are disabled at launch.
+- **Basic fingerprint inconsistency and automation probes** — profile values are validated for coherence and runtime patches reduce common automation markers.
+- **Profile archive exposure in transit or at rest** — local/remote sync archives are passphrase-derived AES-256-GCM payloads before they are written or uploaded. The remote service receives encrypted bytes, not the passphrase or plaintext profile data.
+- **Cloudflare credential exposure** — the normal Windows credential store uses user-scoped DPAPI. Legacy plaintext credential files require an explicit opt-in.
+
+### Storage-key limitation
+
+Live profile metadata is encrypted with a single file-based Fernet master key at `profiles_data/.master.key`, shared by all local profiles. It is not per-profile and is not DPAPI-protected. Protect the profile directory and master-key file with OS account and filesystem permissions; compromise of that key exposes all locally encrypted profile metadata.
+
+### Out of scope
+
+GhostBrowser does not protect against network-level TLS/TCP/HTTP fingerprinting, server-side behavioral or account correlation, a malicious proxy or TLS-intercepting provider, OS-level malware or memory inspection, or a compromised browser extension. It provides no anonymity or undetectability guarantee.
+
+### Implemented and future capabilities
+
+Encrypted cloud sync, a remote-sync reference server, GitHub update checks, signed-download verification, staged update application/rollback, and an SBOM endpoint are implemented repository capabilities. Deployment and operation of a remote sync or update service remain the operator's responsibility. TUF-style metadata, reproducible builds, and fuller font-metric/emoji consistency remain future work.
 
 ## Privacy Configuration
 
@@ -51,7 +59,7 @@ Users can configure the following privacy settings in their profile:
 
 | Setting | Effect | Default |
 |---------|--------|---------|
-| `webrtc_mode` | Controls WebRTC IP leak protection (`disabled`, `protected`, `unprotected`) | `protected` |
+| `webrtc_mode` | Controls WebRTC IP leak protection; only `protected`/legacy `altered` are accepted | `protected` |
 | `block_service_workers` | Blocks service workers for proxy profiles | `true` (when proxy set) |
 | `canvas_noise_seed` | Adds deterministic noise to canvas fingerprint | Random |
 | `audio_noise_seed` | Adds deterministic noise to audio fingerprint | Random |
@@ -66,7 +74,7 @@ When `privacy_mode = "high"` is set on a profile, GhostBrowser will:
 1. Disable all high-entropy APIs (WebGL, Canvas, AudioContext, Battery, Sensors, WebGPU) via content setting policies
 2. Block all third-party cookies
 3. Disable service workers entirely
-4. Set WebRTC to `disabled`
+4. Retain protected WebRTC transport (the unsupported legacy `disabled` value is normalized to protected)
 5. Strip `Accept-CH` headers for non-local origins
 
 ## Reporting Privacy Issues
