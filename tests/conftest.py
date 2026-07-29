@@ -118,10 +118,9 @@ def _no_cloudflare_accounts(monkeypatch):
 @pytest.fixture(autouse=True)
 def _reset_rate_limiters():
     """Keep process-local rate-limit state from leaking between tests."""
-    from backend.auth import RATE_LIMITERS
+    from backend.auth import reset_all_limiters
 
-    for limiter in RATE_LIMITERS.values():
-        limiter.reset()
+    reset_all_limiters()
     yield
 
 

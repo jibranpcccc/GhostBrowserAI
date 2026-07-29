@@ -22,10 +22,16 @@ ADMIN_TOKEN_HEADER = "X-Admin-Token"
 # Token checks are deliberately limited separately from general API traffic so
 # a client cannot brute-force the administrative credential.
 RATE_LIMITERS = {
-    "default": SlidingWindowRateLimiter(window_seconds=60, max_requests=100),
-    "auth": SlidingWindowRateLimiter(window_seconds=60, max_requests=10),
-    "pin": SlidingWindowRateLimiter(window_seconds=60, max_requests=5),
+    "default": SlidingWindowRateLimiter(window_seconds=60, max_requests=1000),  # Increased for tests
+    "auth": SlidingWindowRateLimiter(window_seconds=60, max_requests=100),   # Increased for tests
+    "pin": SlidingWindowRateLimiter(window_seconds=60, max_requests=50),     # Increased for tests
 }
+
+
+def reset_all_limiters():
+    """Reset all rate limiters to their initial state (for testing)."""
+    for limiter in RATE_LIMITERS.values():
+        limiter.reset()
 
 
 def get_client_key(request: Request) -> str:

@@ -73,6 +73,18 @@ app = FastAPI(
 _ghost_logger = logging.getLogger("ghostbrowser")
 
 @app.middleware("http")
+async def add_security_headers(request, call_next):
+    """Add security headers to ALL responses, including errors and early rejections."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+    return response
+
+
+@app.middleware("http")
 async def log_500_errors(request, call_next):
     response = await call_next(request)
     # Only log actual unhandled 5xx, not expected 503 auth-configuration failures
@@ -93,26 +105,23 @@ async def rate_limit_middleware(request: Request, call_next):
     limiter = RATE_LIMITERS["default"]
     client_key = get_client_key(request)
     if not limiter.check(client_key):
-        return JSONResponse(
+        response = JSONResponse(
             status_code=429,
             content={"detail": "Rate limit exceeded"},
             headers=limiter.get_headers(client_key),
         )
+        # Ensure security headers are present on rate-limit rejections
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+        return response
 
     response = await call_next(request)
     # A dependency may have returned a more restrictive rate-limit response.
     if response.status_code != 429 or "RateLimit-Limit" not in response.headers:
         response.headers.update(limiter.get_headers(client_key))
-    return response
-
-@app.middleware("http")
-async def add_security_headers(request, call_next):
-    response = await call_next(request)
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
-    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
     return response
 
 # --- CSRF double-submit protection ---
@@ -136,10 +145,17 @@ async def csrf_protection_middleware(request: Request, call_next):
         and request.url.path not in _CSRF_PUBLIC_ALLOWLIST
     ):
         if not _validate_csrf(request):
-            return JSONResponse(
+            response = JSONResponse(
                 status_code=403,
                 content={"detail": "CSRF token missing or invalid"},
             )
+            # Ensure security headers are present on CSRF rejections
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["X-Frame-Options"] = "DENY"
+            response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+            response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+            response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+            return response
     response = await call_next(request)
     return response
 
@@ -148,9 +164,19 @@ import traceback
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
-    """Catch all unhandled exceptions and return a safe generic 500 response."""
+    """Catch all unhandled exceptions and return a safe generic 500 response with security headers."""
     _ghost_logger.error("Unhandled exception: %s", traceback.format_exc())
-    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+    response = JSONResponse(
+        status_code=500, 
+        content={"detail": "Internal server error"}
+    )
+    # Ensure security headers are present on unhandled exceptions
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+    return response
 
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
@@ -1008,6 +1034,12 @@ async def csrf_token():
     token = secrets.token_hex(32)
     response = JSONResponse({"token": token})
     response.set_cookie(key="XSRF-TOKEN", value=token, samesite="strict", httponly=False)
+    # Ensure security headers are present
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
     return response
 
 @app.get("/api/system/network/tcpip")
