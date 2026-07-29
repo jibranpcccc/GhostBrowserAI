@@ -25,6 +25,8 @@ from backend.config import get_data_dir
 from backend.scheduler_manager import SchedulerManager
 # H4+H5 FIX: Move system_monitor import to top of file (was at line 569, after its first use in lifespan)
 from backend.system_monitor import system_monitor
+from backend.device_cohorts import host_os
+from backend.credential_store import store_status
 
 # --- API Routers ---
 from backend.synchronizer import router as synchronizer_router
@@ -987,12 +989,25 @@ def get_metrics(_auth: None = Depends(require_admin_token)):
         except Exception:
             pass
 
+    # Deliberately project the store status into this public contract rather
+    # than returning its provider, location, or encrypted account material.
+    try:
+        credential_status = store_status()
+        credential_store = {
+            "configured": bool(credential_status.get("configured", False)),
+            "count": int(credential_status.get("count", 0)),
+        }
+    except Exception:
+        credential_store = {"configured": False, "count": 0}
+
     return {
         "active_profiles": len(active_browsers),
         "total_profiles": len(profile_manager.list_profiles()),
         "quarantined_profiles": quarantine_count,
         "total_anomalies": anomaly_count,
-        "memory_usage_percent": system_monitor.ram_usage
+        "memory_usage_percent": system_monitor.ram_usage,
+        "host_os": host_os(),
+        "credential_store": credential_store,
     }
 
 # ---------------------------------------------------------------------------

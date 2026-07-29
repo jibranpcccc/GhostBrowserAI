@@ -6,6 +6,7 @@ dependencies.  Public routes must exactly match the documented allowlist.
 from __future__ import annotations
 
 import os
+import json
 from unittest.mock import patch
 from unittest import TestCase
 
@@ -121,6 +122,47 @@ class ApiSecurityContractTests(TestCase):
             headers={"X-Admin-Token": "test-contract-token"},
         )
         self.assertEqual(resp.status_code, 200)
+
+    def test_metrics_exposes_only_sanitized_credential_store_status(self):
+        headers = {"X-Admin-Token": "test-contract-token"}
+        raw_status = {
+            "configured": True,
+            "count": 2,
+            "provider": "windows-dpapi-user",
+            "path": "C:/private/cloudflare_accounts.secure.json",
+            "account_id": "account-id-secret",
+            "token": "token-secret",
+            "payload": "encrypted-payload-secret",
+        }
+        with patch("backend.main.store_status", return_value=raw_status):
+            response = self.client.get("/api/metrics", headers=headers)
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIsInstance(body["host_os"], str)
+        self.assertIn(body["host_os"], {"Windows", "Mac", "Linux"})
+        self.assertEqual(body["credential_store"], {"configured": True, "count": 2})
+        self.assertIsInstance(body["credential_store"]["configured"], bool)
+        self.assertIsInstance(body["credential_store"]["count"], int)
+        serialized = json.dumps(body)
+        for credential_material in (
+            "C:/private/cloudflare_accounts.secure.json",
+            "account-id-secret",
+            "token-secret",
+            "encrypted-payload-secret",
+        ):
+            self.assertNotIn(credential_material, serialized)
+
+    def test_metrics_handles_unreadable_credential_store(self):
+        headers = {"X-Admin-Token": "test-contract-token"}
+        with patch("backend.main.store_status", side_effect=OSError("unreadable")):
+            response = self.client.get("/api/metrics", headers=headers)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["credential_store"],
+            {"configured": False, "count": 0},
+        )
 
     def test_proxy_credentials_never_appear_in_profile_or_proxy_responses(self):
         secret_proxy = {
