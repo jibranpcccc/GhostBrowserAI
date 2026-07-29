@@ -1386,6 +1386,94 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
                         originalConvertToBlob.length
                     );
                 }}
+
+                // Inject the same OffscreenCanvas noise into dedicated/blob workers.
+                // Page init scripts do not run in worker realms; prepend a worker-safe
+                // bootstrap to JS Blob sources and data: worker URLs.
+                (function installWorkerCanvasBootstrap() {{
+                    const workerBootstrap = '(function(){{' +
+                        'if(typeof self!=="undefined"&&self.__ghostWorkerPatchInstalled)return;' +
+                        'try{{' +
+                        'var R={canvas_r_offset},G={canvas_g_offset},B={canvas_b_offset};' +
+                        'function noise(id,ox,oy,sw){{var d=id.data,seed=(Math.imul(R,73856093)^Math.imul(G,19349663)^Math.imul(B,83492791))>>>0;' +
+                        'var x0=(ox==null)?0:(ox|0),y0=(oy==null)?0:(oy|0),W=(sw==null)?id.width:(sw|0),iw=id.width;' +
+                        'for(var i=0;i<d.length;i+=4){{var li=i>>>2,lc=li%iw,lr=(li-lc)/iw,pi=(y0+lr)*W+(x0+lc);' +
+                        'var h=Math.imul(((pi^seed)>>>0),0x45d9f3b);h^=(h>>>16);' +
+                        'if((h&63)===0&&d[i+3]!==0){{var ch=(h>>>6)%3,dt=((h>>>8)&1)===0?-1:1,ti=i+ch;' +
+                        'd[ti]=Math.max(0,Math.min(255,d[ti]+dt));}}}}return id;}}' +
+                        'if(typeof OffscreenCanvas==="undefined"){{if(typeof self!=="undefined")self.__ghostWorkerPatchInstalled=true;return;}}' +
+                        'var proto=null;try{{var t=new OffscreenCanvas(1,1),c=t.getContext("2d");if(c)proto=Object.getPrototypeOf(c);}}catch(e){{}}' +
+                        'if(!proto){{if(typeof self!=="undefined")self.__ghostWorkerPatchInstalled=true;return;}}' +
+                        'var oGID=proto.getImageData,oCTB=OffscreenCanvas.prototype.convertToBlob;' +
+                        'proto.getImageData=function(x,y,w,h){{var img=oGID.apply(this,arguments);return noise(img,x|0,y|0,this.canvas?this.canvas.width:img.width);}};' +
+                        'OffscreenCanvas.prototype.convertToBlob=function(opts){{if(this.width===0||this.height===0)return oCTB.apply(this,arguments);' +
+                        'var cl=new OffscreenCanvas(this.width,this.height),cx=cl.getContext("2d");cx.drawImage(this,0,0);' +
+                        'var id=oGID.call(cx,0,0,cl.width,cl.height);noise(id,0,0,cl.width);cx.putImageData(id,0,0);return oCTB.call(cl,opts);}};' +
+                        'if(typeof self!=="undefined")self.__ghostWorkerPatchInstalled=true;' +
+                        '}}catch(_e){{try{{if(typeof self!=="undefined")self.__ghostWorkerPatchInstalled=true;}}catch(_e2){{}}}}' +
+                        '}})();';
+
+                    const isJsBlobType = (type) => {{
+                        const t = String(type || '').toLowerCase();
+                        return t.includes('javascript') || t.includes('ecmascript') || t === 'text/js' || t === 'application/js';
+                    }};
+
+                    const OrigBlob = typeof Blob !== 'undefined' ? Blob : null;
+                    if (OrigBlob) {{
+                        const PatchedBlob = function(parts, options) {{
+                            let nextParts = parts;
+                            let nextOptions = options;
+                            try {{
+                                const type = options && options.type;
+                                if (isJsBlobType(type)) {{
+                                    const list = parts == null ? [] : (Array.isArray(parts) ? parts.slice() : Array.from(parts));
+                                    list.unshift(workerBootstrap + '\\n');
+                                    nextParts = list;
+                                }}
+                            }} catch (_blobErr) {{}}
+                            return new OrigBlob(nextParts, nextOptions);
+                        }};
+                        PatchedBlob.prototype = OrigBlob.prototype;
+                        try {{ Object.defineProperty(PatchedBlob, 'name', {{ value: 'Blob', configurable: true }}); }} catch (_n) {{}}
+                        try {{ Object.defineProperty(PatchedBlob, 'length', {{ value: OrigBlob.length, configurable: true }}); }} catch (_l) {{}}
+                        self.Blob = PatchedBlob;
+                    }}
+
+                    const wrapWorkerCtor = (OrigCtor, name) => {{
+                        if (typeof OrigCtor !== 'function') return OrigCtor;
+                        const Wrapped = function(scriptURL, options) {{
+                            let url = scriptURL;
+                            try {{
+                                if (typeof scriptURL === 'string' && scriptURL.startsWith('data:')) {{
+                                    const comma = scriptURL.indexOf(',');
+                                    if (comma > 0) {{
+                                        const header = scriptURL.slice(0, comma);
+                                        const body = scriptURL.slice(comma + 1);
+                                        const isBase64 = /;base64/i.test(header);
+                                        if (!isBase64 && /javascript|ecmascript/i.test(header)) {{
+                                            url = header + ',' + encodeURIComponent(workerBootstrap + '\\n') + body;
+                                        }}
+                                    }}
+                                }}
+                            }} catch (_wErr) {{}}
+                            if (options === undefined) {{
+                                return new OrigCtor(url);
+                            }}
+                            return new OrigCtor(url, options);
+                        }};
+                        Wrapped.prototype = OrigCtor.prototype;
+                        try {{ Object.defineProperty(Wrapped, 'name', {{ value: name, configurable: true }}); }} catch (_wn) {{}}
+                        try {{ Object.defineProperty(Wrapped, 'length', {{ value: OrigCtor.length, configurable: true }}); }} catch (_wl) {{}}
+                        return Wrapped;
+                    }};
+
+                    if (typeof Worker !== 'undefined') {{
+                        self.Worker = wrapWorkerCtor(Worker, 'Worker');
+                    }}
+                    if (typeof SharedWorker !== 'undefined') {{
+                        self.SharedWorker = wrapWorkerCtor(SharedWorker, 'SharedWorker');
+                    }}
+                }})();
             }}
             if ({str(webgl_noise).lower()}) {{
                 const spoofedRenderer = '{ai_webgl_renderer}';
@@ -1657,6 +1745,32 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
         "wow64": False
     }
 
+    worker_canvas_patch = ""
+    if canvas_noise:
+        worker_canvas_patch = (
+            "(function(){"
+            "if(typeof self!==\"undefined\"&&self.__ghostWorkerPatchInstalled)return;"
+            "try{"
+            f"var R={int(canvas_r_offset)},G={int(canvas_g_offset)},B={int(canvas_b_offset)};"
+            "function noise(id,ox,oy,sw){var d=id.data,seed=(Math.imul(R,73856093)^Math.imul(G,19349663)^Math.imul(B,83492791))>>>0;"
+            "var x0=(ox==null)?0:(ox|0),y0=(oy==null)?0:(oy|0),W=(sw==null)?id.width:(sw|0),iw=id.width;"
+            "for(var i=0;i<d.length;i+=4){var li=i>>>2,lc=li%iw,lr=(li-lc)/iw,pi=(y0+lr)*W+(x0+lc);"
+            "var h=Math.imul(((pi^seed)>>>0),0x45d9f3b);h^=(h>>>16);"
+            "if((h&63)===0&&d[i+3]!==0){var ch=(h>>>6)%3,dt=((h>>>8)&1)===0?-1:1,ti=i+ch;"
+            "d[ti]=Math.max(0,Math.min(255,d[ti]+dt));}}}return id;}"
+            "if(typeof OffscreenCanvas===\"undefined\"){if(typeof self!==\"undefined\")self.__ghostWorkerPatchInstalled=true;return;}"
+            "var proto=null;try{var t=new OffscreenCanvas(1,1),c=t.getContext(\"2d\");if(c)proto=Object.getPrototypeOf(c);}catch(e){}"
+            "if(!proto){if(typeof self!==\"undefined\")self.__ghostWorkerPatchInstalled=true;return;}"
+            "var oGID=proto.getImageData,oCTB=OffscreenCanvas.prototype.convertToBlob;"
+            "proto.getImageData=function(x,y,w,h){var img=oGID.apply(this,arguments);return noise(img,x|0,y|0,this.canvas?this.canvas.width:img.width);};"
+            "OffscreenCanvas.prototype.convertToBlob=function(opts){if(this.width===0||this.height===0)return oCTB.apply(this,arguments);"
+            "var cl=new OffscreenCanvas(this.width,this.height),cx=cl.getContext(\"2d\");cx.drawImage(this,0,0);"
+            "var id=oGID.call(cx,0,0,cl.width,cl.height);noise(id,0,0,cl.width);cx.putImageData(id,0,0);return oCTB.call(cl,opts);};"
+            "if(typeof self!==\"undefined\")self.__ghostWorkerPatchInstalled=true;"
+            "}catch(_e){try{if(typeof self!==\"undefined\")self.__ghostWorkerPatchInstalled=true;}catch(_e2){}}"
+            "})();"
+        )
+
     return {
         "headless": playwright_headless,
         "args": args,
@@ -1669,6 +1783,7 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
         "device_scale_factor": device_scale_factor,
         "webrtc_mode": webrtc_mode,
         "spoofing_script": spoofing_script,
+        "worker_canvas_patch": worker_canvas_patch,
         "proxy_warning": None,
         "block_trackers": advanced.get("block_trackers", False),
         "extra_http_headers": extra_http_headers,
@@ -1926,6 +2041,28 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                     target_future = futures[0]
                 else:
                     target_future = profile_page_futures.get(profile_id, {}).get(owning_page)
+
+                # Prepend canvas noise bootstrap to network-loaded classic worker scripts.
+                worker_patch = config.get("worker_canvas_patch") or ""
+                if worker_patch and request.resource_type in ("worker", "sharedworker"):
+                    try:
+                        await asyncio.wait_for(target_future, timeout=3.0)
+                        response = await route.fetch()
+                        content_type = (response.headers.get("content-type") or "").lower()
+                        if "javascript" in content_type or "ecmascript" in content_type or request.url.endswith(".js"):
+                            body = await response.text()
+                            headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
+                            await route.fulfill(
+                                status=response.status,
+                                headers=headers,
+                                body=worker_patch + "\n" + body,
+                            )
+                            return
+                        await route.fulfill(response=response)
+                        return
+                    except Exception as worker_inject_err:
+                        from backend.logging_config import logger as _wlog
+                        _wlog.debug("Worker script inject skipped: %s", worker_inject_err)
             else:
                 for i in range(300):
                     try:
