@@ -19,7 +19,9 @@ function isApiUrl(resource) {
 
 function withAdminToken(headers) {
     if (!_adminToken) return headers;
-    return { ...headers, 'X-Admin-Token': _adminToken };
+    const normalizedHeaders = new Headers(headers || undefined);
+    normalizedHeaders.set('X-Admin-Token', _adminToken);
+    return normalizedHeaders;
 }
 
 // Transparently add the XSRF token to every non-GET/HEAD fetch.
@@ -28,9 +30,11 @@ window.fetch = function (...args) {
     const [resource, rawInit = {}] = args;
     const init = { ...rawInit };
     const method = (init.method || (typeof resource === 'object' ? resource.method : 'GET') || 'GET').toUpperCase();
-    if (window.XSRF_TOKEN && method !== 'GET' && method !== 'HEAD') {
-        init.headers = { ...init.headers, 'X-XSRF-Token': window.XSRF_TOKEN };
+    const headers = new Headers(init.headers || undefined);
+    if (window.XSRF_TOKEN && method !== 'GET' && method !== 'HEAD' && !headers.has('X-XSRF-Token')) {
+        headers.append('X-XSRF-Token', window.XSRF_TOKEN);
     }
+    init.headers = headers;
     if (isApiUrl(resource)) {
         init.headers = withAdminToken(init.headers);
     }
@@ -160,10 +164,11 @@ let vkCurrentInput = null;
 async function requestJson(url, options = {}, fallbackMessage = 'Request failed') {
     options = options || {};
     const method = (options.method || 'GET').toUpperCase();
+    const headers = new Headers(options.headers || undefined);
     if (window.XSRF_TOKEN && method !== 'GET' && method !== 'HEAD') {
-        options.headers = { ...options.headers, 'X-XSRF-Token': window.XSRF_TOKEN };
+        headers.append('X-XSRF-Token', window.XSRF_TOKEN);
     }
-    const response = await fetch(url, options);
+    const response = await fetch(url, { ...options, headers });
     let payload = {};
     try {
         payload = await response.json();

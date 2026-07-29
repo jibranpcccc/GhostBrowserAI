@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 from pathlib import Path
 from unittest import TestCase, mock
 
@@ -15,6 +16,70 @@ APP_JS = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
 
 
 class FrontendApiContractTests(TestCase):
+    def test_request_json_normalizes_header_init_without_mutating_callers(self):
+        script = r"""
+const fs = require('fs');
+const source = fs.readFileSync('frontend/app.js', 'utf8');
+const prefix = source.slice(0, source.indexOf('// --- Transparently add admin token'));
+
+global.document = { cookie: '' };
+const requests = [];
+global.window = {
+    XSRF_TOKEN: 'xsrf-token',
+    fetch: async (_url, options) => {
+        requests.push(options);
+        return { ok: true, json: async () => ({}) };
+    },
+};
+eval(prefix);
+window.XSRF_TOKEN = 'xsrf-token';
+global.fetch = window.fetch;
+
+const start = source.indexOf('async function requestJson');
+const firstBrace = source.indexOf('{', source.indexOf(')', start));
+let depth = 0;
+let end = firstBrace;
+for (; end < source.length; end += 1) {
+    if (source[end] === '{') depth += 1;
+    if (source[end] === '}' && --depth === 0) {
+        end += 1;
+        break;
+    }
+}
+eval(source.slice(start, end));
+
+const cases = [
+    { name: 'object', headers: { 'Content-Type': 'application/json', 'X-Caller': 'object' } },
+    { name: 'headers', headers: new Headers([['Content-Type', 'application/json'], ['X-Caller', 'headers']]) },
+    { name: 'tuples', headers: [['Content-Type', 'application/json'], ['X-Caller', 'tuples']] },
+];
+
+(async () => {
+    for (const testCase of cases) {
+        const before = Array.from(new Headers(testCase.headers).entries());
+        const options = { method: 'POST', headers: testCase.headers };
+        await requestJson('/api/test', options);
+        const sent = requests.pop().headers;
+        if (!(sent instanceof Headers)) throw new Error(`${testCase.name}: headers were not normalized`);
+        if (sent.get('content-type') !== 'application/json') throw new Error(`${testCase.name}: content type was lost`);
+        if (sent.get('x-caller') !== testCase.name) throw new Error(`${testCase.name}: caller header was lost`);
+        if (sent.get('x-xsrf-token') !== 'xsrf-token') throw new Error(`${testCase.name}: XSRF token was not appended`);
+        const after = Array.from(new Headers(testCase.headers).entries());
+        if (JSON.stringify(after) !== JSON.stringify(before)) throw new Error(`${testCase.name}: caller headers were mutated`);
+        if (options.headers !== testCase.headers) throw new Error(`${testCase.name}: options headers were replaced`);
+    }
+})().catch((error) => { console.error(error); process.exitCode = 1; });
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_every_app_api_url_has_a_matching_route_and_method(self):
         os.environ.setdefault("GHOSTBROWSER_ADMIN_TOKEN", "test-contract-token")
         from backend.main import app
