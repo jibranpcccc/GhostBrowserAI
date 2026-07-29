@@ -13,8 +13,10 @@ def get_privacy_launch_flags(advanced: dict) -> list[str]:
     """Return Chromium privacy restrictions requested by a high-privacy profile."""
     if advanced.get("privacy_mode") != "high":
         return []
+    # Do not disable UserAgentClientHint: real Chrome always exposes
+    # navigator.userAgentData, and CDP/UA metadata spoofing depends on it.
     return [
-        "--disable-features=ThirdPartyCookies,GenericSensorExtraClasses,WebGPU,ServiceWorker,UserAgentClientHint",
+        "--disable-features=ThirdPartyCookies,GenericSensorExtraClasses,WebGPU,ServiceWorker",
         "--disable-blink-features=BatteryStatus",
     ]
 
