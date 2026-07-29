@@ -64,16 +64,16 @@ function showAdminTokenPrompt(message) {
 
         const modal = document.createElement('div');
         modal.id = 'admin-token-modal';
-        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:99999;';
+        modal.className = 'admin-token-overlay';
         modal.innerHTML = `
-            <div style="background:var(--surface,#1f2937);padding:1.5rem;border-radius:8px;min-width:320px;max-width:90vw;box-shadow:0 20px 25px -5px rgba(0,0,0,0.3);font-family:sans-serif;">
-                <h3 style="margin:0 0 0.5rem 0;color:var(--text);">Admin Token Required</h3>
-                ${message ? `<p style="color:var(--danger,#ef4444);font-size:0.85rem;margin:0.25rem 0;">${escHtml(message)}</p>` : ''}
-                <p style="color:var(--text-muted);font-size:0.85rem;margin:0.25rem 0;">The backend is protected by <code style="background:rgba(255,255,255,0.1);padding:0.1rem 0.3rem;border-radius:4px;">GHOSTBROWSER_ADMIN_TOKEN</code>. Your token stays in memory only and is never persisted.</p>
-                <input id="admin-token-input" type="password" placeholder="Paste X-Admin-Token" autocomplete="off" style="width:100%;padding:0.5rem;margin:0.5rem 0;background:var(--input-bg);border:1px solid var(--border);border-radius:4px;color:var(--text);box-sizing:border-box;">
-                <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.75rem;">
-                    <button id="admin-token-cancel" style="padding:0.4rem 0.8rem;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;">Skip</button>
-                    <button id="admin-token-submit" style="padding:0.4rem 0.8rem;border-radius:4px;border:none;background:var(--primary,#6366f1);color:#fff;cursor:pointer;">Authenticate</button>
+            <div class="admin-token-dialog">
+                <h3 class="admin-token-title">Admin Token Required</h3>
+                ${message ? `<p class="admin-token-error">${escHtml(message)}</p>` : ''}
+                <p class="admin-token-copy">The backend is protected by <code>GHOSTBROWSER_ADMIN_TOKEN</code>. Your token stays in memory only and is never persisted.</p>
+                <input id="admin-token-input" class="admin-token-input" type="password" placeholder="Paste X-Admin-Token" autocomplete="off">
+                <div class="admin-token-actions">
+                    <button id="admin-token-cancel" class="admin-token-cancel">Skip</button>
+                    <button id="admin-token-submit" class="admin-token-submit">Authenticate</button>
                 </div>
             </div>
         `;
@@ -281,15 +281,11 @@ async function fetchMetrics() {
         const dot = health.querySelector('.health-dot');
         if (data.memory_usage_percent > 85) {
             dot.className = 'health-dot critical';
-            health.style.background = 'rgba(239,68,68,0.1)';
-            health.style.borderColor = 'rgba(239,68,68,0.2)';
-            health.style.color = 'var(--danger)';
+            health.classList.add('critical');
             health.querySelector('span').textContent = 'System Critical';
         } else {
             dot.className = 'health-dot healthy';
-            health.style.background = '';
-            health.style.borderColor = '';
-            health.style.color = '';
+            health.classList.remove('critical');
             health.querySelector('span').textContent = 'System Healthy';
         }
     } catch (e) {
@@ -297,9 +293,7 @@ async function fetchMetrics() {
         if (health) {
             const dot = health.querySelector('.health-dot');
             if (dot) dot.className = 'health-dot offline';
-            health.style.background = 'rgba(239,68,68,0.1)';
-            health.style.borderColor = 'rgba(239,68,68,0.2)';
-            health.style.color = 'var(--danger)';
+            health.classList.add('critical');
             const label = health.querySelector('span');
             if (label) label.textContent = 'Backend Offline';
         }
@@ -321,8 +315,7 @@ async function fetchCFStatus() {
         const offset = circumference * (1 - pct);
         const arc = document.getElementById('cf-ring-arc');
         if (arc) {
-            arc.style.strokeDashoffset = offset;
-            arc.style.transition = 'stroke-dashoffset 1s ease';
+            arc.setAttribute('stroke-dashoffset', offset);
         }
         const pctEl = document.getElementById('cf-ring-pct');
         if (pctEl) pctEl.textContent = `${Math.round(pct * 100)}%`;
@@ -411,15 +404,15 @@ function renderProfiles(profiles) {
 
     if (profiles.length === 0) {
         grid.innerHTML = '';
-        document.querySelector('.table-container').style.display = 'none';
+        document.querySelector('.table-container').hidden = true;
         const emptyState = document.getElementById('profiles-empty');
-        if (emptyState) emptyState.style.display = 'flex';
+        if (emptyState) emptyState.hidden = false;
         return;
     }
 
-    document.querySelector('.table-container').style.display = 'block';
+    document.querySelector('.table-container').hidden = false;
     const emptyState = document.getElementById('profiles-empty');
-    if (emptyState) emptyState.style.display = 'none';
+    if (emptyState) emptyState.hidden = true;
 
     const displayedProfiles = [...profiles].sort(
         (left, right) => Number(Boolean(right.pinned)) - Number(Boolean(left.pinned))
@@ -443,13 +436,13 @@ function renderProfiles(profiles) {
         const pinTitle = p.pinned ? 'Unpin profile' : 'Pin profile to top';
 
         return `
-            <tr id="card-${escAttr(id)}" class="profile-row ${p.pinned ? 'profile-row-pinned' : ''}" style="--profile-color:${profileColor}">
+            <tr id="card-${escAttr(id)}" class="profile-row ${p.pinned ? 'profile-row-pinned' : ''}" data-profile-color="${profileColor}">
                 <td><input type="checkbox" class="profile-checkbox" value="${escAttr(id)}" data-action="update-bulk-actions"></td>
                 <td>
                     <div class="td-name">
                         <div class="profile-icon-wrapper">${initials}</div>
                         <div>
-                            <div style="display: flex; align-items: center; gap: 4px;">
+                            <div class="profile-name-actions">
                                 ${escHtml(p.name)}
                                 <button class="btn-icon profile-pin-button ${p.pinned ? 'active' : ''}" data-action="toggle-profile-pin" data-profile-id="${escAttr(id)}" data-pinned="${p.pinned ? 'false' : 'true'}" title="${pinTitle}" aria-label="${pinTitle}">
                                     <svg width="13" height="13" viewBox="0 0 24 24" fill="${p.pinned ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M12 17v5M5 3h14l-3 7 3 4H5l3-4-3-7z"/></svg>
@@ -458,7 +451,7 @@ function renderProfiles(profiles) {
                                     ⚙️
                                 </button>
                             </div>
-                            <div style="display: flex; gap: 4px; margin-top: 4px;">
+                            <div class="profile-meta-row">
                                 <span class="td-id">${escHtml(idShort)}</span>
                                 ${proxyPinBadge}
                                 ${pinLockBadge}
@@ -491,9 +484,9 @@ function renderProfiles(profiles) {
                     ${isRunning
                         ? `<button class="btn-secondary btn-sm" data-action="stop-profile" data-profile-id="${escAttr(id)}">⏹ Stop</button>`
                         : `<button class="btn-primary btn-sm" data-action="launch-profile" data-profile-id="${escAttr(id)}">▶ Launch</button>`}
-                    <button class="btn-secondary btn-sm" data-action="scan-profile" data-profile-id="${escAttr(id)}" title="Scan Fingerprint Risk" aria-label="Scan fingerprint risk" style="padding: 0.25rem 0.5rem; color: var(--primary);">🛡️</button>
-                    <button class="btn-secondary btn-sm" data-action="open-metadata-modal" data-profile-id="${escAttr(id)}" title="Tags, notes and pinning" aria-label="Edit tags, notes and pinning" style="padding: 0.25rem 0.5rem;">🏷️</button>
-                    <button class="btn-secondary btn-sm" data-action="tag-profile" data-profile-id="${escAttr(id)}" title="Quick tag" aria-label="Quick tag" style="padding: 0.25rem 0.5rem;">+ Tag</button>
+                    <button class="btn-secondary btn-sm compact-action primary-action" data-action="scan-profile" data-profile-id="${escAttr(id)}" title="Scan Fingerprint Risk" aria-label="Scan fingerprint risk">🛡️</button>
+                    <button class="btn-secondary btn-sm compact-action" data-action="open-metadata-modal" data-profile-id="${escAttr(id)}" title="Tags, notes and pinning" aria-label="Edit tags, notes and pinning">🏷️</button>
+                    <button class="btn-secondary btn-sm compact-action" data-action="tag-profile" data-profile-id="${escAttr(id)}" title="Quick tag" aria-label="Quick tag">+ Tag</button>
                     <button class="btn-secondary btn-sm" data-action="clone-profile" data-profile-id="${escAttr(id)}" title="Clone Profile" aria-label="Clone profile">🧬</button>
                     <button class="btn-secondary btn-sm" data-action="open-cookie-modal" data-profile-id="${escAttr(id)}" title="Manage Cookies" aria-label="Manage cookies">🍪</button>
                     <button class="btn-secondary btn-sm" data-action="open-set-pin-modal" data-profile-id="${escAttr(id)}" title="Set PIN" aria-label="Set PIN">🔒</button>
@@ -524,14 +517,14 @@ async function toggleProfilePin(id, pinned) {
 let currentEditProfileId = null;
 
 function switchEditModalTab(tab) {
-    document.getElementById('edit-tab-overview').style.display = 'none';
-    document.getElementById('edit-tab-network').style.display = 'none';
-    document.getElementById('edit-tab-stealth').style.display = 'none';
+    document.getElementById('edit-tab-overview').classList.remove('active');
+    document.getElementById('edit-tab-network').classList.remove('active');
+    document.getElementById('edit-tab-stealth').classList.remove('active');
     document.getElementById('edit-tab-btn-overview').classList.remove('active');
     document.getElementById('edit-tab-btn-network').classList.remove('active');
     document.getElementById('edit-tab-btn-stealth').classList.remove('active');
 
-    document.getElementById(`edit-tab-${tab}`).style.display = 'block';
+    document.getElementById(`edit-tab-${tab}`).classList.add('active');
     document.getElementById(`edit-tab-btn-${tab}`).classList.add('active');
 }
 
@@ -722,8 +715,8 @@ function openSetPinModal(id) {
     document.getElementById('pin-input').value = '';
     document.getElementById('pin-confirm').value = '';
     document.getElementById('pin-error').textContent = '';
-    document.getElementById('pin-confirm-group').style.display = 'block';
-    document.getElementById('pin-remove-btn').style.display = 'inline-block';
+    document.getElementById('pin-confirm-group').hidden = false;
+    document.getElementById('pin-remove-btn').hidden = false;
     const p = allProfiles.find(x => x.id === id);
     document.getElementById('pin-modal-title').textContent = `${p?.name || 'Profile'} PIN 🔒`;
     document.getElementById('pin-save-btn').textContent = 'Save PIN';
@@ -738,8 +731,8 @@ function openPinPrompt(id) {
     document.getElementById('pin-input').value = '';
     document.getElementById('pin-confirm').value = '';
     document.getElementById('pin-error').textContent = '';
-    document.getElementById('pin-confirm-group').style.display = 'none';
-    document.getElementById('pin-remove-btn').style.display = 'none';
+    document.getElementById('pin-confirm-group').hidden = true;
+    document.getElementById('pin-remove-btn').hidden = true;
     document.getElementById('pin-modal-title').textContent = 'Enter PIN to Launch 🔒';
     document.getElementById('pin-save-btn').textContent = 'Unlock & Launch';
     document.getElementById('pin-modal').classList.add('show');
@@ -909,27 +902,25 @@ async function cloneProfile(id) {
 
 async function scanProfile(id) {
     document.getElementById('scan-modal').classList.add('show');
-    document.getElementById('scan-loading').style.display = 'block';
-    document.getElementById('scan-results').style.display = 'none';
+    document.getElementById('scan-loading').hidden = false;
+    document.getElementById('scan-results').hidden = true;
 
     try {
         const res = await fetch(`${API}/api/profiles/${id}/scan`);
         const data = await res.json();
 
         if (res.ok && data.status === 'success') {
-            document.getElementById('scan-loading').style.display = 'none';
-            document.getElementById('scan-results').style.display = 'block';
+            document.getElementById('scan-loading').hidden = true;
+            document.getElementById('scan-results').hidden = false;
 
             const scan = data.scan;
             const score = scan.ai_score || 0;
             const circle = document.getElementById('scan-circle');
             const offset = 100 - score;
-            circle.style.strokeDasharray = `${score}, 100`;
+            circle.setAttribute('stroke-dasharray', `${score}, 100`);
 
             // Color based on score
-            if (score > 80) circle.style.stroke = 'var(--primary)'; // Green
-            else if (score > 50) circle.style.stroke = '#fbbf24'; // Yellow
-            else circle.style.stroke = 'var(--danger)'; // Red
+            circle.className.baseVal = score > 80 ? 'scan-score-good' : (score > 50 ? 'scan-score-warning' : 'scan-score-danger');
 
             document.getElementById('scan-score').textContent = score;
             document.getElementById('scan-verdict').textContent = scan.overall_verdict || 'Unknown';
@@ -938,8 +929,8 @@ async function scanProfile(id) {
             // Breakdown
             const issues = scan.detected_issues || [];
             const breakdownHtml = issues.length > 0
-                ? issues.map(i => `<div style="color:var(--danger);">- ${escHtml(i)}</div>`).join('')
-                : '<div style="color:var(--primary);">No major issues detected.</div>';
+                ? issues.map(i => `<div class="scan-issue">- ${escHtml(i)}</div>`).join('')
+                : '<div class="scan-ok">No major issues detected.</div>';
             document.getElementById('scan-breakdown').innerHTML = breakdownHtml;
 
         } else {
@@ -1029,7 +1020,7 @@ function toggleSelectAll() {
     checkboxes.forEach(cb => {
         // only check if row is visible (handle search filter)
         const tr = cb.closest('tr');
-        if (tr && tr.style.display !== 'none') {
+        if (tr && !tr.hidden) {
             cb.checked = isChecked;
         }
     });
@@ -1040,9 +1031,9 @@ function updateBulkActions() {
     const checked = document.querySelectorAll('.profile-checkbox:checked').length;
     const bulkDiv = document.getElementById('bulk-actions');
     if (checked > 0) {
-        bulkDiv.style.display = 'flex';
+        bulkDiv.hidden = false;
     } else {
-        bulkDiv.style.display = 'none';
+        bulkDiv.hidden = true;
         document.getElementById('select-all').checked = false;
     }
     updateAutomationSelectionCounts();
@@ -1237,7 +1228,7 @@ function closeCreateModal() {
 function showModalSection(id) {
     ['modal-form', 'modal-progress', 'modal-success', 'modal-error'].forEach(s => {
         const el = document.getElementById(s);
-        if (el) el.style.display = s === id ? '' : 'none';
+        if (el) el.hidden = s !== id;
     });
 }
 
@@ -1415,7 +1406,7 @@ async function submitCreateProfile() {
     await delay(400);
     const preview = document.getElementById('success-profile-preview');
     const launchButton = document.getElementById('launch-created-profile-btn');
-    if (launchButton) launchButton.style.display = createdProfileId ? 'inline-flex' : 'none';
+    if (launchButton) launchButton.hidden = !createdProfileId;
     if (count > 1) {
         if (preview) {
             preview.innerHTML = `
@@ -1538,7 +1529,7 @@ async function fetchTitanProxies() {
         if (!grid) return;
 
         if (!data.proxies || data.proxies.length === 0) {
-            grid.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-muted);">No proxies found in Titan Database. Run the scraper first.</td></tr>';
+            grid.innerHTML = '<tr><td colspan="6" class="table-empty">No proxies found in Titan Database. Run the scraper first.</td></tr>';
             return;
         }
 
@@ -1552,16 +1543,16 @@ async function fetchTitanProxies() {
             }
             if (p.status === 'dead' || p.latency_ms === -1) {
                 pingColor = 'var(--danger)';
-                statusBadge = '<span style="color:var(--danger);font-size:0.75rem;font-weight:600;background:rgba(239,68,68,0.1);padding:2px 6px;border-radius:4px;">Dead</span>';
+                statusBadge = '<span class="proxy-status-dead">Dead</span>';
             }
 
             return `
                 <tr>
                     <td class="mono">${escHtml(p.ip)}</td>
                     <td class="mono">${escHtml(p.port)}</td>
-                    <td><span style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:4px;font-size:0.75rem;">${escHtml(String(p.protocol || 'unknown').toUpperCase())}</span></td>
+                    <td><span class="protocol-pill">${escHtml(String(p.protocol || 'unknown').toUpperCase())}</span></td>
                     <td>${escHtml(p.city || 'Unknown')}, ${escHtml(p.country || 'Unknown')}</td>
-                    <td class="mono" style="color:${pingColor};">${escHtml(p.latency_ms)}ms</td>
+                    <td class="mono ping-${pingColor === 'var(--success)' ? 'fast' : (pingColor === 'var(--warning)' ? 'medium' : 'slow')}">${escHtml(p.latency_ms)}ms</td>
                     <td>${statusBadge}</td>
                 </tr>
             `;
@@ -1629,7 +1620,7 @@ async function scrapeFreeProxies() {
     const btn = document.getElementById('btn-scrape-proxies');
     const originalText = btn.innerHTML;
 
-    btn.innerHTML = `<div class="spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:8px;"></div> Scraping & Testing...`;
+    btn.innerHTML = '<div class="spinner button-spinner"></div> Scraping & Testing...';
     btn.disabled = true;
     showToast('Auto-scraper started. This will take a few minutes...', 'info');
 
@@ -1776,9 +1767,7 @@ function showToast(msg, type = 'info') {
     container.appendChild(toast);
 
     setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateX(20px)';
-        toast.style.transition = 'all 0.3s ease';
+        toast.classList.add('leaving');
         setTimeout(() => toast.remove(), 300);
     }, 3500);
 }
@@ -1849,7 +1838,7 @@ function switchAutomationTab(tabName) {
 
     ['macros', 'schedules', 'cookie-robot', 'sync'].forEach(name => {
         const actions = document.getElementById(`automation-${name}-actions`);
-        if (actions) actions.style.display = name === tabName ? 'block' : 'none';
+        if (actions) actions.hidden = name !== tabName;
     });
 
     if (tabName === 'macros') fetchMacros();
@@ -1867,7 +1856,7 @@ async function fetchMacros() {
         grid.innerHTML = '';
 
         if (currentMacros.length === 0) {
-            grid.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--text-muted);">No macros found. Create one!</td></tr>`;
+            grid.innerHTML = '<tr><td colspan="4" class="table-empty">No macros found. Create one!</td></tr>';
             return;
         }
 
@@ -1876,9 +1865,9 @@ async function fetchMacros() {
             tr.innerHTML = `
                 <td><strong>${escHtml(m.name)}</strong></td>
                 <td>${escHtml(m.description) || '-'}</td>
-                <td><span class="mono" style="background:rgba(255,255,255,0.1);padding:0.2rem 0.5rem;border-radius:4px;">${Array.isArray(m.steps) ? m.steps.length : 0} steps</span></td>
+                <td><span class="mono code-pill">${Array.isArray(m.steps) ? m.steps.length : 0} steps</span></td>
                 <td>
-                    <button class="btn-secondary" style="padding:0.25rem 0.5rem;font-size:0.8rem;border-color:var(--danger);color:var(--danger);" data-action="delete-macro" data-macro-id="${escAttr(m.id)}">Delete</button>
+                    <button class="btn-secondary danger-compact-action" data-action="delete-macro" data-macro-id="${escAttr(m.id)}">Delete</button>
                 </td>
             `;
             grid.appendChild(tr);
@@ -1895,7 +1884,7 @@ async function fetchSchedules() {
         grid.innerHTML = '';
 
         if (currentSchedules.length === 0) {
-            grid.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted);">No active cron schedules.</td></tr>`;
+            grid.innerHTML = '<tr><td colspan="5" class="table-empty">No active cron schedules.</td></tr>';
             return;
         }
 
@@ -1904,12 +1893,12 @@ async function fetchSchedules() {
             const macro = currentMacros.find(m => m.id === s.macro_id);
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td><span class="mono" style="background:rgba(255,255,255,0.1);padding:0.2rem 0.5rem;border-radius:4px;">${escHtml(s.cron)}</span></td>
+                <td><span class="mono code-pill">${escHtml(s.cron)}</span></td>
                 <td>${escHtml(macro?.name || s.macro_id)}</td>
                 <td>${profileIds.includes('*') ? 'All Profiles' : profileIds.length + ' Profiles'}</td>
-                <td><span style="color:var(--success);">Active</span></td>
+                <td><span class="text-success">Active</span></td>
                 <td>
-                    <button class="btn-secondary" style="padding:0.25rem 0.5rem;font-size:0.8rem;border-color:var(--danger);color:var(--danger);" data-action="delete-schedule" data-schedule-id="${escAttr(s.id)}">Stop</button>
+                    <button class="btn-secondary danger-compact-action" data-action="delete-schedule" data-schedule-id="${escAttr(s.id)}">Stop</button>
                 </td>
             `;
             grid.appendChild(tr);
@@ -1933,9 +1922,9 @@ function updateMacroStepFields(selectEl) {
     const step = selectEl.closest('.macro-step');
     const valInput = step.querySelector('.step-value');
     if (['type', 'wait'].includes(selectEl.value)) {
-        valInput.style.display = 'block';
+        valInput.hidden = false;
     } else {
-        valInput.style.display = 'none';
+        valInput.hidden = true;
         valInput.value = '';
     }
 }
@@ -2011,14 +2000,14 @@ async function openScheduleModal() {
     // Populate profiles
     const pContainer = document.getElementById('schedule-profiles-list');
     pContainer.innerHTML = `
-        <label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0;cursor:pointer;">
+        <label class="schedule-profile-option">
             <input type="checkbox" value="*" id="schedule-all-profiles">
             <strong>* (All Existing & Future Profiles)</strong>
         </label>
     `;
 
     pContainer.insertAdjacentHTML('beforeend', allProfiles.map(p => `
-            <label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0;cursor:pointer;">
+            <label class="schedule-profile-option">
                 <input type="checkbox" class="schedule-profile-cb" value="${escAttr(p.id)}">
                 ${escHtml(p.name)}
             </label>
@@ -2158,7 +2147,7 @@ function openVirtualKeyboard(inputField) {
     vkCurrentInput = inputField;
     const keyboard = document.getElementById('virtual-keyboard');
     if (!keyboard) return;
-    keyboard.style.display = 'flex';
+    keyboard.classList.add('open');
     renderVirtualKeyboard();
     // Position after layout is computed
     requestAnimationFrame(() => {
@@ -2170,7 +2159,7 @@ function openVirtualKeyboard(inputField) {
 function closeVirtualKeyboard() {
     const keyboard = document.getElementById('virtual-keyboard');
     if (keyboard) {
-        keyboard.style.display = 'none';
+        keyboard.classList.remove('open');
         keyboard.innerHTML = '';
     }
     vkCurrentInput = null;
@@ -2194,8 +2183,7 @@ function positionVirtualKeyboard() {
     const maxLeft = window.innerWidth - keyboard.offsetWidth - pad;
     if (left > maxLeft) left = maxLeft;
     if (left < pad) left = pad;
-    keyboard.style.top = `${top}px`;
-    keyboard.style.left = `${left}px`;
+    keyboard.dataset.position = top < rect.top ? 'above' : 'below';
 }
 
 function getVirtualKeyboardLayout() {
@@ -2354,8 +2342,7 @@ function startPolling() {
 // INIT
 // =========================================================
 document.addEventListener('DOMContentLoaded', () => {
-    // Dynamic rows cannot use inline event attributes: the strict CSP permits
-    // scripts from this application but intentionally blocks unsafe-inline.
+    // Dynamic rows use delegated listeners so the strict CSP can block inline handlers.
     document.addEventListener('click', (event) => {
         const control = event.target.closest('[data-action]');
         if (!control) return;
@@ -2394,6 +2381,22 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!control) return;
         if (control.dataset.action === 'update-bulk-actions') updateBulkActions();
         if (control.dataset.action === 'set-privacy-mode') setPrivacyMode(control.dataset.profileId, control.value);
+        if (control.dataset.action === 'toggleAutoReplenish') toggleAutoReplenish();
+        if (control.dataset.action === 'applyProfileTemplate') applyProfileTemplate();
+        if (control.dataset.action === 'toggleEditProxyRemoval') toggleEditProxyRemoval();
+        if (control.dataset.action === 'updateMacroStepFields') updateMacroStepFields(control);
+    });
+    document.addEventListener('input', (event) => {
+        const control = event.target.closest('[data-action]');
+        if (!control) return;
+        if (control.dataset.action === 'filterProfiles') filterProfiles();
+        if (control.dataset.action === 'updateRangeValue') {
+            const target = document.getElementById(control.dataset.target);
+            if (target) target.textContent = control.value;
+        }
+        if (control.dataset.action === 'resetProxyTest') {
+            try { resetProxyTest(...JSON.parse(control.dataset.params || '[]')); } catch (_) {}
+        }
     });
     // Bind navigation in JavaScript as well as retaining the markup fallback.
     // This keeps sidebar controls functional in packaged and hardened runtimes
@@ -2510,7 +2513,7 @@ async function fetchCookieRobotStatus() {
                 const pct = Math.max(0, Math.min(100, Number(status.sites_visited) / Number(status.sites_total) * 100 || 0));
                 return `<div class="cookie-robot-widget">
                     <span>${escHtml(pid.slice(0,8))}: ${escHtml(status.state)}</span>
-                    <div class="warming-progress"><div class="warming-progress-bar" style="width:${pct}%"></div></div>
+                    <progress class="warming-progress" max="100" value="${pct}"></progress>
                 </div>`;
             }).join('');
         }
@@ -2590,7 +2593,7 @@ async function applyRiskBadges(profiles) {
 
 async function openSurfacesModal() {
     const modal = document.getElementById('surfaces-modal');
-    if (modal) modal.style.display = 'flex';
+    if (modal) modal.classList.add('show');
     const tbody = document.getElementById('surfaces-table-body');
     const scoreEl = document.getElementById('surfaces-score');
     if (!tbody) return;
@@ -2604,10 +2607,10 @@ async function openSurfacesModal() {
         tbody.innerHTML = surfaces.map(s => {
             const statusClass = s.status === 'protected' ? 'status-success' : (s.status === 'partial' ? 'status-warning' : 'status-danger');
             const statusLabel = s.status === 'protected' ? 'protected' : (s.status === 'partial' ? 'partial' : 'not protected');
-            return `<tr style="border-bottom:1px solid var(--border);">
-                <td style="padding:0.4rem 0;" title="${escAttr(s.notes || '')}">${escHtml(s.name)}</td>
-                <td style="padding:0.4rem 0;">${escHtml(s.category)}</td>
-                <td style="padding:0.4rem 0;"><span class="${statusClass}" style="padding:2px 6px;border-radius:99px;font-size:0.7rem;font-weight:600;">${statusLabel}</span></td>
+            return `<tr class="surface-row">
+                <td class="surface-cell" title="${escAttr(s.notes || '')}">${escHtml(s.name)}</td>
+                <td class="surface-cell">${escHtml(s.category)}</td>
+                <td class="surface-cell"><span class="surface-status ${statusClass}">${statusLabel}</span></td>
             </tr>`;
         }).join('');
     } catch (e) {
@@ -2617,7 +2620,7 @@ async function openSurfacesModal() {
 
 function closeSurfacesModal() {
     const modal = document.getElementById('surfaces-modal');
-    if (modal) modal.style.display = 'none';
+    if (modal) modal.classList.remove('show');
 }
 
 // Close modal on outside click
@@ -2635,7 +2638,7 @@ setInterval(() => {
 // =========================================================
 async function openAccessLogModal() {
     const modal = document.getElementById('access-log-modal');
-    if (modal) modal.style.display = 'flex';
+    if (modal) modal.classList.add('show');
     try {
         const data = await requestJson(`${API}/api/sites/access-log`, {}, 'Could not load access log');
         renderAccessLog(data);
@@ -2646,7 +2649,7 @@ async function openAccessLogModal() {
 
 function closeAccessLogModal() {
     const modal = document.getElementById('access-log-modal');
-    if (modal) modal.style.display = 'none';
+    if (modal) modal.classList.remove('show');
 }
 
 async function clearAccessLog() {
@@ -2670,13 +2673,13 @@ function renderAccessLog(data, errorMessage) {
     const tbody = document.getElementById('access-log-table-body');
     if (!tbody) return;
     if (errorMessage) {
-        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--danger);">Could not load access log: ${escHtml(errorMessage)}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="4" class="table-error">Could not load access log: ${escHtml(errorMessage)}</td></tr>`;
         return;
     }
     const sites = data && typeof data.sites === 'object' ? data.sites : {};
     const entries = Object.entries(sites);
     if (entries.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);">No tracked API calls yet.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" class="table-empty">No tracked API calls yet.</td></tr>';
         return;
     }
     const rows = entries.map(([origin, calls]) => {
