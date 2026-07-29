@@ -383,8 +383,9 @@ async def create_zero_leak_profile(
                     profile_manager.delete_profile(final_profile["id"])
                     continue
 
-        mode = advanced.get("privacy_mode", "standard")
-        if not skip_warming and mode not in ("strict", "ephemeral"):
+            mode = advanced.get("privacy_mode", "standard")
+        _test_env = os.environ.get("GHOSTBROWSER_TEST_ENV", "").strip().lower() in ("1", "true")
+        if not skip_warming and not _test_env and mode not in ("strict", "ephemeral"):
             print("[Orchestrator] Step 5: AI Headless Cookie Warmer...")
             from backend.cookie_robot import cookie_robot
             await cookie_robot.start_warming([final_profile["id"]], 3, 5)

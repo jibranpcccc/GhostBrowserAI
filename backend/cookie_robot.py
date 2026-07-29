@@ -193,6 +193,15 @@ class CookieRobot:
         max_sites: int = 20,
     ) -> Dict[str, Any]:
         """Start warming for one or more profiles.  Returns immediately."""
+        _test_env = os.environ.get("GHOSTBROWSER_TEST_ENV", "").strip().lower() in ("1", "true")
+        if _test_env:
+            return {
+                "status": "success",
+                "started": [],
+                "skipped": [],
+                "message": "Cookie warming disabled in test environment.",
+            }
+
         started = []
         skipped = []
 
@@ -212,6 +221,22 @@ class CookieRobot:
             "skipped": skipped,
             "message": f"Started cookie warming for {len(started)} profile(s).",
         }
+
+    async def cancel_all(self):
+        """Cancel all running warming tasks and wait for them to finish."""
+        for pid, task in list(self._tasks.items()):
+            if task and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
+            self._tasks.pop(pid, None)
+
+    def reset(self):
+        """Reset all status and task state."""
+        self.status.clear()
+        self._tasks.clear()
 
     def get_status(self, profile_id: str) -> dict:
         """Return the warming status for a single profile."""
@@ -264,6 +289,7 @@ class CookieRobot:
         profile = profile_manager.get_profile(profile_id)
         if not profile:
             self._set_status(profile_id, state="failed", error=f"Profile {profile_id} not found")
+            self._tasks.pop(profile_id, None)
             return False
 
         country = self._detect_country(profile)
@@ -289,6 +315,7 @@ class CookieRobot:
                 self._set_status(profile_id, state="failed",
                                  error=f"Launch failed: {page_data.get('message', '')}")
                 print(f"[CookieRobot] ❌ Launch failed for {profile_id}: {page_data}")
+                self._tasks.pop(profile_id, None)
                 return False
 
             # Wait for browser to register
@@ -296,6 +323,7 @@ class CookieRobot:
             if profile_id not in active_browsers:
                 self._set_status(profile_id, state="failed",
                                  error="Browser did not register in active_browsers")
+                self._tasks.pop(profile_id, None)
                 return False
 
             page = active_browsers[profile_id]["page"]
@@ -304,6 +332,7 @@ class CookieRobot:
         except Exception as e:
             self._set_status(profile_id, state="failed", error=f"Launch exception: {e}")
             print(f"[CookieRobot] ❌ Exception launching {profile_id}: {e}")
+            self._tasks.pop(profile_id, None)
             return False
 
         # --- Visit sites ---

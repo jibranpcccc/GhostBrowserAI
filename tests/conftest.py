@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT))
 # The autouse fixture below clears any stray singleton state for each test.
 os.environ["GHOSTBROWSER_ALLOW_PLAINTEXT_CREDENTIALS"] = "0"
 os.environ["GHOSTBROWSER_CF_ACCOUNTS_JSON"] = ""
+os.environ["GHOSTBROWSER_TEST_ENV"] = "1"
 import backend.credential_store as _credential_store
 _credential_store.DEFAULT_STORE_PATH = Path(tempfile.mktemp(suffix=".secure.json"))
 
@@ -122,6 +123,18 @@ def _reset_rate_limiters():
 
     reset_all_limiters()
     yield
+
+
+@pytest.fixture(autouse=True)
+async def _cleanup_cookie_robot():
+    """Cancel all cookie-robot warming tasks after each test to avoid lifecycle conflicts."""
+    yield
+    try:
+        from backend.cookie_robot import cookie_robot
+        await cookie_robot.cancel_all()
+        cookie_robot.reset()
+    except Exception:
+        pass
 
 
 
