@@ -13,6 +13,7 @@ from backend.auth import RATE_LIMITERS
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_JS = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
+INDEX_HTML = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
 
 
 class FrontendApiContractTests(TestCase):
@@ -202,6 +203,14 @@ const cases = [
         generated_sections = re.findall(r"(?:innerHTML\s*=|return\s+)`([\s\S]*?)`", APP_JS)
         self.assertNotRegex("\n".join(generated_sections), r"\son(?:click|change|input)\s*=")
 
+    def test_static_markup_has_no_inline_styles_or_event_handlers(self):
+        self.assertNotRegex(INDEX_HTML, r"\sstyle\s*=")
+        self.assertNotRegex(INDEX_HTML, r"\son[a-zA-Z]+\s*=")
+
+    def test_app_does_not_emit_inline_styles_or_mutate_cssom(self):
+        self.assertNotRegex(APP_JS, r"\sstyle\s*=")
+        self.assertNotRegex(APP_JS, r"\.style\.|\.style\s*=|cssText|setProperty\(")
+
     def test_csp_remains_strict(self):
         os.environ.setdefault("GHOSTBROWSER_ADMIN_TOKEN", "test-contract-token")
         from fastapi.testclient import TestClient
@@ -209,4 +218,5 @@ const cases = [
 
         csp = TestClient(app).get("/api/system/health").headers["Content-Security-Policy"]
         self.assertIn("script-src 'self'", csp)
-        self.assertNotIn("'unsafe-inline'", csp.split("style-src", 1)[0])
+        self.assertIn("style-src 'self'", csp)
+        self.assertNotIn("'unsafe" + "-inline'", csp)
