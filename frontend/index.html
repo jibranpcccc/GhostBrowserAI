@@ -634,8 +634,8 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Profile PIN (Optional) 🔒</label>
-                    <input type="password" id="new-profile-pin" class="form-input" placeholder="Lock this profile with a PIN" autocomplete="new-password">
-                    <div class="form-hint">Leave blank to allow launching without a PIN.</div>
+                    <input type="password" id="new-profile-pin" class="form-input" placeholder="4-6 digit PIN" autocomplete="new-password" inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6">
+                    <div class="form-hint">Optional. PINs must contain exactly 4-6 ASCII digits.</div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Privacy Mode</label>
@@ -934,11 +934,11 @@
             <input type="hidden" id="pin-profile-id">
             <div class="form-group">
                 <label>PIN</label>
-                <input type="password" id="pin-input" class="input-base" style="width:100%;" placeholder="Enter 4-128 character PIN" autocomplete="new-password">
+                <input type="password" id="pin-input" class="input-base" style="width:100%;" placeholder="Enter 4-6 digit PIN" autocomplete="new-password" inputmode="numeric">
             </div>
             <div class="form-group" id="pin-confirm-group">
                 <label>Confirm PIN</label>
-                <input type="password" id="pin-confirm" class="input-base" style="width:100%;" placeholder="Confirm PIN" autocomplete="new-password">
+                <input type="password" id="pin-confirm" class="input-base" style="width:100%;" placeholder="Confirm 4-6 digit PIN" autocomplete="new-password" inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6">
             </div>
             <div id="pin-error" style="color:var(--danger);font-size:0.85rem;min-height:1.2rem;"></div>
             <div class="modal-footer" style="margin-top: 1.5rem; justify-content: space-between;">

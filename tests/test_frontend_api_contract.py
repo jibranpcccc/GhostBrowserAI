@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest import TestCase, mock
 
 from fastapi.routing import APIRoute
+from backend.auth import RATE_LIMITERS
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -72,6 +73,49 @@ class FrontendApiContractTests(TestCase):
         response = client.post("/api/profiles", json={"name": "locked", "pin": "1234"}, headers=headers)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(create.await_args.kwargs["pin"], "1234")
+
+    @mock.patch("backend.main.profile_creator.create_zero_leak_profile", new_callable=mock.AsyncMock)
+    def test_pin_policy_accepts_boundary_values_for_create_and_bulk(self, create):
+        os.environ["GHOSTBROWSER_ADMIN_TOKEN"] = "test-contract-token"
+        create.return_value = {"status": "success", "profile": {"id": "p1", "name": "locked"}}
+        client, headers = self._client()
+        with mock.patch("backend.main.profile_manager.set_profile_pin", return_value=True):
+            for pin in ("1234", "123456"):
+                with self.subTest(pin=pin):
+                    self.assertEqual(client.post("/api/profiles", json={"name": "locked", "pin": pin}, headers=headers).status_code, 200)
+                    self.assertEqual(client.post("/api/profiles/generate/bulk", json={"base_name": "locked", "count": 1, "pin": pin}, headers=headers).status_code, 200)
+                    self.assertEqual(client.post("/api/profiles/p1/pin/set", json={"pin": pin}, headers=headers).status_code, 200)
+
+    def test_new_pin_endpoints_reject_invalid_policy_values(self):
+        os.environ["GHOSTBROWSER_ADMIN_TOKEN"] = "test-contract-token"
+        client, headers = self._client()
+
+        def post(url, payload):
+            for limiter in RATE_LIMITERS.values():
+                limiter.reset()
+            return client.post(url, json=payload, headers=headers)
+
+        for pin in ("123", "1234567", "12a4", "１２３４"):
+            with self.subTest(pin=pin):
+                responses = (
+                    post("/api/profiles", {"name": "locked", "pin": pin}),
+                    post("/api/profiles/generate/bulk", {"base_name": "locked", "pin": pin}),
+                    post("/api/profiles/p1/pin/set", {"pin": pin}),
+                )
+                for response in responses:
+                    self.assertEqual(response.status_code, 422)
+                    self.assertIn("PIN must be exactly 4-6 ASCII digits", response.text)
+
+    def test_verify_accepts_legacy_pin_values(self):
+        os.environ["GHOSTBROWSER_ADMIN_TOKEN"] = "test-contract-token"
+        client, headers = self._client()
+        with mock.patch("backend.main.profile_manager.get_profile", return_value={"id": "p1"}), mock.patch(
+            "backend.main.profile_manager.verify_profile_pin", return_value=True
+        ) as verify:
+            response = client.post("/api/profiles/p1/pin/verify", json={"pin": "legacy PIN"}, headers=headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["verified"])
+        verify.assert_called_once_with("p1", "legacy PIN")
 
     @mock.patch("backend.main.profile_creator.create_zero_leak_profile", new_callable=mock.AsyncMock)
     def test_bulk_create_retains_canonical_proxy_string(self, create):

@@ -724,6 +724,12 @@ function openSetPinModal(id) {
     document.getElementById('pin-error').textContent = '';
     document.getElementById('pin-confirm-group').style.display = 'block';
     document.getElementById('pin-remove-btn').style.display = 'inline-block';
+    const pinInput = document.getElementById('pin-input');
+    pinInput.placeholder = 'Enter 4-6 digit PIN';
+    pinInput.inputMode = 'numeric';
+    pinInput.setAttribute('pattern', '[0-9]{4,6}');
+    pinInput.setAttribute('minlength', '4');
+    pinInput.setAttribute('maxlength', '6');
     const p = allProfiles.find(x => x.id === id);
     document.getElementById('pin-modal-title').textContent = `${p?.name || 'Profile'} PIN 🔒`;
     document.getElementById('pin-save-btn').textContent = 'Save PIN';
@@ -740,6 +746,13 @@ function openPinPrompt(id) {
     document.getElementById('pin-error').textContent = '';
     document.getElementById('pin-confirm-group').style.display = 'none';
     document.getElementById('pin-remove-btn').style.display = 'none';
+    const pinInput = document.getElementById('pin-input');
+    // Legacy hashes may have been created from non-policy PINs.
+    pinInput.placeholder = 'Enter PIN';
+    pinInput.inputMode = 'text';
+    pinInput.removeAttribute('pattern');
+    pinInput.removeAttribute('minlength');
+    pinInput.removeAttribute('maxlength');
     document.getElementById('pin-modal-title').textContent = 'Enter PIN to Launch 🔒';
     document.getElementById('pin-save-btn').textContent = 'Unlock & Launch';
     document.getElementById('pin-modal').classList.add('show');
@@ -778,7 +791,7 @@ async function saveProfilePin() {
     if (!currentPinProfileId) return;
     const pin = document.getElementById('pin-input').value;
     const confirm = document.getElementById('pin-confirm').value;
-    if (!pin) { err.textContent = 'Enter a PIN.'; return; }
+    if (!/^[0-9]{4,6}$/.test(pin)) { err.textContent = 'PIN must be exactly 4-6 ASCII digits.'; return; }
     if (pin !== confirm) { err.textContent = 'PINs do not match.'; return; }
     try {
         await requestJson(`${API}/api/profiles/${currentPinProfileId}/pin/set`, {
@@ -1307,6 +1320,10 @@ async function submitCreateProfile() {
     const count = parseInt(document.getElementById('new-profile-count').value) || 1;
 
     const pinRaw = document.getElementById('new-profile-pin').value.trim() || null;
+    if (pinRaw !== null && !/^[0-9]{4,6}$/.test(pinRaw)) {
+        showToast('PIN must be exactly 4-6 ASCII digits.', 'warning');
+        return;
+    }
 
     const payload = {
         name: name,

@@ -17,7 +17,7 @@ import hmac
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-from backend.profile_manager import profile_manager
+from backend.profile_manager import is_valid_new_pin, profile_manager
 from backend.browser_manager import launch_profile, close_profile, is_profile_running, active_browsers, get_profile_cookies, set_profile_cookies, parse_proxy_string
 from backend.macro_manager import macro_manager
 from backend.macro_runner import run_macro_bulk
@@ -227,6 +227,13 @@ class CreateProfileModel(BaseModel):
             raise ValueError("name must be 120 characters or less")
         return v
 
+    @field_validator("pin")
+    @classmethod
+    def _validate_pin(cls, v):
+        if v is not None and not is_valid_new_pin(v):
+            raise ValueError("PIN must be exactly 4-6 ASCII digits")
+        return v
+
 class ProfileProxyUpdateRequest(BaseModel):
     proxy_string: Optional[str] = None
     clear_proxy: bool = False
@@ -286,6 +293,13 @@ class BulkCreateProfileModel(BaseModel):
     @classmethod
     def cap_count(cls, v):
         return max(1, min(v, 50))
+
+    @field_validator("pin")
+    @classmethod
+    def _validate_pin(cls, v):
+        if v is not None and not is_valid_new_pin(v):
+            raise ValueError("PIN must be exactly 4-6 ASCII digits")
+        return v
 
 @app.post("/api/profiles/generate/bulk")
 async def generate_bulk_profiles(data: BulkCreateProfileModel, _auth: None = Depends(require_admin_token)):
@@ -495,12 +509,25 @@ async def update_profile_tags(profile_id: str, req: ProfileTagsRequest, _auth: N
     return {"status": "success"}
 
 
-class ProfilePinRequest(BaseModel):
+class NewProfilePinRequest(BaseModel):
+    pin: str
+
+    @field_validator("pin")
+    @classmethod
+    def _validate_pin(cls, v):
+        if not is_valid_new_pin(v):
+            raise ValueError("PIN must be exactly 4-6 ASCII digits")
+        return v
+
+
+class ProfilePinVerificationRequest(BaseModel):
+    # Legacy hashes may have been created from PINs outside the current policy.
+    # Keep this request intentionally unconstrained so their owners can unlock.
     pin: str
 
 
 @app.post("/api/profiles/{profile_id}/pin/set")
-async def set_profile_pin(profile_id: str, req: ProfilePinRequest, _auth: None = Depends(require_admin_token)):
+async def set_profile_pin(profile_id: str, req: NewProfilePinRequest, _auth: None = Depends(require_admin_token)):
     if not profile_manager.set_profile_pin(profile_id, req.pin):
         raise HTTPException(status_code=404, detail="Profile not found or invalid PIN")
     return {"status": "success"}
@@ -509,7 +536,7 @@ async def set_profile_pin(profile_id: str, req: ProfilePinRequest, _auth: None =
 @app.post("/api/profiles/{profile_id}/pin/verify")
 async def verify_profile_pin(
     profile_id: str,
-    req: ProfilePinRequest,
+    req: ProfilePinVerificationRequest,
     _pin_limit: bool = Depends(check_pin_rate_limit),
     _auth: None = Depends(require_admin_token),
 ):

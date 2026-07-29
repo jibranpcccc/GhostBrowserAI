@@ -5,6 +5,7 @@ import colorsys
 import hashlib
 import hmac
 import secrets
+import re
 from datetime import datetime
 import shutil
 import sys
@@ -15,6 +16,16 @@ from backend.config import get_data_dir
 from backend.proxy_manager import guess_locale_timezone
 
 _PIN_HASH_ITERATIONS = 100_000
+_NEW_PIN_PATTERN = re.compile(r"[0-9]{4,6}\Z")
+
+
+def is_valid_new_pin(pin: str) -> bool:
+    """Return whether a newly submitted PIN meets the current policy.
+
+    Verification intentionally does not use this check: hashes created under
+    previous policies must remain usable until their owner replaces the PIN.
+    """
+    return isinstance(pin, str) and _NEW_PIN_PATTERN.fullmatch(pin) is not None
 
 
 def _hash_pin(pin: str) -> str:
@@ -389,7 +400,7 @@ class ProfileManager:
             "color": self._next_profile_color(),
             "pinned": False,
         }
-        if isinstance(pin, str) and pin:
+        if is_valid_new_pin(pin):
             profile_data["pin_hash"] = _hash_pin(pin)
 
         self.profiles[profile_id] = profile_data
@@ -433,7 +444,7 @@ class ProfileManager:
             "color": self._next_profile_color(),
             "pinned": False,
         }
-        if isinstance(pin, str) and pin:
+        if is_valid_new_pin(pin):
             profile_data["pin_hash"] = _hash_pin(pin)
 
         self.profiles[profile_id] = profile_data
@@ -588,7 +599,7 @@ class ProfileManager:
 
     def set_profile_pin(self, profile_id: str, pin: str) -> bool:
         """Store a PBKDF2 hash of the given PIN for the profile."""
-        if profile_id not in self.profiles or not isinstance(pin, str) or not pin:
+        if profile_id not in self.profiles or not is_valid_new_pin(pin):
             return False
         self.profiles[profile_id]["pin_hash"] = _hash_pin(pin)
         self._save_metadata()
