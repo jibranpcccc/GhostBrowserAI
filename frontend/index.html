@@ -599,11 +599,11 @@
 </main>
 
 <!-- CREATE PROFILE MODAL -->
-<div class="modal-overlay" id="create-modal">
+<div class="modal-overlay" id="create-modal" role="dialog" aria-modal="true" aria-labelledby="create-modal-title" aria-hidden="true">
     <div class="modal">
         <div class="modal-header">
             <div>
-                <h2 class="modal-title">Generate AI Profile</h2>
+                <h2 class="modal-title" id="create-modal-title">Generate AI Profile</h2>
                 <p class="modal-subtitle">Powered by Kimi AI via Cloudflare Workers</p>
             </div>
             <button class="modal-close" data-action="closeCreateModal" aria-label="Close profile creation dialog" title="Close">✕</button>
@@ -612,33 +612,35 @@
         <!-- Step 1: Form with Tabs -->
         <div id="modal-form" class="modal-body">
             <div class="modal-tabs">
-                <button type="button" class="modal-tab active" data-action="switchModalTab" data-params=\'["overview","__ELEMENT__"]\'>Overview</button>
-                <button type="button" class="modal-tab" data-action="switchModalTab" data-params=\'["network","__ELEMENT__"]\'>Network</button>
-                <button type="button" class="modal-tab" data-action="switchModalTab" data-params=\'["stealth","__ELEMENT__"]\'>Fingerprint Settings</button>
+                <button type="button" class="modal-tab active" data-action="switchModalTab" data-params='["overview","__ELEMENT__"]'>Overview</button>
+                <button type="button" class="modal-tab" data-action="switchModalTab" data-params='["network","__ELEMENT__"]'>Network</button>
+                <button type="button" class="modal-tab" data-action="switchModalTab" data-params='["stealth","__ELEMENT__"]'>Fingerprint Settings</button>
             </div>
 
             <!-- Tab Content: Overview -->
             <div id="tab-overview" class="tab-content active">
                 <div class="form-group">
-                    <label class="form-label">Profile Name <span class="required">*</span></label>
-                    <input type="text" id="new-profile-name" class="form-input" placeholder="e.g. Shopping Bot #1">
+                    <label class="form-label" for="new-profile-name">Profile Name <span class="required">*</span></label>
+                    <input type="text" id="new-profile-name" class="form-input" placeholder="e.g. Shopping Bot #1" maxlength="120" aria-describedby="new-profile-name-error" autocomplete="off">
+                    <div id="new-profile-name-error" class="form-error" role="alert" aria-live="polite"></div>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Quick Start Template</label>
+                    <label class="form-label" for="new-profile-template">Quick Start Template</label>
                     <select id="new-profile-template" class="form-input" data-action="applyProfileTemplate">
                         <option value="custom">Custom (Manual)</option>
-                        <option value="ecommerce">🛒 E-Commerce (Strict Stealth)</option>
-                        <option value="social">📱 Social Media (Balanced)</option>
-                        <option value="research">🔍 Research (Fast, Auto-Assign Proxy)</option>
+                        <option value="ecommerce">E-Commerce (Strict Stealth)</option>
+                        <option value="social">Social Media (Balanced)</option>
+                        <option value="research">Research (Fast Headless)</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Profile PIN (Optional) 🔒</label>
-                    <input type="password" id="new-profile-pin" class="form-input" placeholder="4-6 digit PIN" autocomplete="new-password" inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6">
-                    <div class="form-hint">Optional. PINs must contain exactly 4-6 ASCII digits.</div>
+                    <label class="form-label" for="new-profile-pin">Profile PIN (Optional)</label>
+                    <input type="password" id="new-profile-pin" class="form-input" placeholder="4-6 digit PIN" autocomplete="new-password" inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" aria-describedby="new-profile-pin-hint new-profile-pin-error">
+                    <div id="new-profile-pin-hint" class="form-hint">Optional. PINs must contain exactly 4-6 ASCII digits. Applied to single and bulk creates.</div>
+                    <div id="new-profile-pin-error" class="form-error" role="alert" aria-live="polite"></div>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Privacy Mode</label>
+                    <label class="form-label" for="new-privacy-mode">Privacy Mode</label>
                     <select id="new-privacy-mode" class="form-input">
                         <option value="standard">Standard — Full spoofing + extensions</option>
                         <option value="strict">Strict — No extensions / warming / service workers</option>
@@ -647,22 +649,30 @@
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label">Target OS</label>
+                        <label class="form-label" for="new-profile-os">Target OS</label>
                         <select id="new-profile-os" class="form-input">
-                            <option value="Windows">🪟 Windows</option>
-                            <option value="Mac">🍎 Mac</option>
+                            <option value="Windows">Windows</option>
+                            <option value="Mac">Mac</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Quantity</label>
-                            <input type="number" class="form-input quantity-input" id="new-profile-count" value="1" min="1" max="50">
+                        <label class="form-label" for="new-profile-count">Quantity (1-50)</label>
+                        <input type="number" class="form-input quantity-input" id="new-profile-count" value="1" min="1" max="50" step="1" aria-describedby="new-profile-count-error">
+                        <div id="new-profile-count-error" class="form-error" role="alert" aria-live="polite"></div>
                     </div>
                 </div>
+                <div class="bulk-quick-row top-margin" aria-label="Quick quantity presets">
+                    <button type="button" class="btn-ghost btn-sm" data-action="setCreateQuantity" data-params='[1]'>1</button>
+                    <button type="button" class="btn-ghost btn-sm" data-action="setCreateQuantity" data-params='[5]'>5</button>
+                    <button type="button" class="btn-ghost btn-sm" data-action="setCreateQuantity" data-params='[10]'>10</button>
+                    <button type="button" class="btn-ghost btn-sm" data-action="setCreateQuantity" data-params='[25]'>25</button>
+                    <button type="button" class="btn-ghost btn-sm" data-action="setCreateQuantity" data-params='[50]'>50</button>
+                </div>
                 <div class="kimi-notice top-margin">
-                    <div class="kimi-icon">🤖</div>
+                    <div class="kimi-icon">AI</div>
                     <div>
                         <strong>Powered by Kimi AI</strong>
-                        <p>A coherent, host-matched browser profile will be generated from a realistic device class.</p>
+                        <p>A coherent, host-matched browser profile will be generated from a realistic device class. Bulk creates apply the same PIN, proxy, and stealth settings to every profile.</p>
                     </div>
                 </div>
             </div>
@@ -670,10 +680,11 @@
             <!-- Tab Content: Network -->
             <div id="tab-network" class="tab-content">
                 <div class="form-group">
-                    <label class="form-label">Proxy <span class="form-label-detail">(Leave empty for direct connection)</span></label>
-                    <input type="text" id="new-profile-proxy" class="form-input mono" placeholder="ip:port or ip:port:user:pass" data-secure="true" autocomplete="off" data-action="resetProxyTest" data-params='["new-profile-proxy", "new-proxy-test-result"]'>
+                    <label class="form-label" for="new-profile-proxy">Proxy <span class="form-label-detail">(Leave empty for direct connection)</span></label>
+                    <input type="text" id="new-profile-proxy" class="form-input mono" placeholder="ip:port or ip:port:user:pass" data-secure="true" autocomplete="off" data-action="resetProxyTest" data-params='["new-profile-proxy", "new-proxy-test-result"]' aria-describedby="new-proxy-test-result new-profile-proxy-error">
                     <button type="button" class="btn-ghost half-top-margin" data-action="testEnteredProxy" data-params='["new-profile-proxy", "new-proxy-test-result"]'>Test Connection</button>
                     <div id="new-proxy-test-result" class="form-hint" aria-live="polite"></div>
+                    <div id="new-profile-proxy-error" class="form-error" role="alert" aria-live="polite"></div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">WebRTC Behavior</label>
@@ -711,7 +722,7 @@
 
             <div class="modal-footer modal-footer-spaced">
                 <button class="btn-ghost" data-action="closeCreateModal">Cancel</button>
-                <button class="btn-primary btn-glow" data-action="submitCreateProfile">
+                <button id="create-profile-submit-btn" class="btn-primary btn-glow" data-action="submitCreateProfile">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="m8 12 3 3 5-6"/></svg>
                     Generate Profile
                 </button>
@@ -760,6 +771,7 @@
             <p class="muted-copy">The backend created and validated your AI profile.</p>
             <div class="profile-preview" id="success-profile-preview"></div>
             <div class="modal-footer modal-footer-centered">
+                <button class="btn-ghost" id="view-created-profiles-btn" data-action="viewCreatedProfiles">View Profiles</button>
                 <button class="btn-ghost" data-action="closeCreateModal">Close</button>
                 <button class="btn-primary" id="launch-created-profile-btn" data-action="launchNewProfile">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
@@ -770,10 +782,11 @@
 
         <!-- Step 4: Error -->
         <div id="modal-error" class="modal-body modal-outcome" hidden>
-            <div class="error-icon">❌</div>
+            <div class="error-icon">!</div>
             <h2 class="outcome-heading">Creation Failed</h2>
             <p class="error-message text-danger" id="modal-error-msg"></p>
             <div class="modal-footer modal-footer-centered">
+                <button class="btn-ghost" data-action="viewCreatedProfiles">View Profiles</button>
                 <button class="btn-ghost" data-action="closeCreateModal">Close</button>
                 <button class="btn-primary" data-action="backToForm">Try Again</button>
             </div>

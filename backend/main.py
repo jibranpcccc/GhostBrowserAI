@@ -286,13 +286,27 @@ class BulkCreateProfileModel(BaseModel):
     count: int = 5
     proxy: Optional[dict] = None
     proxy_string: Optional[str] = None
-    advanced: Optional[dict] = None
+    advanced: Optional[AdvancedSettingsModel] = None
     pin: Optional[str] = None
+
+    @field_validator("base_name")
+    @classmethod
+    def _validate_base_name(cls, v):
+        v = v.strip() if isinstance(v, str) else ""
+        if not v:
+            raise ValueError("base_name cannot be empty")
+        if len(v) > 120:
+            raise ValueError("base_name must be 120 characters or less")
+        return v
 
     @field_validator("count")
     @classmethod
-    def cap_count(cls, v):
-        return max(1, min(v, 50))
+    def validate_count(cls, v):
+        if not isinstance(v, int) or isinstance(v, bool):
+            raise ValueError("count must be an integer between 1 and 50")
+        if v < 1 or v > 50:
+            raise ValueError("count must be between 1 and 50")
+        return v
 
     @field_validator("pin")
     @classmethod
@@ -304,18 +318,25 @@ class BulkCreateProfileModel(BaseModel):
 @app.post("/api/profiles/generate/bulk")
 async def generate_bulk_profiles(data: BulkCreateProfileModel, _auth: None = Depends(require_admin_token)):
     """Generate multiple profiles concurrently via Kimi AI, with concurrency limits."""
-    count = min(data.count, 50) # Cap at 50 to prevent overload
+    count = data.count
 
     try:
         proxy = data.proxy if data.proxy is not None else (parse_proxy_string(data.proxy_string) if data.proxy_string else None)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    advanced_dict = data.advanced.model_dump() if data.advanced else None
+
     async def create_single(i):
         name = f"{data.base_name}_{i+1}"
         try:
             async with _profile_create_sem:
-                return await profile_creator.create_zero_leak_profile(name=name, proxy=proxy, advanced_ui=data.advanced, pin=data.pin)
+                result = await profile_creator.create_zero_leak_profile(
+                    name=name, proxy=proxy, advanced_ui=advanced_dict, pin=data.pin
+                )
+            if isinstance(result, dict):
+                result.setdefault("name", name)
+            return result
         except Exception as e:
             return {"status": "error", "message": str(e), "name": name}
 
@@ -323,11 +344,22 @@ async def generate_bulk_profiles(data: BulkCreateProfileModel, _auth: None = Dep
     results = await asyncio.gather(*tasks)
 
     success_count = sum(1 for r in results if r.get("status") == "success")
+    failed_count = count - success_count
+    if success_count == count:
+        status = "success"
+    elif success_count == 0:
+        status = "error"
+    else:
+        status = "partial"
 
     return _redact_sensitive_api_data({
-        "status": "success",
+        "status": status,
         "message": f"Successfully created {success_count} out of {count} profiles",
-        "results": results
+        "total": count,
+        "success_count": success_count,
+        "succeeded": success_count,
+        "failed": failed_count,
+        "results": results,
     })
 
 @app.get("/api/profiles")

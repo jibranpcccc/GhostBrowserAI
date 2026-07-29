@@ -872,6 +872,10 @@ input[type="checkbox"]:checked::after {
     outline: none; transition: border-color 0.15s; font-family: inherit;
 }
 .form-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-glow); }
+.form-input.field-error { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.2); }
+.form-error { color: var(--danger); font-size: 0.78rem; min-height: 1.1rem; margin-top: 0.3rem; }
+.bulk-quick-row { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.bulk-quick-row .btn-sm { min-width: 2.4rem; }
 
 .stealth-toggles { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
 

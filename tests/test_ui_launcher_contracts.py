@@ -184,17 +184,31 @@ class UiLauncherContracts(unittest.TestCase):
         self.assertIn('["edit-profile-proxy"', HTML)
 
         create_body = function_body(JS, "submitCreateProfile")
-        self.assertIn("proxyWasTested('new-profile-proxy')", create_body)
+        validate_body = function_body(JS, "validateCreateProfileForm")
+        self.assertIn("proxyWasTested('new-profile-proxy')", validate_body)
+        self.assertIn("validateCreateProfileForm()", create_body)
 
     def test_bulk_create_uses_proxy_string_and_reports_partial_results(self) -> None:
         body = function_body(JS, "submitCreateProfile")
         self.assertIn("proxy_string: proxyRaw || null", body)
+        self.assertIn("pin: pinRaw", body)
         self.assertIn("profile.results", body)
         self.assertIn("failedResults", body)
         self.assertRegex(body, r"profile\.status\s*===\s*['\"]partial['\"]")
         self.assertRegex(body, r"failedResults\.length\s*>\s*0")
         self.assertIn("profile.success_count", body)
+        self.assertIn("createSubmitInFlight", body)
+        self.assertIn("validateCreateProfileForm", JS)
         self.assertNotIn("Bulk created ${count} profiles", body)
+
+    def test_create_modal_resets_and_guards_double_submit(self) -> None:
+        self.assertIn("function resetCreateModalForm", JS)
+        self.assertIn("function setChipState", JS)
+        open_body = function_body(JS, "openCreateModal")
+        self.assertIn("resetCreateModalForm()", open_body)
+        submit_body = function_body(JS, "submitCreateProfile")
+        self.assertIn("if (createSubmitInFlight) return", submit_body)
+        self.assertIn("Quantity must be a whole number from 1 to 50", JS)
 
     def test_cookie_robot_uses_backend_status_field_names(self) -> None:
         body = function_body(JS, "fetchCookieRobotStatus")

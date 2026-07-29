@@ -290,6 +290,34 @@ eval(source.slice(start, end));
     def test_credential_store_hint_states_windows_only_support(self):
         self.assertIn("Credential storage is supported on Windows only", INDEX_HTML)
 
+    def test_bulk_create_rejects_out_of_range_count(self):
+        os.environ["GHOSTBROWSER_ADMIN_TOKEN"] = "test-contract-token"
+        client, headers = self._client()
+        for count in (0, 51, -1):
+            with self.subTest(count=count):
+                for limiter in RATE_LIMITERS.values():
+                    limiter.reset()
+                response = client.post(
+                    "/api/profiles/generate/bulk",
+                    json={"base_name": "bulk", "count": count},
+                    headers=headers,
+                )
+                self.assertEqual(response.status_code, 422)
+
+    def test_bulk_create_model_forwards_pin_field(self):
+        from backend.main import BulkCreateProfileModel
+        model = BulkCreateProfileModel(base_name="locked", count=2, pin="1234")
+        self.assertEqual(model.pin, "1234")
+        self.assertEqual(model.count, 2)
+
+    def test_create_modal_markup_has_dialog_semantics_and_field_errors(self):
+        self.assertIn('role="dialog"', INDEX_HTML)
+        self.assertIn('id="create-profile-submit-btn"', INDEX_HTML)
+        self.assertIn('id="view-created-profiles-btn"', INDEX_HTML)
+        self.assertIn('id="new-profile-name-error"', INDEX_HTML)
+        self.assertIn('id="new-profile-count-error"', INDEX_HTML)
+        self.assertIn('data-action="setCreateQuantity"', INDEX_HTML)
+
     def test_polling_pauses_when_document_hidden(self):
         self.assertIn("if (document.hidden) return;", APP_JS)
 

@@ -178,7 +178,10 @@ async function requestJson(url, options = {}, fallbackMessage = 'Request failed'
     }
     if (!response.ok) {
         const detail = payload.detail || payload.message || `${fallbackMessage} (HTTP ${response.status})`;
-        throw new Error(detail);
+        const err = new Error(typeof detail === 'string' ? detail : (detail.message || fallbackMessage));
+        err.status = response.status;
+        err.detail = detail;
+        throw err;
     }
     return payload;
 }
@@ -419,15 +422,19 @@ function renderProfiles(profiles) {
     const grid = document.getElementById('profiles-grid');
     if (!grid) return;
 
+    const profilesPage = document.getElementById('page-profiles');
+    const tableContainer = profilesPage
+        ? profilesPage.querySelector('.table-container')
+        : document.querySelector('#page-profiles .table-container');
     if (profiles.length === 0) {
         grid.innerHTML = '';
-        document.querySelector('.table-container').hidden = true;
+        if (tableContainer) tableContainer.hidden = true;
         const emptyState = document.getElementById('profiles-empty');
         if (emptyState) emptyState.hidden = false;
         return;
     }
 
-    document.querySelector('.table-container').hidden = false;
+    if (tableContainer) tableContainer.hidden = false;
     const emptyState = document.getElementById('profiles-empty');
     if (emptyState) emptyState.hidden = true;
 
@@ -1228,26 +1235,116 @@ async function setPrivacyMode(id, mode) {
 // =========================================================
 // CREATE PROFILE MODAL
 // =========================================================
-function openCreateModal() {
-    document.getElementById('create-modal').classList.add('active');
+let createSubmitInFlight = false;
+let createModalTrigger = null;
+
+function setChipState(id, key, active) {
+    chipState[key] = Boolean(active);
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('active', chipState[key]);
+}
+
+function clearCreateFieldErrors() {
+    ['new-profile-name', 'new-profile-count', 'new-profile-pin', 'new-profile-proxy'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('field-error');
+        const err = document.getElementById(`${id}-error`);
+        if (err) err.textContent = '';
+    });
+}
+
+function showCreateFieldError(id, message, tabName = 'overview') {
+    const el = document.getElementById(id);
+    if (el) {
+        el.classList.add('field-error');
+        el.focus({ preventScroll: true });
+    }
+    const err = document.getElementById(`${id}-error`);
+    if (err) err.textContent = message;
+    const tabBtn = document.querySelector(`#modal-form .modal-tab[data-params*="${tabName}"]`)
+        || document.querySelector(`#modal-form .modal-tab`);
+    switchModalTab(tabName, tabBtn);
+    showToast(message, 'warning');
+}
+
+function resetCreateModalForm() {
+    clearCreateFieldErrors();
+    const nameEl = document.getElementById('new-profile-name');
+    const proxyEl = document.getElementById('new-profile-proxy');
+    const pinEl = document.getElementById('new-profile-pin');
+    const privacyEl = document.getElementById('new-privacy-mode');
+    const countEl = document.getElementById('new-profile-count');
+    const templateEl = document.getElementById('new-profile-template');
+    const webrtcEl = document.getElementById('new-profile-webrtc');
+    if (nameEl) nameEl.value = '';
+    if (proxyEl) proxyEl.value = '';
+    if (pinEl) pinEl.value = '';
+    if (privacyEl) privacyEl.value = 'standard';
+    if (countEl) countEl.value = '1';
+    if (templateEl) templateEl.value = 'custom';
+    if (webrtcEl) webrtcEl.value = 'protected';
+    setChipState('chip-canvas', 'canvas', true);
+    setChipState('chip-webgl', 'webgl', true);
+    setChipState('chip-audio', 'audio', true);
+    setChipState('chip-headless', 'headless', false);
+    setChipState('chip-trackers', 'trackers', false);
+    resetProxyTest('new-profile-proxy', 'new-proxy-test-result');
+    resetProgressSteps();
+    const preview = document.getElementById('success-profile-preview');
+    if (preview) preview.innerHTML = '';
+    const errMsg = document.getElementById('modal-error-msg');
+    if (errMsg) errMsg.textContent = '';
+    createdProfileId = null;
+    createSubmitInFlight = false;
+    const submitBtn = document.getElementById('create-profile-submit-btn');
+    if (submitBtn) submitBtn.disabled = false;
     showModalSection('modal-form');
     const overviewTab = document.querySelector('#modal-form .modal-tab');
     switchModalTab('overview', overviewTab);
-    resetProxyTest('new-profile-proxy', 'new-proxy-test-result');
+}
+
+function openCreateModal() {
+    createModalTrigger = document.activeElement;
+    resetCreateModalForm();
+    // Auto-suggest next name from existing profile count
+    try {
+        const next = Math.max(1, (allProfiles || []).length + 1);
+        const nameEl = document.getElementById('new-profile-name');
+        if (nameEl && !nameEl.value) nameEl.placeholder = `e.g. Profile ${next}`;
+        const savedCount = localStorage.getItem('gb_last_create_count');
+        const countEl = document.getElementById('new-profile-count');
+        if (countEl && savedCount && /^[0-9]+$/.test(savedCount)) {
+            const n = Math.min(50, Math.max(1, parseInt(savedCount, 10)));
+            countEl.value = String(n);
+        }
+        const savedPrivacy = localStorage.getItem('gb_last_privacy_mode');
+        const privacyEl = document.getElementById('new-privacy-mode');
+        if (privacyEl && savedPrivacy && ['standard', 'strict', 'ephemeral'].includes(savedPrivacy)) {
+            privacyEl.value = savedPrivacy;
+        }
+    } catch (_) {}
+    const modal = document.getElementById('create-modal');
+    modal.classList.add('active');
+    modal.setAttribute('aria-hidden', 'false');
+    showModalSection('modal-form');
+    setTimeout(() => {
+        const nameEl = document.getElementById('new-profile-name');
+        if (nameEl) nameEl.focus();
+    }, 50);
 }
 
 function closeCreateModal() {
-    document.getElementById('create-modal').classList.remove('active');
-    // Reset form
+    if (createSubmitInFlight) return;
+    const modal = document.getElementById('create-modal');
+    modal.classList.remove('active');
+    modal.setAttribute('aria-hidden', 'true');
     setTimeout(() => {
-        document.getElementById('new-profile-name').value = '';
-        document.getElementById('new-profile-proxy').value = '';
-        document.getElementById('new-profile-pin').value = '';
-        document.getElementById('new-privacy-mode').value = 'standard';
-        resetProxyTest('new-profile-proxy', 'new-proxy-test-result');
-        showModalSection('modal-form');
-        createdProfileId = null;
-    }, 300);
+        resetCreateModalForm();
+        if (createModalTrigger && typeof createModalTrigger.focus === 'function') {
+            try { createModalTrigger.focus(); } catch (_) {}
+        }
+        createModalTrigger = null;
+    }, 200);
 }
 
 function showModalSection(id) {
@@ -1272,66 +1369,84 @@ function removeMacroStep(el) {
     if (step) step.remove();
 }
 
-function backToForm() { showModalSection('modal-form'); }
+function backToForm() {
+    createSubmitInFlight = false;
+    const submitBtn = document.getElementById('create-profile-submit-btn');
+    if (submitBtn) submitBtn.disabled = false;
+    showModalSection('modal-form');
+}
 
-async function applyProfileTemplate() {
+function applyProfileTemplate() {
     const val = document.getElementById('new-profile-template').value;
-    const canvasChip = document.getElementById('chip-canvas');
-    const webglChip = document.getElementById('chip-webgl');
-    const audioChip = document.getElementById('chip-audio');
-    const headlessChip = document.getElementById('chip-headless');
-    const trackersChip = document.getElementById('chip-trackers');
     const webrtc = document.getElementById('new-profile-webrtc');
 
     if (val === 'ecommerce') {
-        canvasChip.classList.add('active');
-        webglChip.classList.add('active');
-        audioChip.classList.add('active');
-        headlessChip.classList.remove('active');
-        trackersChip.classList.add('active');
-        webrtc.value = 'protected';
+        setChipState('chip-canvas', 'canvas', true);
+        setChipState('chip-webgl', 'webgl', true);
+        setChipState('chip-audio', 'audio', true);
+        setChipState('chip-headless', 'headless', false);
+        setChipState('chip-trackers', 'trackers', true);
+        if (webrtc) webrtc.value = 'protected';
     } else if (val === 'social') {
-        canvasChip.classList.remove('active'); // some social flags canvas noise
-        webglChip.classList.add('active');
-        audioChip.classList.add('active');
-        headlessChip.classList.remove('active');
-        trackersChip.classList.remove('active');
-        webrtc.value = 'protected';
+        setChipState('chip-canvas', 'canvas', false);
+        setChipState('chip-webgl', 'webgl', true);
+        setChipState('chip-audio', 'audio', true);
+        setChipState('chip-headless', 'headless', false);
+        setChipState('chip-trackers', 'trackers', false);
+        if (webrtc) webrtc.value = 'protected';
     } else if (val === 'research') {
-        canvasChip.classList.remove('active');
-        webglChip.classList.remove('active');
-        audioChip.classList.remove('active');
-        headlessChip.classList.add('active');
-        trackersChip.classList.add('active');
-        webrtc.value = 'protected';
+        setChipState('chip-canvas', 'canvas', false);
+        setChipState('chip-webgl', 'webgl', false);
+        setChipState('chip-audio', 'audio', false);
+        setChipState('chip-headless', 'headless', true);
+        setChipState('chip-trackers', 'trackers', true);
+        if (webrtc) webrtc.value = 'protected';
+    } else {
+        setChipState('chip-canvas', 'canvas', true);
+        setChipState('chip-webgl', 'webgl', true);
+        setChipState('chip-audio', 'audio', true);
+        setChipState('chip-headless', 'headless', false);
+        setChipState('chip-trackers', 'trackers', false);
+        if (webrtc) webrtc.value = 'protected';
     }
 }
 
-async function submitCreateProfile() {
+function validateCreateProfileForm() {
+    clearCreateFieldErrors();
     const name = document.getElementById('new-profile-name').value.trim();
     if (!name) {
-        showToast('Please enter a profile name.', 'warning');
-        return;
+        showCreateFieldError('new-profile-name', 'Please enter a profile name.', 'overview');
+        return null;
+    }
+    if (name.length > 120) {
+        showCreateFieldError('new-profile-name', 'Name must be 120 characters or less.', 'overview');
+        return null;
+    }
+
+    const countRaw = document.getElementById('new-profile-count').value;
+    const count = Number.parseInt(String(countRaw), 10);
+    if (!Number.isInteger(count) || String(count) !== String(countRaw).trim() || count < 1 || count > 50) {
+        showCreateFieldError('new-profile-count', 'Quantity must be a whole number from 1 to 50.', 'overview');
+        return null;
+    }
+
+    const pinRaw = document.getElementById('new-profile-pin').value.trim() || null;
+    if (pinRaw !== null && !/^[0-9]{4,6}$/.test(pinRaw)) {
+        showCreateFieldError('new-profile-pin', 'PIN must be exactly 4-6 ASCII digits.', 'overview');
+        return null;
     }
 
     const proxyRaw = document.getElementById('new-profile-proxy').value.trim();
     if (proxyRaw && !proxyWasTested('new-profile-proxy')) {
-        showToast('Test this exact proxy successfully before creating the profile.', 'warning');
-        switchModalTab('network', document.querySelector('#modal-form .modal-tab:nth-child(2)'));
-        return;
-    }
-    const count = parseInt(document.getElementById('new-profile-count').value) || 1;
-
-    const pinRaw = document.getElementById('new-profile-pin').value.trim() || null;
-    if (pinRaw !== null && !/^[0-9]{4,6}$/.test(pinRaw)) {
-        showToast('PIN must be exactly 4-6 ASCII digits.', 'warning');
-        return;
+        showCreateFieldError('new-profile-proxy', 'Test this exact proxy successfully before creating the profile.', 'network');
+        return null;
     }
 
-    const payload = {
-        name: name,
-        proxy_string: proxyRaw || null,
-        pin: pinRaw,
+    return {
+        name,
+        count,
+        pinRaw,
+        proxyRaw,
         advanced: {
             os: document.getElementById('new-profile-os').value,
             webrtc_mode: document.getElementById('new-profile-webrtc').value,
@@ -1346,13 +1461,49 @@ async function submitCreateProfile() {
             screen_resolution: '1920x1080'
         }
     };
+}
 
-    // Show progress
+function formatCreateErrorDetail(detail, status) {
+    const value = detail && detail.detail !== undefined ? detail.detail : detail;
+    if (Array.isArray(value)) {
+        return value.map((item) => item.msg || item.message || JSON.stringify(item)).join('; ');
+    }
+    if (value && typeof value === 'object') {
+        return value.message || value.detail || JSON.stringify(value);
+    }
+    if (typeof value === 'string' && value) return value;
+    if (status === 401 || status === 403) return 'Authentication required. Check admin token and try again.';
+    if (status === 422) return 'Validation failed. Check name, quantity, PIN, and proxy.';
+    if (status === 429) return 'Rate limited. Wait a moment and retry.';
+    if (status === 503) return 'AI generation temporarily unavailable. Retry shortly.';
+    return `Profile creation failed (HTTP ${status || '?'})`;
+}
+
+async function submitCreateProfile() {
+    if (createSubmitInFlight) return;
+    const form = validateCreateProfileForm();
+    if (!form) return;
+
+    const { name, count, pinRaw, proxyRaw, advanced } = form;
+    try {
+        localStorage.setItem('gb_last_create_count', String(count));
+        localStorage.setItem('gb_last_privacy_mode', advanced.privacy_mode);
+    } catch (_) {}
+
+    createSubmitInFlight = true;
+    const submitBtn = document.getElementById('create-profile-submit-btn');
+    if (submitBtn) submitBtn.disabled = true;
+
+    const payload = {
+        name,
+        proxy_string: proxyRaw || null,
+        pin: pinRaw,
+        advanced
+    };
+
     showModalSection('modal-progress');
     resetProgressSteps();
-
     addLogLine(`Starting validated profile creation (${count > 1 ? 'Bulk Mode: ' + count + ' profiles' : 'Single Mode'})...`);
-
     setStepActive(1);
     addLogLine('Calling Kimi AI via Cloudflare Workers...');
 
@@ -1360,57 +1511,66 @@ async function submitCreateProfile() {
     const requestController = new AbortController();
     const requestTimeout = setTimeout(() => requestController.abort(), 120000);
     try {
-        let resPromise;
+        let data;
         if (count > 1) {
-            // Bulk creation
-            resPromise = fetch(`${API}/api/profiles/generate/bulk`, {
+            data = await requestJson(`${API}/api/profiles/generate/bulk`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 signal: requestController.signal,
                 body: JSON.stringify({
                     base_name: name,
-                    count: count,
+                    count,
                     proxy_string: proxyRaw || null,
-                    advanced: payload.advanced
+                    pin: pinRaw,
+                    advanced
                 })
-            });
+            }, 'Bulk profile creation failed');
         } else {
-            // Single creation
-            resPromise = fetch(`${API}/api/profiles/generate`, {
+            data = await requestJson(`${API}/api/profiles/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 signal: requestController.signal,
                 body: JSON.stringify(payload)
-            });
-        }
-
-        addLogLine('Request submitted. Waiting for the backend result; no unverified test claims will be shown.');
-        const res = await resPromise;
-        const data = await res.json().catch(() => ({}));
-
-        if (!res.ok) {
-            setStepError(1);
-            const detail = data.detail || data.message || `Profile creation failed (HTTP ${res.status})`;
-            addLogLine(`❌ Error: ${detail}`);
-            document.getElementById('modal-error-msg').textContent = detail;
-            showModalSection('modal-error');
-            addActivity(`Profile creation failed: ${detail}`, 'error');
-            addLogEntry('error', detail);
-            return;
+            }, 'Profile creation failed');
         }
 
         profile = data;
+        const successCount = Number(profile.success_count ?? profile.succeeded ?? 0);
         const failedResults = count > 1 && Array.isArray(profile.results)
             ? profile.results.filter(result => result.status !== 'success')
             : [];
-        if (count > 1 && (profile.status === 'partial' || profile.status === 'error' || failedResults.length > 0)) {
+        const isPartial = count > 1 && (
+            profile.status === 'partial'
+            || profile.status === 'error'
+            || failedResults.length > 0
+            || (successCount > 0 && successCount < count)
+        );
+
+        if (count > 1 && profile.status === 'error' && successCount === 0) {
             for (let step = 1; step <= 3; step++) setStepDone(step);
             setStepError(4);
-            const detail = data.message || 'Bulk creation completed only partially.';
+            const detail = profile.message || 'Bulk creation failed.';
             addLogLine(`❌ ${detail}`);
-            document.getElementById('modal-error-msg').textContent = `${detail}. Review the Profiles list for any profiles that were created.`;
+            document.getElementById('modal-error-msg').textContent = detail;
+            showModalSection('modal-error');
+            addActivity(detail, 'error');
+            createSubmitInFlight = false;
+            if (submitBtn) submitBtn.disabled = false;
+            return;
+        }
+
+        if (isPartial) {
+            for (let step = 1; step <= 3; step++) setStepDone(step);
+            setStepError(4);
+            const detail = profile.message || `Created ${successCount} of ${count} profiles.`;
+            addLogLine(`⚠️ ${detail}`);
+            document.getElementById('modal-error-msg').textContent =
+                `${detail} Open Profiles to review created items, then retry failed ones.`;
             showModalSection('modal-error');
             addActivity(detail, 'warning');
+            await fetchProfiles();
+            createSubmitInFlight = false;
+            if (submitBtn) submitBtn.disabled = false;
             return;
         }
 
@@ -1420,32 +1580,38 @@ async function submitCreateProfile() {
 
     } catch (e) {
         setStepError(1);
-        addLogLine(`❌ Network error: ${e.message}`);
         const detail = e.name === 'AbortError'
             ? 'Profile generation timed out after 120 seconds. Please retry; exhausted Kimi accounts will be skipped automatically.'
-            : 'Could not reach backend: ' + e.message;
+            : formatCreateErrorDetail(e.detail || e.message, e.status);
+        addLogLine(`❌ ${detail}`);
         document.getElementById('modal-error-msg').textContent = detail;
         showModalSection('modal-error');
+        addActivity(`Profile creation failed: ${detail}`, 'error');
+        createSubmitInFlight = false;
+        if (submitBtn) submitBtn.disabled = false;
         return;
     } finally {
         clearTimeout(requestTimeout);
     }
 
-    // Show success
     await delay(400);
     const preview = document.getElementById('success-profile-preview');
     const launchButton = document.getElementById('launch-created-profile-btn');
+    const viewButton = document.getElementById('view-created-profiles-btn');
     if (launchButton) launchButton.hidden = !createdProfileId;
+    if (viewButton) viewButton.hidden = false;
+
     if (count > 1) {
+        const successCount = Number(profile.success_count ?? profile.succeeded ?? count);
         if (preview) {
             preview.innerHTML = `
                 <b>Bulk Creation Complete</b><br>
-                ${escHtml(profile.message || 'Multiple profiles created successfully.')}<br>
-                Check the Profiles list to view them.
+                ${escHtml(profile.message || `Created ${successCount} of ${count} profiles.`)}<br>
+                Created: ${escHtml(successCount)} / ${escHtml(count)}
             `;
         }
-        addActivity(`Bulk created ${profile.success_count} profiles`, 'success');
-        addLogEntry('info', `Bulk profile creation finished.`);
+        addActivity(`Bulk created ${successCount} profiles`, 'success');
+        addLogEntry('info', `Bulk profile creation finished: ${successCount}/${count}.`);
     } else {
         if (preview) {
             preview.innerHTML = `
@@ -1461,16 +1627,36 @@ async function submitCreateProfile() {
     }
 
     showModalSection('modal-success');
-    fetchProfiles();
+    createSubmitInFlight = false;
+    if (submitBtn) submitBtn.disabled = false;
+    try {
+        await fetchProfiles();
+    } catch (_) {
+        showToast('Profiles created, but the list could not refresh yet.', 'warning');
+    }
 }
 
 async function launchNewProfile() {
     if (createdProfileId) {
+        const id = createdProfileId;
         closeCreateModal();
         navigate('profiles');
         await delay(300);
-        launchProfile(createdProfileId);
+        launchProfile(id);
     }
+}
+
+function viewCreatedProfiles() {
+    closeCreateModal();
+    navigate('profiles');
+}
+
+function setCreateQuantity(n) {
+    const countEl = document.getElementById('new-profile-count');
+    if (!countEl) return;
+    const value = Math.min(50, Math.max(1, Number.parseInt(n, 10) || 1));
+    countEl.value = String(value);
+    clearCreateFieldErrors();
 }
 
 // Progress step helpers
@@ -2442,9 +2628,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize virtual keyboard for secure inputs
     initVirtualKeyboard();
 
-    // Close modal on overlay click
-    document.getElementById('create-modal').addEventListener('click', function(e) {
-        if (e.target === this) closeCreateModal();
+    // Close modal on overlay click / Escape
+    const createModal = document.getElementById('create-modal');
+    if (createModal) {
+        createModal.addEventListener('click', function(e) {
+            if (e.target === this && !createSubmitInFlight) closeCreateModal();
+        });
+        createModal.setAttribute('aria-hidden', 'true');
+    }
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        const modal = document.getElementById('create-modal');
+        if (modal && modal.classList.contains('active') && !createSubmitInFlight) {
+            e.preventDefault();
+            closeCreateModal();
+        }
     });
 });
 
