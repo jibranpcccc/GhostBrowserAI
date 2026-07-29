@@ -71,7 +71,7 @@ The API is available at `http://127.0.0.1:8000`; its interactive schema is at
 - Proxy kill-switch prevents direct-connection fallback when a proxy fails.
 - CSRF double-submit cookie/header validation is implemented for unsafe methods (`POST`, `PUT`, `PATCH`, `DELETE`). The frontend obtains a CSRF token from `GET /api/system/csrf-token` and sends it as `X-XSRF-Token` header.
 - Content Security Policy and additional security headers are set by FastAPI middleware.
-- Profile metadata is encrypted at rest with one file-based Fernet master key (`profiles_data/.master.key`) shared by local profiles; backup archives use passphrase-derived AES-256-GCM. Cloudflare credentials use the Windows DPAPI credential store when available.
+- Profile metadata is encrypted at rest with one file-based Fernet master key (`profiles_data/.master.key.dpapi`) shared by local profiles; backup archives use passphrase-derived AES-256-GCM. Cloudflare credentials use the Windows DPAPI credential store when available.
 - No OS-level keystroke interception; the virtual keyboard is a UI-layer mitigation.
 
 ### Administrative API authentication

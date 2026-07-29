@@ -98,7 +98,7 @@ function showAdminTokenPrompt(message) {
 async function verifyAdminToken(token) {
     try {
         const res = await _originalFetch(`${API}/api/profiles`, { headers: { 'X-Admin-Token': token } });
-        return res.status !== 401;
+        return res.status !== 401 && res.status !== 403;
     } catch (_) {
         return true;
     }
@@ -1246,6 +1246,16 @@ function toggleChip(el, key) {
     el.classList.toggle('active', chipState[key]);
 }
 
+function toggleChipById(id, key) {
+    const el = document.getElementById(id);
+    if (el) toggleChip(el, key);
+}
+
+function removeMacroStep(el) {
+    const step = el.closest('.macro-step');
+    if (step) step.remove();
+}
+
 function backToForm() { showModalSection('modal-form'); }
 
 async function applyProfileTemplate() {
@@ -2365,7 +2375,19 @@ document.addEventListener('DOMContentLoaded', () => {
             'delete-macro': () => deleteMacro(macroId),
             'delete-schedule': () => deleteSchedule(scheduleId),
         };
-        if (actions[action]) actions[action]();
+        if (actions[action]) {
+            actions[action]();
+            return;
+        }
+        const fn = window[action];
+        if (typeof fn === 'function') {
+            let args = [];
+            if (control.dataset.params) {
+                try { args = JSON.parse(control.dataset.params); } catch (_) {}
+            }
+            const resolved = args.map(a => a === '__ELEMENT__' ? control : a);
+            fn(...resolved);
+        }
     });
     document.addEventListener('change', (event) => {
         const control = event.target.closest('[data-action]');
@@ -2389,6 +2411,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // Ensure the CSRF/XSRF token is available for state-changing requests.
+    ensureXsrfToken();
+
+    // Prompt for the admin token if the backend is protected.
+    ensureAdminToken();
+
     navigate('dashboard');
     startPolling();
     addLogEntry('info', 'GhostBrowser dashboard initialized');
@@ -2402,12 +2430,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialize virtual keyboard for secure inputs
     initVirtualKeyboard();
-
-    // Ensure the CSRF/XSRF token is available for state-changing requests.
-    ensureXsrfToken();
-
-    // Prompt for the admin token if the backend is protected.
-    ensureAdminToken();
 
     // Close modal on overlay click
     document.getElementById('create-modal').addEventListener('click', function(e) {
