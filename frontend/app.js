@@ -918,13 +918,9 @@ async function cloneProfile(id) {
     if(!confirm("Are you sure you want to duplicate this profile?")) return;
     showToast('Cloning profile...', 'info');
     try {
-        const res = await fetch(`${API}/api/profiles/${id}/clone`, { method: 'POST' });
-        if(res.ok) {
-            showToast('Profile Cloned!', 'success');
-            fetchProfiles();
-        } else {
-            showToast('Failed to clone', 'error');
-        }
+        await requestJson(`${API}/api/profiles/${id}/clone`, { method: 'POST' }, 'Profile clone failed');
+        showToast('Profile Cloned!', 'success');
+        fetchProfiles();
     } catch(e) {
         showToast('Clone error: ' + e.message, 'error');
     }
@@ -1026,12 +1022,11 @@ async function saveCookies() {
 
     showToast('Saving and importing cookies...', 'info');
     try {
-        const res = await fetch(`${API}/api/profiles/${currentCookieProfileId}/cookies`, {
+        const data = await requestJson(`${API}/api/profiles/${currentCookieProfileId}/cookies`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ cookies: cookies })
-        });
-        const data = await res.json();
+        }, 'Cookie import failed');
         if (data.status === 'success') {
             showToast('Cookies imported successfully!', 'success');
             closeCookieModal();
@@ -1039,7 +1034,7 @@ async function saveCookies() {
             showToast('Error: ' + data.message, 'error');
         }
     } catch (e) {
-        showToast('Network error: ' + e.message, 'error');
+        showToast('Error: ' + e.message, 'error');
     }
 }
 
@@ -1613,18 +1608,15 @@ async function importProxies() {
     if (proxies.length === 0) { showToast('No valid proxies found.', 'error'); return; }
 
     try {
-        const res = await fetch(`${API}/api/proxies`, {
+        const data = await requestJson(`${API}/api/proxies`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ proxies })
-        });
-        if (res.ok) {
-            const data = await res.json();
-            showToast(`${data.added} proxies imported!`, 'success');
-            addActivity(`${data.added} proxies added to pool`, 'success');
-            document.getElementById('proxy-import-text').value = '';
-            fetchProxies();
-        }
+        }, 'Proxy import failed');
+        showToast(`${data.added} proxies imported!`, 'success');
+        addActivity(`${data.added} proxies added to pool`, 'success');
+        document.getElementById('proxy-import-text').value = '';
+        fetchProxies();
     } catch (e) { showToast('Import failed: ' + e.message, 'error'); }
 }
 
@@ -1634,15 +1626,10 @@ async function testAllProxies() {
     if (btn) { btn.disabled = true; btn.textContent = 'Testing...'; }
     showToast('Running health check on all proxies...', 'info');
     try {
-        const res = await fetch(`${API}/api/proxies/test`, { method: 'POST' });
-        if (res.ok) {
-            const data = await res.json();
-            showToast(data.message || 'Proxy health check complete', 'success');
-            addActivity(data.message || 'Proxy health check complete', 'success');
-            fetchProxies();
-        } else {
-            showToast('Health check failed', 'error');
-        }
+        const data = await requestJson(`${API}/api/proxies/test`, { method: 'POST' }, 'Proxy health check failed');
+        showToast(data.message || 'Proxy health check complete', 'success');
+        addActivity(data.message || 'Proxy health check complete', 'success');
+        fetchProxies();
     } catch(e) {
         showToast('Health check failed: ' + e.message, 'error');
     } finally {
@@ -1659,23 +1646,16 @@ async function scrapeFreeProxies() {
     showToast('Auto-scraper started. This will take a few minutes...', 'info');
 
     try {
-        const res = await fetch(`${API}/api/proxies/scrape`, {
+        const data = await requestJson(`${API}/api/proxies/scrape`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ target_count: 50 })
-        });
-
-        if (res.ok) {
-            const data = await res.json();
-            showToast(data.message, 'success');
-            addActivity(data.message, 'success');
-            fetchProxies();
-        } else {
-            const err = await res.json();
-            showToast('Scraping failed: ' + err.detail, 'error');
-        }
+        }, 'Scraping failed');
+        showToast(data.message, 'success');
+        addActivity(data.message, 'success');
+        fetchProxies();
     } catch (e) {
-        showToast('Network error during scrape: ' + e.message, 'error');
+        showToast('Scraping failed: ' + e.message, 'error');
     } finally {
         btn.innerHTML = originalText;
         btn.disabled = false;
@@ -1841,19 +1821,14 @@ async function executeBulkMacro() {
     closeRunMacroModal();
 
     try {
-        const res = await fetch(`${API}/api/macros/run/bulk`, {
+        const data = await requestJson(`${API}/api/macros/run/bulk`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ profile_ids: checked, macro_id: macroId })
-        });
-        const data = await res.json();
-        if (res.ok) {
-            showToast(data.message, 'success');
-        } else {
-            showToast('Error: ' + data.detail, 'error');
-        }
+        }, 'Failed to execute macro');
+        showToast(data.message, 'success');
     } catch(e) {
-        showToast('Failed to start macro', 'error');
+        showToast('Error: ' + e.message, 'error');
     }
 }
 
@@ -1993,20 +1968,15 @@ async function submitCreateMacro() {
     }
 
     try {
-        const res = await fetch(`${API}/api/macros`, {
+        await requestJson(`${API}/api/macros`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, description: desc, steps })
-        });
-        if (res.ok) {
-            showToast('Macro saved successfully!', 'success');
-            closeMacroModal();
-            fetchMacros();
-        } else {
-            const data = await res.json();
-            showToast('Error: ' + data.detail, 'error');
-        }
-    } catch(e) { showToast('Error saving macro', 'error'); }
+        }, 'Failed to save macro');
+        showToast('Macro saved successfully!', 'success');
+        closeMacroModal();
+        fetchMacros();
+    } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
 async function deleteMacro(id) {
@@ -2349,16 +2319,18 @@ function virtualBackspace() {
 // =========================================================
 // AUTO REFRESH
 // =========================================================
+let _pollIntervalId = null;
+
 function startPolling() {
+    if (_pollIntervalId) return;
     fetchMetrics();
     fetchCFStatus();
 
-    // Refresh every 5 seconds
-    setInterval(() => {
+    _pollIntervalId = setInterval(() => {
+        if (document.hidden) return;
         fetchMetrics();
         fetchCFStatus();
 
-        // Only refresh profiles if on that page
         const profilesPage = document.getElementById('page-profiles');
         if (profilesPage && profilesPage.classList.contains('active')) {
             fetchProfiles();
@@ -2369,6 +2341,8 @@ function startPolling() {
             fetchTitanProxies();
             fetchProxies();
         }
+
+        fetchCookieRobotStatus();
     }, 5000);
 }
 
@@ -2662,10 +2636,6 @@ window.addEventListener('click', function(e) {
     const modal = document.getElementById('surfaces-modal');
     if (modal && e.target === modal) closeSurfacesModal();
 });
-
-setInterval(() => {
-    fetchCookieRobotStatus();
-}, 5000);
 
 // =========================================================
 // ACCESS LOG

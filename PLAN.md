@@ -196,6 +196,18 @@ Repository-side adapters/build pipelines are in place for:
 
 All implementable repository-side work is complete. No active TODOs remain.
 
+## 16. Known Non-Blocking Frontend Items
+
+These are tracked for polish but are not release blockers:
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Dashboard Live Activity empty state | **DONE** | Shows "Waiting for events..." until first activity event. |
+| Rate-limit self-throttling for polling | **DONE** | Polling pauses when `document.hidden` is true; consolidated to single `setInterval`. |
+| Fetch wrapper normalization | **DONE** | All mutation endpoints use `requestJson`; global fetch override handles headers/XSRF/admin-token. |
+| Dashboard activity feed population | **PARTIAL** | Populated by `addActivity()` calls; empty state shown before first event. |
+| Account badge responsiveness | **DONE** | Collapsed sidebar hides badges; mobile layout shows compact icons. |
+
 External runtime dependencies that the operator must provide at deploy time:
 - A deployed production instance of `sync_server/`
 - A GitHub releases bucket and signing key for automatic updates

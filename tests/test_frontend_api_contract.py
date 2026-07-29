@@ -290,6 +290,29 @@ eval(source.slice(start, end));
     def test_credential_store_hint_states_windows_only_support(self):
         self.assertIn("Credential storage is supported on Windows only", INDEX_HTML)
 
+    def test_polling_pauses_when_document_hidden(self):
+        self.assertIn("if (document.hidden) return;", APP_JS)
+
+    def test_polling_is_consolidated_to_single_interval(self):
+        intervals = re.findall(r"setInterval\([^)]+\)", APP_JS)
+        self.assertLessEqual(len(intervals), 1, "Polling must use a single consolidated setInterval")
+
+    def test_mutation_api_calls_use_requestJson(self):
+        required_patterns = [
+            ("clone profile", r"requestJson\(.*?/clone"),
+            ("save cookies", r"requestJson\(.*?/cookies"),
+            ("proxy health test", r"requestJson\(.*?/proxies/test"),
+            ("scrape proxies", r"requestJson\(.*?/proxies/scrape"),
+            ("bulk macro", r"requestJson\(.*?/macros/run/bulk"),
+            ("create macro", r"requestJson\(.*?/api/macros"),
+        ]
+        for label, pattern in required_patterns:
+            with self.subTest(endpoint=label):
+                self.assertRegex(
+                    APP_JS, pattern,
+                    f"expected requestJson call for {label}"
+                )
+
     def test_csp_remains_strict(self):
         os.environ.setdefault("GHOSTBROWSER_ADMIN_TOKEN", "test-contract-token")
         from fastapi.testclient import TestClient
