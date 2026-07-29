@@ -83,14 +83,14 @@ SURFACES: List[Dict] = [
     {
         "name": "Client hints",
         "category": "navigator",
-        "status": "partial",
-        "notes": "Relies on native Chromium headers; no explicit override.",
+        "status": "protected",
+        "notes": "CDP Emulation+Network UserAgentOverride plus JS navigator.userAgentData fallback; request headers aligned via Accept-CH opt-in routing.",
     },
     {
         "name": "Canvas fingerprint noise",
         "category": "rendering",
         "status": "protected",
-        "notes": "Stable per-profile noise in toDataURL, getImageData, toBlob.",
+        "notes": "Stable per-profile noise in toDataURL, getImageData, toBlob, OffscreenCanvas, and blob/network workers.",
     },
     {
         "name": "WebGL vendor / renderer / params",

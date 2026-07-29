@@ -1961,11 +1961,16 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                 logger.debug("Page CDP session created")
                 await session.send("Network.enable")
 
-                await session.send("Network.setUserAgentOverride", {
+                ua_override = {
                     "userAgent": config["user_agent"],
+                    "acceptLanguage": config.get("locale") or "en-US",
                     "platform": config["userAgentMetadata"]["platform"],
-                    "userAgentMetadata": config["userAgentMetadata"]
-                })
+                    "userAgentMetadata": config["userAgentMetadata"],
+                }
+                # Emulation populates navigator.userAgent / userAgentData;
+                # Network keeps request headers coherent with the same metadata.
+                await session.send("Emulation.setUserAgentOverride", ua_override)
+                await session.send("Network.setUserAgentOverride", ua_override)
                 if not future.done():
                     future.set_result(True)
                 logger.debug("CDP user-agent metadata override applied")
@@ -1977,8 +1982,8 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                 if not future.done():
                     future.set_exception(e)
                 logger.error(f"FAIL-CLOSED: CDP setup failed for page: {e}")
-                asyncio.create_task(fail_closed_profile(profile_id, context, playwright, f"CDP Network.setUserAgentOverride failed: {e}"))
-                raise RuntimeError(f"FAIL-CLOSED: CDP Network.setUserAgentOverride failed: {e}")
+                asyncio.create_task(fail_closed_profile(profile_id, context, playwright, f"CDP UserAgentOverride failed: {e}"))
+                raise RuntimeError(f"FAIL-CLOSED: CDP UserAgentOverride failed: {e}")
 
         # Listen for context close to cancel any remaining futures
         def on_context_close():
@@ -2352,6 +2357,88 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                 enumerable: false,
                 configurable: true
             });
+
+            // Ensure navigator.userAgentData exists and matches launch metadata.
+            // Playwright UA overrides can strip Client Hints; CDP Emulation should
+            // restore them, and this is the fail-closed JS fallback.
+            (function() {
+                var meta = %s;
+                if (!meta || typeof meta !== 'object') return;
+                var brands = Array.isArray(meta.brands) ? meta.brands.slice() : [];
+                var fullVersionList = Array.isArray(meta.fullVersionList) ? meta.fullVersionList.slice() : brands.slice();
+                var mobile = !!meta.mobile;
+                var platform = String(meta.platform || 'Windows');
+                function freezeBrandList(list) {
+                    return Object.freeze(list.map(function(b) {
+                        return Object.freeze({
+                            brand: String(b.brand || ''),
+                            version: String(b.version || '')
+                        });
+                    }));
+                }
+                var frozenBrands = freezeBrandList(brands);
+                var frozenFull = freezeBrandList(fullVersionList);
+                var highEntropy = {
+                    architecture: String(meta.architecture || 'x86'),
+                    bitness: String(meta.bitness || '64'),
+                    model: String(meta.model || ''),
+                    platform: platform,
+                    platformVersion: String(meta.platformVersion || ''),
+                    uaFullVersion: String(meta.fullVersion || meta.uaFullVersion || ''),
+                    fullVersionList: frozenFull,
+                    mobile: mobile,
+                    wow64: !!meta.wow64
+                };
+                function makeUAData() {
+                    var data = {
+                        brands: frozenBrands,
+                        mobile: mobile,
+                        platform: platform,
+                        getHighEntropyValues: __makeNative(function(hints) {
+                            var out = {
+                                brands: frozenBrands,
+                                mobile: mobile,
+                                platform: platform
+                            };
+                            var wanted = Array.isArray(hints) ? hints : [];
+                            for (var i = 0; i < wanted.length; i++) {
+                                var key = wanted[i];
+                                if (Object.prototype.hasOwnProperty.call(highEntropy, key)) {
+                                    out[key] = highEntropy[key];
+                                }
+                            }
+                            return Promise.resolve(out);
+                        }, 'getHighEntropyValues'),
+                        toJSON: __makeNative(function() {
+                            return { brands: frozenBrands, mobile: mobile, platform: platform };
+                        }, 'toJSON')
+                    };
+                    try {
+                        if (typeof NavigatorUAData !== 'undefined' && NavigatorUAData.prototype) {
+                            Object.setPrototypeOf(data, NavigatorUAData.prototype);
+                        }
+                    } catch (e) {}
+                    return data;
+                }
+                try {
+                    var existing = navigator.userAgentData;
+                    if (!existing || !existing.brands || !existing.brands.length) {
+                        Object.defineProperty(navigator, 'userAgentData', {
+                            get: __makeNative(function() { return makeUAData(); }, 'get userAgentData'),
+                            configurable: true,
+                            enumerable: true
+                        });
+                    }
+                } catch (e) {
+                    try {
+                        Object.defineProperty(navigator, 'userAgentData', {
+                            get: __makeNative(function() { return makeUAData(); }, 'get userAgentData'),
+                            configurable: true,
+                            enumerable: true
+                        });
+                    } catch (e2) {}
+                }
+            })();
 
             // ponytail: realistic Chromium loadTimes/csi values, wrapped or created as needed.
             function __chromeLoadTimes() {
@@ -2977,6 +3064,7 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
             });
         """ % (
             _ad_seed,
+            json.dumps(config.get("userAgentMetadata") or {}),
             str(_ad_has_device_values).lower(),
             _ad_cpu,
             _ad_mem,
