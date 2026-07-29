@@ -13,7 +13,7 @@ This plan maps the feature request against the current codebase. Items are marke
 | Profile import/export | **DONE** | `backend/profile_transfer.py` with encrypted channels. |
 | Profile tags / bulk tagging | **DONE** | Tags stored in profile metadata; add/remove/bulk endpoints + frontend badges. |
 | Bulk operations | **DONE** | `backend/bulk_operations.py` + UI. |
-| Team roles & API keys | **DONE** | `backend/team_manager.py`, `backend/api_keys.py`. |
+| Team roles | **DONE** | `backend/team_manager.py`. |
 | Cloud sync | **TODO** | No remote sync yet; only local encrypted storage. |
 
 ## 2. Keyboard/Password/Fraud Isolation (added from request)
@@ -164,7 +164,7 @@ Repository-side adapters/build pipelines are in place for:
 | SBOM generation | **DONE** | `backend/sbom.py` serves CycloneDX-ish JSON. |
 | Top-level README | **DONE** | `README.md` rewritten. |
 | CLI entry point | **DONE** | `python -m backend` works. |
-| Rate limiting | **DONE** | In-memory sliding-window middleware. |
+| Rate limiting | **DONE** | Thread-safe, process-local sliding-window limiter: 100 requests/minute per peer IP globally, 10/minute for admin-token checks, and 5/minute for PIN verification. Responses include `RateLimit-*` and `Retry-After` headers. |
 | Health/metrics endpoints | **DONE** | Extended health + metrics endpoints. |
 | PyInstaller packaging script | **DONE** | `scripts/build_executable.py`. |
 | Webhook/callback notifier | **DONE** | `backend/webhook_notifier.py` + endpoints. |
@@ -180,7 +180,7 @@ Repository-side adapters/build pipelines are in place for:
 - Removed insecure XOR fallback for profile encryption
 - Signed auto-update system with confirmation, staged apply, rollback
 - CLI entry point
-- API rate-limiting middleware
+- Thread-safe API sliding-window rate limiting with global, admin-token, and PIN-verification quotas
 - Expanded health/metrics endpoints
 - PyInstaller packaging script
 - Webhook/callback notifier

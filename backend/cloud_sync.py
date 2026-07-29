@@ -438,6 +438,14 @@ class CloudSyncClient:
         token: str,
         timeout: int = 60,
     ):
+        parsed_url = urllib.parse.urlsplit(base_url)
+        is_development_mode = os.environ.get("GHOSTBROWSER_DEV_MODE") == "1"
+        if not parsed_url.scheme or not parsed_url.netloc:
+            raise ValueError("Sync server URL must be an absolute HTTPS URL")
+        if parsed_url.scheme.lower() != "https" and not is_development_mode:
+            raise ValueError(
+                "Sync server URL must use HTTPS unless GHOSTBROWSER_DEV_MODE=1"
+            )
         self.base_url = base_url.rstrip("/")
         self.tenant_id = tenant_id
         self.device_id = device_id

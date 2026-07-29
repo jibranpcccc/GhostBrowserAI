@@ -7,7 +7,7 @@ services:
       dockerfile: sync_server/Dockerfile
     container_name: ghostbrowser-sync-server
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       # REQUIRED: set this in a .env file or via docker-compose override.
       GHOSTBROWSER_SYNC_MASTER_TOKEN: ${GHOSTBROWSER_SYNC_MASTER_TOKEN:?GHOSTBROWSER_SYNC_MASTER_TOKEN is required}
@@ -15,7 +15,7 @@ services:
       GHOSTBROWSER_SYNC_DATABASE: ${GHOSTBROWSER_SYNC_DATABASE:-/data/sync.db}
       # Optional: change archive size limit (default is 100 MiB).
       GHOSTBROWSER_SYNC_MAX_ARCHIVE_BYTES: ${GHOSTBROWSER_SYNC_MAX_ARCHIVE_BYTES:-104857600}
-      # Optional: HMAC salt used for device key derivation.
+      # Required outside development: HMAC salt used for device key derivation.
       GHOSTBROWSER_SYNC_HMAC_SALT: ${GHOSTBROWSER_SYNC_HMAC_SALT:-}
     volumes:
       - sync_data:/data

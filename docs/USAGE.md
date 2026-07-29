@@ -252,7 +252,7 @@ Transferred profiles keep fingerprints, proxies, and metadata but do not include
 
 ---
 
-## 8. Team and API Keys
+## 8. Team Management
 
 The API supports role-based access control (RBAC) for team accounts.
 
@@ -262,29 +262,16 @@ The API supports role-based access control (RBAC) for team accounts.
 |--------|--------------|
 | viewer | Read profiles, proxies, reports, dashboards. |
 | operator | Create and launch profiles, run scans, manage own proxies. |
-| admin | Full access including members, API keys, and global settings. |
+| admin | Full access including team-member management and global settings. |
 
-### Key RBAC endpoints
+### Team endpoints
 
-All endpoints require an API key header: `X-API-Key: <key>`.
+Team-management endpoints require the configured admin token in the
+`X-Admin-Token` header.
 
-- `GET /api/api-keys` — list your API keys
-- `POST /api/api-keys` — create a new API key with a role
-- `DELETE /api/api-keys/{id}` — revoke an API key
 - `GET /api/team/members` — list team members (admin)
 - `POST /api/team/members` — invite a team member (admin)
-- `PATCH /api/team/members/{id}` — change a member's role (admin)
-
-### Create an API key
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/api-keys \
-  -H "X-API-Key: <admin-key>" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"automation-service","role":"operator"}'
-```
-
-Store the returned key securely. It is shown only once.
+- `PUT /api/team/members/{id}/role` — change a member's role (admin)
 
 ---
 

@@ -20,6 +20,12 @@ FORBIDDEN_NAMES = {
     "profiles_meta.json",
     "proxies.db",
 }
+ARTIFACT_NAME = "GhostBrowser"
+DEFAULT_DIST = Path("dist") / ARTIFACT_NAME
+REQUIRED_DISTRIBUTION_FILES = (
+    f"{ARTIFACT_NAME}.exe",
+    "playwright-browsers/chrome-win64/chrome.exe",
+)
 
 
 def sha256(path: Path) -> str:
@@ -45,9 +51,8 @@ def audit_distribution(root: Path) -> dict:
             if any(pattern.search(content) for pattern in SECRET_PATTERNS):
                 problems.append(f"Possible credential material: {relative}")
         files.append({"path": relative, "size": path.stat().st_size, "sha256": sha256(path)})
-    required = ["GhostBrowser.exe", "playwright-browsers/chrome-win64/chrome.exe"]
     observed = {item["path"] for item in files}
-    for name in required:
+    for name in REQUIRED_DISTRIBUTION_FILES:
         if name not in observed:
             problems.append(f"Required release file missing: {name}")
     return {"passed": not problems, "problems": problems, "files": files}
@@ -208,7 +213,7 @@ def _run_credential_scan(root: Path) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="GhostBrowser release audit")
-    parser.add_argument("--dist", type=Path, default=Path("dist/GhostBrowser"))
+    parser.add_argument("--dist", type=Path, default=DEFAULT_DIST)
     parser.add_argument("--manifest", type=Path, default=Path("dist/release-manifest.json"))
     parser.add_argument("--skip-dist", action="store_true", help="Skip the built distribution audit")
     parser.add_argument("--skip-credentials", action="store_true", help="Skip the credential pattern scan")

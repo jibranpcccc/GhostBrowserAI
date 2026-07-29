@@ -41,7 +41,7 @@ PERMISSIONS: Dict[Role, set] = {
     Role.ADMIN: {
         "create_profile", "edit_profile", "delete_profile", "launch_profile",
         "close_profile", "view_profile", "manage_team", "lock_profile",
-        "export_profile", "import_profile", "manage_api_keys",
+        "export_profile", "import_profile",
     },
     Role.MANAGER: {
         "create_profile", "edit_profile", "launch_profile",

@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse
 from sync_server.crypto import (
     compare_token,
     derive_profile_storage_tag,
+    get_device_key_derivation_salt,
     hash_token_for_audit,
     redact_metadata,
 )
@@ -40,6 +41,7 @@ logger = logging.getLogger("ghostbrowser.sync_server")
 ENV_MASTER_TOKEN = "GHOSTBROWSER_SYNC_MASTER_TOKEN"
 ENV_DATABASE = "GHOSTBROWSER_SYNC_DATABASE"
 ENV_MAX_ARCHIVE_BYTES = "GHOSTBROWSER_SYNC_MAX_ARCHIVE_BYTES"
+ENV_BIND_HOST = "GHOSTBROWSER_SYNC_BIND_HOST"
 DEFAULT_MAX_ARCHIVE_BYTES = 100 * 1024 * 1024
 
 
@@ -305,6 +307,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Initialise store and master token once at startup."""
     global _store, _master_token
     db_path = os.environ.get(ENV_DATABASE)
+    # Validate this before accepting requests or creating persistent state.
+    get_device_key_derivation_salt()
+    bind_host = os.environ.get(ENV_BIND_HOST, "0.0.0.0")
+    if bind_host == "0.0.0.0" and os.environ.get("GHOSTBROWSER_DEV_MODE") != "1":
+        logger.warning(
+            "Sync server is configured to bind to 0.0.0.0 in production; "
+            "place it behind TLS and restrict network access."
+        )
     _store = ProfileSyncStore(database_path=db_path)
     _master_token = _get_master_token()
     logger.info(

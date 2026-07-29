@@ -35,8 +35,23 @@ jobs:
       - name: Credential pattern scan
         run: python scripts/check_credentials.py
 
+      - name: Install Chromium for release artifact
+        run: python -m playwright install chromium
+
+      - name: Build release artifact
+        run: python scripts/build_executable.py
+
+      - name: Bundle Playwright Chromium
+        shell: pwsh
+        run: |
+          $chromiumExe = python -c "from backend.config import get_installed_chromium_path; print(get_installed_chromium_path())"
+          $chromiumSource = Split-Path -Parent $chromiumExe
+          $chromiumDestination = "dist/GhostBrowser/playwright-browsers/chrome-win64"
+          New-Item -ItemType Directory -Force -Path $chromiumDestination
+          Copy-Item -Path "$chromiumSource/*" -Destination $chromiumDestination -Recurse -Force
+
       - name: Release audit
-        run: python scripts/release_audit.py --skip-dist
+        run: python scripts/release_audit.py
 
       - name: Pytest
         run: python -m pytest -q --timeout=60

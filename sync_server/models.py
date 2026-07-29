@@ -7,9 +7,24 @@ The sync server never handles plaintext archives.  All payloads treat
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 from typing import Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
+
+
+MAX_METADATA_JSON_BYTES = 10 * 1024
+MAX_METADATA_NESTING_DEPTH = 5
+
+
+def _metadata_exceeds_depth_limit(value: Any, depth: int = 0) -> bool:
+    """Return whether a JSON-compatible value nests beyond the allowed depth."""
+    if not isinstance(value, (dict, list)):
+        return False
+    if depth > MAX_METADATA_NESTING_DEPTH:
+        return True
+    values = value.values() if isinstance(value, dict) else value
+    return any(_metadata_exceeds_depth_limit(item, depth + 1) for item in values)
 
 
 class SyncArchiveUpload(BaseModel):
@@ -32,6 +47,26 @@ class SyncArchiveUpload(BaseModel):
         value = value.strip()
         if len(value) < 4:
             raise ValueError("archive_b64 is too short to be valid base64")
+        return value
+
+    @field_validator("metadata")
+    @classmethod
+    def _metadata_is_bounded(cls, value: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """Reject metadata that would be unsafe to persist as SQLite JSON."""
+        if value is None:
+            return value
+        if _metadata_exceeds_depth_limit(value):
+            raise ValueError(
+                f"metadata nesting must not exceed {MAX_METADATA_NESTING_DEPTH} levels"
+            )
+        try:
+            json_size = len(json.dumps(value).encode("utf-8"))
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError("metadata must be JSON serializable") from exc
+        if json_size > MAX_METADATA_JSON_BYTES:
+            raise ValueError(
+                f"metadata JSON must not exceed {MAX_METADATA_JSON_BYTES} bytes"
+            )
         return value
 
 

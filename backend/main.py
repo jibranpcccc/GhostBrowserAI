@@ -31,7 +31,7 @@ from backend.synchronizer import router as synchronizer_router
 from backend.profile_folders import router as profile_folders_router
 from backend.bulk_operations import router as bulk_operations_router
 from backend.cloud_sync import cloud_sync_manager, CloudSyncClient, _validate_sync_id, _get_remote_sync_client
-from backend.auth import require_admin_token
+from backend.auth import RATE_LIMITERS, check_pin_rate_limit, get_client_key, require_admin_token
 from backend.update_manager import router as update_manager_router
 from backend.sbom import router as sbom_router
 from backend.detection_score import router as detection_score_router
@@ -82,6 +82,27 @@ async def log_500_errors(request, call_next):
             request.url.path,
             request.method,
         )
+    return response
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    """Apply the general per-IP quota and expose quota state on every reply."""
+    # PIN attempts and administrative credential checks have additional,
+    # stricter dependencies; all requests still consume the global quota.
+    limiter = RATE_LIMITERS["default"]
+    client_key = get_client_key(request)
+    if not limiter.check(client_key):
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Rate limit exceeded"},
+            headers=limiter.get_headers(client_key),
+        )
+
+    response = await call_next(request)
+    # A dependency may have returned a more restrictive rate-limit response.
+    if response.status_code != 429 or "RateLimit-Limit" not in response.headers:
+        response.headers.update(limiter.get_headers(client_key))
     return response
 
 @app.middleware("http")
@@ -458,7 +479,12 @@ async def set_profile_pin(profile_id: str, req: ProfilePinRequest, _auth: None =
 
 
 @app.post("/api/profiles/{profile_id}/pin/verify")
-async def verify_profile_pin(profile_id: str, req: ProfilePinRequest, _auth: None = Depends(require_admin_token)):
+async def verify_profile_pin(
+    profile_id: str,
+    req: ProfilePinRequest,
+    _pin_limit: bool = Depends(check_pin_rate_limit),
+    _auth: None = Depends(require_admin_token),
+):
     if not profile_manager.get_profile(profile_id):
         raise HTTPException(status_code=404, detail="Profile not found")
     return {"verified": profile_manager.verify_profile_pin(profile_id, req.pin)}
@@ -1024,7 +1050,6 @@ async def legacy_remote_sync(profile_id: str, req: LegacyRemoteSyncRequest, _aut
 # --- API Routers ---
 from backend.team_manager import router as team_router
 from backend.profile_transfer import router as profile_transfer_router
-from backend.api_keys import router as api_keys_router
 from backend.cloud_sync import router as cloud_sync_router
 
 app.include_router(synchronizer_router)
@@ -1032,7 +1057,6 @@ app.include_router(profile_folders_router)
 app.include_router(bulk_operations_router)
 app.include_router(team_router)
 app.include_router(profile_transfer_router)
-app.include_router(api_keys_router)
 app.include_router(cloud_sync_router)
 app.include_router(update_manager_router)
 app.include_router(sbom_router)

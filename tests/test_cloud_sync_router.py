@@ -18,6 +18,7 @@ class CloudSyncRouterTests(TestCase):
             "GHOSTBROWSER_SYNC_TENANT_ID": os.environ.get("GHOSTBROWSER_SYNC_TENANT_ID"),
             "GHOSTBROWSER_SYNC_DEVICE_ID": os.environ.get("GHOSTBROWSER_SYNC_DEVICE_ID"),
             "GHOSTBROWSER_SYNC_REMOTE_TOKEN": os.environ.get("GHOSTBROWSER_SYNC_REMOTE_TOKEN"),
+            "GHOSTBROWSER_DEV_MODE": os.environ.get("GHOSTBROWSER_DEV_MODE"),
         }
         os.environ.update({
             "GHOSTBROWSER_ADMIN_TOKEN": self.ADMIN_TOKEN,
@@ -25,6 +26,7 @@ class CloudSyncRouterTests(TestCase):
             "GHOSTBROWSER_SYNC_TENANT_ID": "tenant-1",
             "GHOSTBROWSER_SYNC_DEVICE_ID": "device-a",
             "GHOSTBROWSER_SYNC_REMOTE_TOKEN": "token-secret",
+            "GHOSTBROWSER_DEV_MODE": "1",
         })
 
     def tearDown(self):

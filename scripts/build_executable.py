@@ -96,7 +96,7 @@ def build(args: argparse.Namespace) -> int:
     project_root = _find_project_root()
     _find_entrypoint(project_root)
 
-    name = "ghostbrowser-backend"
+    name = "GhostBrowser"
 
     # Determine bundle and console modes.
     if args.onefile and args.onedir:
@@ -198,8 +198,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--output-dir",
-        default="dist/ghostbrowser",
-        help="Directory for PyInstaller output (default: dist/ghostbrowser).",
+        default="dist/GhostBrowser",
+        help="Directory for PyInstaller output (default: dist/GhostBrowser).",
     )
     args = parser.parse_args(argv)
 

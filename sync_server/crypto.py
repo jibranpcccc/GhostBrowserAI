@@ -22,6 +22,40 @@ from typing import Any
 _PBKDF2_ITERATIONS = 100_000
 _DEVICE_KEY_DERIVATION_SALT_ENV = "GHOSTBROWSER_SYNC_HMAC_SALT"
 _SAFE_ID_RE = re.compile(r"^[A-Za-z0-9_.@-]{1,128}$")
+_SENSITIVE_METADATA_KEYS = frozenset(
+    {
+        "token",
+        "api_key",
+        "api-key",
+        "apikey",
+        "secret",
+        "password",
+        "passwd",
+        "authorization",
+        "auth",
+        "credential",
+        "credentials",
+        "key",
+        "private_key",
+        "private-key",
+        # Retain the existing protection for these sensitive metadata fields.
+        "passphrase",
+        "archive",
+        "plaintext",
+    }
+)
+
+
+def get_device_key_derivation_salt() -> bytes:
+    """Return the configured HMAC salt, allowing a fallback only in development."""
+    secret = os.environ.get(_DEVICE_KEY_DERIVATION_SALT_ENV, "").encode("utf-8")
+    if secret:
+        return secret
+    if os.environ.get("GHOSTBROWSER_DEV_MODE") == "1":
+        return b"__GHOSTBROWSER_SYNC_FALLBACK_SALT__"
+    raise RuntimeError(
+        f"{_DEVICE_KEY_DERIVATION_SALT_ENV} must be set outside development mode"
+    )
 
 
 def _safe_identifier(value: str, name: str = "identifier") -> str:
@@ -51,12 +85,7 @@ def derive_device_key(tenant_id: str, profile_id: str, device_id: str) -> bytes:
     profile_id = _safe_identifier(profile_id, "profile_id")
     device_id = _safe_identifier(device_id, "device_id")
 
-    secret = os.environ.get(_DEVICE_KEY_DERIVATION_SALT_ENV, "").encode("utf-8")
-    if not secret:
-        # A deterministic fallback is acceptable only because this derivation
-        # is not the master security boundary; the actual archive is encrypted
-        # with a client-side passphrase.  Production must set the env salt.
-        secret = b"__GHOSTBROWSER_SYNC_FALLBACK_SALT__"
+    secret = get_device_key_derivation_salt()
 
     label = "|".join((tenant_id, profile_id, device_id)).encode("utf-8")
     return hmac.new(secret, label, hashlib.sha256).digest()
@@ -81,8 +110,19 @@ def hash_token_for_audit(token: str) -> str:
 
 
 def redact_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
-    """Return a deep copy of *metadata* with any suspicious keys dropped."""
+    """Return a deep copy with sensitive keys removed at every nesting level."""
     if not isinstance(metadata, dict):
         return {}
-    banned = {"archive", "plaintext", "password", "passphrase", "secret"}
-    return {k: v for k, v in metadata.items() if k.lower() not in banned}
+
+    def _redact(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: _redact(item)
+                for key, item in value.items()
+                if not (isinstance(key, str) and key.lower() in _SENSITIVE_METADATA_KEYS)
+            }
+        if isinstance(value, list):
+            return [_redact(item) for item in value]
+        return value
+
+    return _redact(metadata)

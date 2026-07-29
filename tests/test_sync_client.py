@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import unittest
 from unittest.mock import patch, MagicMock
 
@@ -28,6 +29,16 @@ class FakeHTTPResponse(io.BytesIO):
 
 
 class TestCloudSyncClient(unittest.TestCase):
+    def setUp(self):
+        self._original_dev_mode = os.environ.get("GHOSTBROWSER_DEV_MODE")
+        os.environ["GHOSTBROWSER_DEV_MODE"] = "1"
+
+    def tearDown(self):
+        if self._original_dev_mode is None:
+            os.environ.pop("GHOSTBROWSER_DEV_MODE", None)
+        else:
+            os.environ["GHOSTBROWSER_DEV_MODE"] = self._original_dev_mode
+
     def _client(self):
         return CloudSyncClient(
             base_url="http://127.0.0.1:8080",
@@ -41,6 +52,21 @@ class TestCloudSyncClient(unittest.TestCase):
         if suffix:
             return f"{base}/{suffix.lstrip('/')}"
         return base
+
+    def test_http_url_rejected_outside_development_mode(self):
+        os.environ.pop("GHOSTBROWSER_DEV_MODE", None)
+        with self.assertRaisesRegex(ValueError, "must use HTTPS"):
+            self._client()
+
+    def test_https_url_accepted_outside_development_mode(self):
+        os.environ.pop("GHOSTBROWSER_DEV_MODE", None)
+        client = CloudSyncClient(
+            base_url="https://sync.example.test",
+            tenant_id="tenant-test",
+            device_id="device-test",
+            token="test-token",
+        )
+        self.assertEqual(client.base_url, "https://sync.example.test")
 
     @patch("urllib.request.urlopen")
     def test_upload_profile(self, mock_urlopen):

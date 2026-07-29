@@ -15,6 +15,7 @@ import uuid
 
 def _set_test_env():
     os.environ.setdefault("GHOSTBROWSER_SYNC_MASTER_TOKEN", "test-master-token-" + uuid.uuid4().hex)
+    os.environ.setdefault("GHOSTBROWSER_SYNC_HMAC_SALT", "test-hmac-salt-" + uuid.uuid4().hex)
 
 
 _set_test_env()
@@ -176,6 +177,62 @@ class TestSyncServer(unittest.TestCase):
         data = response.json()
         self.assertNotIn("password", data["metadata"])
         self.assertIn("version", data["metadata"])
+
+    def test_nested_sensitive_metadata_keys_are_redacted(self):
+        tenant_id = "tenant-9"
+        profile_id = "profile-nested-meta"
+        device_id = "device-1"
+        archive_b64 = base64.b64encode(b"nested-meta-archive").decode("ascii")
+        metadata = {
+            "version": "3",
+            "details": {
+                "ToKeN": "do-not-store",
+                "safe": "retained",
+                "items": [{"API-KEY": "do-not-store", "name": "retained"}],
+            },
+        }
+
+        response = self.client.post(
+            self._url(tenant_id, profile_id, device_id),
+            json={"archive_b64": archive_b64, "metadata": metadata},
+            headers=self.headers,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.get(
+            self._url(tenant_id, profile_id, device_id),
+            headers=self.headers,
+        )
+        self.assertEqual(response.status_code, 200)
+        metadata = response.json()["metadata"]
+        self.assertEqual(metadata["version"], "3")
+        self.assertEqual(metadata["details"]["safe"], "retained")
+        self.assertEqual(metadata["details"]["items"][0]["name"], "retained")
+        self.assertNotIn("ToKeN", metadata["details"])
+        self.assertNotIn("API-KEY", metadata["details"]["items"][0])
+
+    def test_metadata_larger_than_ten_kib_is_rejected(self):
+        response = self.client.post(
+            self._url("tenant-10", "profile-large-meta", "device-1"),
+            json={"archive_b64": "YWJjZA==", "metadata": {"note": "x" * (10 * 1024)}},
+            headers=self.headers,
+        )
+        self.assertEqual(response.status_code, 422)
+
+    def test_metadata_deeper_than_five_levels_is_rejected(self):
+        metadata = {}
+        current = metadata
+        for _ in range(6):
+            child = {}
+            current["nested"] = child
+            current = child
+
+        response = self.client.post(
+            self._url("tenant-11", "profile-deep-meta", "device-1"),
+            json={"archive_b64": "YWJjZA==", "metadata": metadata},
+            headers=self.headers,
+        )
+        self.assertEqual(response.status_code, 422)
 
 
 if __name__ == "__main__":

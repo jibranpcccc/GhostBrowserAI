@@ -13,9 +13,46 @@ import os
 
 from fastapi import HTTPException, Request
 
+from backend.rate_limiter import SlidingWindowRateLimiter
+
 
 ADMIN_TOKEN_ENV = "GHOSTBROWSER_ADMIN_TOKEN"
 ADMIN_TOKEN_HEADER = "X-Admin-Token"
+
+# Token checks are deliberately limited separately from general API traffic so
+# a client cannot brute-force the administrative credential.
+RATE_LIMITERS = {
+    "default": SlidingWindowRateLimiter(window_seconds=60, max_requests=100),
+    "auth": SlidingWindowRateLimiter(window_seconds=60, max_requests=10),
+    "pin": SlidingWindowRateLimiter(window_seconds=60, max_requests=5),
+}
+
+
+def get_client_key(request: Request) -> str:
+    """Return the peer IP without trusting spoofable forwarding headers."""
+    return request.client.host if request.client else "unknown"
+
+
+def check_rate_limit(request: Request, limiter_name: str = "default") -> bool:
+    """FastAPI dependency which rejects requests after their quota is spent."""
+    try:
+        limiter = RATE_LIMITERS[limiter_name]
+    except KeyError as exc:
+        raise ValueError(f"Unknown rate limiter: {limiter_name}") from exc
+
+    client_key = get_client_key(request)
+    if limiter.check(client_key):
+        return True
+    raise HTTPException(
+        status_code=429,
+        detail="Rate limit exceeded",
+        headers=limiter.get_headers(client_key),
+    )
+
+
+def check_pin_rate_limit(request: Request) -> bool:
+    """Stricter dependency for PIN verification attempts."""
+    return check_rate_limit(request, "pin")
 
 
 def _admin_token_configured() -> bool:
@@ -29,6 +66,8 @@ def require_admin_token(request: Request) -> None:
     Returns 401 if the request omits the token.
     Returns 403 if the supplied token does not match.
     """
+    # Apply this before inspecting the supplied token to bound guessing.
+    check_rate_limit(request, "auth")
     expected = os.environ.get(ADMIN_TOKEN_ENV, "").strip()
     if not expected:
         raise HTTPException(
