@@ -180,7 +180,8 @@ class UiLauncherContracts(unittest.TestCase):
         self.assertIn("proxyWasTested('edit-profile-proxy')", connect_body)
         self.assertIn("/proxy`", connect_body)
         self.assertIn("clear_proxy", connect_body)
-        self.assertIn("resetProxyTest('edit-profile-proxy'", HTML)
+        self.assertIn('data-action="resetProxyTest"', HTML)
+        self.assertIn('["edit-profile-proxy"', HTML)
 
         create_body = function_body(JS, "submitCreateProfile")
         self.assertIn("proxyWasTested('new-profile-proxy')", create_body)
