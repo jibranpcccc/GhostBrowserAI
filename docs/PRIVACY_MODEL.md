@@ -13,6 +13,7 @@ GhostBrowser provides browser profile isolation for legitimate use cases such as
 | Fingerprint coherence | Timezone, locale, user agent, screen resolution, GPU vendor, and client hints are internally consistent and match the profile's declared OS/device | AI-generated fingerprint validation via coherence validator |
 | Automation disclosure | `navigator.webdriver` is spoofed to `false` only when the profile is configured for stealth mode | Context creation args + CDP `Page.addScriptToEvaluateOnNewDocument` |
 | Credential redaction | Proxy credentials, Cloudflare tokens, and database secrets are redacted from logs, audit trails, and API responses | `_redact_sensitive_api_data` middleware; credential store uses encrypted storage (DPAPI on Windows) |
+| Optional profile launch lock | A profile can require a PIN before launch; the PIN is not profile-data encryption | PBKDF2-hashed profile PIN; new or changed PINs are 4–6 ASCII digits |
 | Release integrity | CI runs credential scan + release audit + full test suite before any build is released | `.github/workflows/test.yml`, `scripts/release_audit.py`, `scripts/check_credentials.py` |
 
 ## What GhostBrowser Does NOT Guarantee
@@ -42,6 +43,17 @@ The operator, Chromium, Playwright, the local OS, proxy providers, extensions, a
 ### Storage-key limitation
 
 Live profile metadata is encrypted with a single file-based Fernet master key at `profiles_data/.master.key`, shared by all local profiles. It is not per-profile and is not DPAPI-protected. Protect the profile directory and master-key file with OS account and filesystem permissions; compromise of that key exposes all locally encrypted profile metadata.
+
+### Profile PIN policy
+
+Profile PIN Lock is optional: a profile without a PIN launches without an unlock
+prompt. Set or change it from the profile's **Set PIN** control by entering and
+confirming a new value. New and changed PINs must be 4–6 ASCII digits (`0`–`9`);
+the stored value is a PBKDF2 hash. Removing the PIN disables the launch lock.
+The PIN only gates launch and does not encrypt browser data or replace OS and
+filesystem protections. Existing profiles with legacy PIN hashes can still be
+unlocked with their existing PIN; once changed, the replacement must follow the
+current policy.
 
 ### Out of scope
 

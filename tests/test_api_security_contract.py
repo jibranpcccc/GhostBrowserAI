@@ -134,13 +134,14 @@ class ApiSecurityContractTests(TestCase):
             "token": "token-secret",
             "payload": "encrypted-payload-secret",
         }
-        with patch("backend.main.store_status", return_value=raw_status):
+        with patch("backend.main.host_os", return_value="Windows"), patch(
+            "backend.main.store_status", return_value=raw_status
+        ):
             response = self.client.get("/api/metrics", headers=headers)
 
         self.assertEqual(response.status_code, 200)
         body = response.json()
-        self.assertIsInstance(body["host_os"], str)
-        self.assertIn(body["host_os"], {"Windows", "Mac", "Linux"})
+        self.assertEqual(body["host_os"], "Windows")
         self.assertEqual(body["credential_store"], {"configured": True, "count": 2})
         self.assertIsInstance(body["credential_store"]["configured"], bool)
         self.assertIsInstance(body["credential_store"]["count"], int)

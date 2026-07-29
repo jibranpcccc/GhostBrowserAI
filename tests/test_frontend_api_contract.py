@@ -211,6 +211,85 @@ const cases = [
         self.assertNotRegex(APP_JS, r"\sstyle\s*=")
         self.assertNotRegex(APP_JS, r"\.style\.|\.style\s*=|cssText|setProperty\(")
 
+    def test_metrics_renders_credential_store_only_for_supported_windows_contract(self):
+        script = r"""
+const fs = require('fs');
+const source = fs.readFileSync('frontend/app.js', 'utf8');
+const start = source.indexOf('async function fetchMetrics');
+const firstBrace = source.indexOf('{', source.indexOf(')', start));
+let depth = 0;
+let end = firstBrace;
+for (; end < source.length; end += 1) {
+    if (source[end] === '{') depth += 1;
+    if (source[end] === '}' && --depth === 0) {
+        end += 1;
+        break;
+    }
+}
+
+const osSelect = {};
+const credentialStatus = {};
+const health = {
+    classList: { add() {}, remove() {} },
+    querySelector(selector) {
+        return selector === '.health-dot' ? {} : { textContent: '' };
+    },
+};
+const elements = {
+    'stat-active': {}, 'stat-quarantine': {}, 'stat-ram': {}, 'topbar-ram': {},
+    'new-profile-os': osSelect, 'setting-credential-store': credentialStatus,
+    'system-health': health,
+};
+global.document = { getElementById: (id) => elements[id] || null };
+global.API = '';
+global.escHtml = (value) => value;
+global.escAttr = (value) => value;
+global.SUPPORTED_HOST_OSES = new Set(['Windows', 'Mac', 'Linux']);
+let metrics;
+global.requestJson = async () => metrics;
+eval(source.slice(start, end));
+
+(async () => {
+    metrics = {
+        active_profiles: 1, total_profiles: 2, quarantined_profiles: 0,
+        memory_usage_percent: 20, host_os: 'Windows',
+        credential_store: { configured: true, count: 2 },
+    };
+    await fetchMetrics();
+    if (credentialStatus.value !== 'Windows DPAPI protected — 2 accounts') {
+        throw new Error(`Windows status was incorrect: ${credentialStatus.value}`);
+    }
+
+    metrics.host_os = 'Linux';
+    await fetchMetrics();
+    if (credentialStatus.value !== 'Credential store unavailable — Windows DPAPI requires Windows') {
+        throw new Error(`Non-Windows status was incorrect: ${credentialStatus.value}`);
+    }
+
+    metrics.host_os = '<unsupported>';
+    metrics.credential_store = { configured: true, count: 'secret' };
+    await fetchMetrics();
+    if (credentialStatus.value !== 'Credential store status unavailable') {
+        throw new Error(`Unsupported host status was incorrect: ${credentialStatus.value}`);
+    }
+    if (osSelect.innerHTML && osSelect.innerHTML.includes('<unsupported>')) {
+        throw new Error('Unsupported host OS was rendered into the selector');
+    }
+})().catch((error) => { console.error(error); process.exitCode = 1; });
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_credential_store_hint_states_windows_only_support(self):
+        self.assertIn("Credential storage is supported on Windows only", INDEX_HTML)
+
     def test_csp_remains_strict(self):
         os.environ.setdefault("GHOSTBROWSER_ADMIN_TOKEN", "test-contract-token")
         from fastapi.testclient import TestClient

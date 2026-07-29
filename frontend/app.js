@@ -1,6 +1,7 @@
 /* ===== GhostBrowser App.js — Full Frontend Logic ===== */
 
 const API = '';  // Same origin — FastAPI serves frontend
+const SUPPORTED_HOST_OSES = new Set(['Windows', 'Mac', 'Linux']);
 
 function getCookie(name) {
     const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
@@ -268,18 +269,29 @@ async function fetchMetrics() {
         document.getElementById('stat-quarantine').textContent = data.quarantined_profiles;
         document.getElementById('stat-ram').textContent = `${data.memory_usage_percent.toFixed(1)}%`;
         document.getElementById('topbar-ram').textContent = `${data.memory_usage_percent.toFixed(1)}%`;
+        const hostOs = SUPPORTED_HOST_OSES.has(data.host_os) ? data.host_os : null;
         const osSelect = document.getElementById('new-profile-os');
-        if (osSelect && data.host_os) {
-            const icon = data.host_os === 'Mac' ? '🍎' : (data.host_os === 'Linux' ? '🐧' : '🪟');
-            osSelect.innerHTML = `<option value="${escAttr(data.host_os)}">${icon} ${escHtml(data.host_os)} (Host matched)</option>`;
+        if (osSelect && hostOs) {
+            const icon = hostOs === 'Mac' ? '🍎' : (hostOs === 'Linux' ? '🐧' : '🪟');
+            osSelect.innerHTML = `<option value="${escAttr(hostOs)}">${icon} ${escHtml(hostOs)} (Host matched)</option>`;
             osSelect.disabled = true;
             osSelect.title = 'Profiles use the host operating system to prevent cross-OS fingerprint contradictions.';
         }
         const credentialStatus = document.getElementById('setting-credential-store');
-        if (credentialStatus && data.credential_store) {
-            credentialStatus.value = data.credential_store.configured
-                ? `Windows DPAPI protected — ${data.credential_store.count} accounts`
-                : 'Protected credential store is not configured';
+        if (credentialStatus) {
+            const credentialStore = data.credential_store || {};
+            const accountCount = Number.isSafeInteger(credentialStore.count) && credentialStore.count >= 0
+                ? credentialStore.count
+                : 0;
+            if (hostOs === 'Windows') {
+                credentialStatus.value = credentialStore.configured === true
+                    ? `Windows DPAPI protected — ${accountCount} accounts`
+                    : 'Windows DPAPI credential store is not configured';
+            } else if (hostOs) {
+                credentialStatus.value = 'Credential store unavailable — Windows DPAPI requires Windows';
+            } else {
+                credentialStatus.value = 'Credential store status unavailable';
+            }
         }
 
         const health = document.getElementById('system-health');
