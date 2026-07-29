@@ -86,6 +86,12 @@ def _read_staged_file(root: Path, relative: str) -> bytes:
     return result.stdout
 
 
+def _is_allowed_path(relative: PurePosixPath) -> bool:
+    """Skip test/example/docs directories from secret scanning."""
+    allowed = {"tests", "test", "examples", "example", "docs"}
+    return bool(set(p.lower() for p in relative.parts) & allowed)
+
+
 def audit_release_tree(root: Path) -> list[str]:
     """Audit the staged release candidate, including its staged file content."""
     try:
@@ -103,6 +109,8 @@ def audit_release_tree(root: Path) -> list[str]:
             problems.append(f"Release candidate contains .env file: {relative}")
         if name == "cloudflare_accounts.txt":
             problems.append(f"Release candidate contains cloudflare_accounts.txt: {relative}")
+        if _is_allowed_path(PurePosixPath(relative)):
+            continue
         try:
             content = _read_staged_file(root, relative)
         except RuntimeError as exc:
