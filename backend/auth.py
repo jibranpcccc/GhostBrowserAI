@@ -21,11 +21,22 @@ ADMIN_TOKEN_HEADER = "X-Admin-Token"
 
 # Token checks are deliberately limited separately from general API traffic so
 # a client cannot brute-force the administrative credential.
-RATE_LIMITERS = {
-    "default": SlidingWindowRateLimiter(window_seconds=60, max_requests=1000),  # Increased for tests
-    "auth": SlidingWindowRateLimiter(window_seconds=60, max_requests=100),   # Increased for tests
-    "pin": SlidingWindowRateLimiter(window_seconds=60, max_requests=50),     # Increased for tests
-}
+def _is_test_env() -> bool:
+    """Check if running in the isolated test environment."""
+    return os.environ.get("GHOSTBROWSER_TEST_ENV", "").strip().lower() in ("1", "true")
+
+if _is_test_env():
+    RATE_LIMITERS = {
+        "default": SlidingWindowRateLimiter(window_seconds=60, max_requests=1000),
+        "auth": SlidingWindowRateLimiter(window_seconds=60, max_requests=100),
+        "pin": SlidingWindowRateLimiter(window_seconds=60, max_requests=50),
+    }
+else:
+    RATE_LIMITERS = {
+        "default": SlidingWindowRateLimiter(window_seconds=60, max_requests=100),
+        "auth": SlidingWindowRateLimiter(window_seconds=60, max_requests=10),
+        "pin": SlidingWindowRateLimiter(window_seconds=60, max_requests=5),
+    }
 
 
 def reset_all_limiters():

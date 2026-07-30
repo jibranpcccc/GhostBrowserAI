@@ -103,22 +103,24 @@ function showAdminTokenPrompt(message) {
 async function verifyAdminToken(token) {
     try {
         const res = await _originalFetch(`${API}/api/profiles`, { headers: { 'X-Admin-Token': token } });
-        return res.status !== 401 && res.status !== 403;
+        return res.ok;
     } catch (_) {
-        return true;
+        return false;
     }
 }
 
 async function ensureAdminToken() {
     if (_adminToken) return true;
 
-    // First contact: a 401 means the backend requires a token.
+    // First contact: 401 means token required; 503 means token not configured.
     let needsAuth;
+    let message = '';
     try {
         const res = await _originalFetch(`${API}/api/profiles`);
-        needsAuth = res.status === 401;
+        needsAuth = res.status === 401 || res.status === 503;
+        if (res.status === 503) message = 'The server has no admin token configured. Set GHOSTBROWSER_ADMIN_TOKEN in .env and restart.';
     } catch (_) {
-        return true;
+        return false;
     }
     if (!needsAuth) return true;
 
