@@ -78,7 +78,8 @@ def build_user_agent(os_name: str = "Windows") -> str:
 def _normalize_privacy_advanced(advanced: dict, timezone: str = None, locale: str = None) -> dict:
     """Normalize persisted privacy settings and apply the high-privacy contract."""
     advanced = dict(advanced or {})
-    mode = str(advanced.get("privacy_mode", "standard")).strip().lower()
+    default_privacy = "high" if os.environ.get("GHOSTBROWSER_REQUIRE_PROXY", "1").strip().lower() in ("1", "true") else "standard"
+    mode = str(advanced.get("privacy_mode", default_privacy)).strip().lower()
     advanced["privacy_mode"] = mode if mode in ("standard", "strict", "ephemeral", "high") else "standard"
     if not advanced.get("timezone"):
         advanced["timezone"] = timezone or "UTC"

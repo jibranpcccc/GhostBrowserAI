@@ -106,10 +106,14 @@ def _decrypt(passphrase: str, payload: bytes) -> bytes:
             raise ValueError("Invalid passphrase or corrupted archive") from exc
 
     if payload.startswith(_HEADER_XORWARN):
+        if os.environ.get("GHOSTBROWSER_ALLOW_LEGACY_XOR", "").strip().lower() not in ("1", "true"):
+            raise RuntimeError(
+                "Legacy XOR-encrypted archive rejected. Set GHOSTBROWSER_ALLOW_LEGACY_XOR=1 to "
+                "temporarily enable decryption, then re-encrypt with AES-GCM."
+            )
         rest = payload[len(_HEADER_XORWARN) :]
         salt = rest[:_SALT_BYTES]
         obfuscated = rest[_SALT_BYTES:]
-        # This branch intentionally re-uses the same derivations as encrypt.
         key = _derive_key(passphrase, salt, 32)
         stream = _derive_key(key.hex(), salt, len(obfuscated))
         return bytes(a ^ b for a, b in zip(obfuscated, stream))
