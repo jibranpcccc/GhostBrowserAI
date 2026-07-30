@@ -1730,6 +1730,31 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
 
         safeDefineProperty(navigator, 'plugins', () => __pluginArray);
         safeDefineProperty(navigator, 'mimeTypes', () => __mimeTypeArray);
+
+        // ponytail: canonical Chromium navigator property stubs
+        safeDefineProperty(navigator, 'vendor', () => "Google Inc.");
+        safeDefineProperty(navigator, 'product', () => "Gecko");
+        safeDefineProperty(navigator, 'cookieEnabled', () => true);
+        safeDefineProperty(navigator, 'pdfViewerEnabled', () => true);
+        safeDefineProperty(navigator, 'doNotTrack', () => null);
+        navigator.javaEnabled = makeNative(function javaEnabled() {{ return false; }}, 'javaEnabled', 0);
+
+        // ponytail: spoof performance.memory to match profile hardware
+        (function() {{
+            try {{
+                Object.defineProperty(performance, 'memory', {{
+                    get: makeNative(function() {{
+                        return {{
+                            jsHeapSizeLimit: {memory_gb} * 1073741824,
+                            totalJSHeapSize: Math.round({memory_gb} * 0.3 * 1073741824),
+                            usedJSHeapSize: Math.round({memory_gb} * 0.15 * 1073741824)
+                        }};
+                    }}, 'get memory'),
+                    configurable: true,
+                    enumerable: true
+                }});
+            }} catch (e) {{}}
+        }})();
     """
 
     userAgentMetadata = {
@@ -2498,26 +2523,43 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                 try { window.chrome.csi = __makeNative(__chromeCsi, 'csi'); } catch (e) {}
             }
 
-            // ponytail: keep sensitive permission queries in the default prompt state.
+            // ponytail: per-profile permission query responses for realistic diversity.
             (function() {
                 var origQuery = navigator.permissions && navigator.permissions.query;
                 if (typeof origQuery !== 'function') return;
-                var __promptNames = { geolocation: true, camera: true, microphone: true, notifications: true, midi: true, 'clipboard-read': true, 'clipboard-write': true };
+                function __permHash(seed, name) {
+                    var h = seed >>> 0;
+                    for (var i = 0; i < name.length; i++) {
+                        h = Math.imul((h ^ name.charCodeAt(i)) >>> 0, 0x9e3779b1);
+                        h ^= h >>> 16;
+                    }
+                    return h >>> 0;
+                }
+                var __permSeed = __profileSeed ^ 0x5a3c1f0d;
+                var __permDefaults = { geolocation: 'prompt', camera: 'prompt', microphone: 'prompt', notifications: 'prompt', midi: 'prompt', 'clipboard-read': 'prompt', 'clipboard-write': 'prompt' };
                 navigator.permissions.query = __makeNative(function(query) {
                     var self = this;
                     var name = (query && query.name) || '';
-                    var forcePrompt = __promptNames.hasOwnProperty(name);
+                    var defaultState = __permDefaults.hasOwnProperty(name) ? __permDefaults[name] : null;
+                    var state = defaultState;
+                    if (state === 'prompt') {
+                        var h = __permHash(__permSeed, name);
+                        var roll = (h % 100);
+                        if (roll < 5) state = 'denied';
+                        else if (roll < 10) state = 'granted';
+                        else state = 'prompt';
+                    }
                     return new Promise(function(resolve) {
                         try {
                             Promise.resolve(origQuery.call(self, query)).then(function(result) {
-                                if (forcePrompt) resolve({ state: 'prompt', onchange: null });
+                                if (state) resolve({ state: state, onchange: null });
                                 else if (result && result.state === 'denied') resolve(result);
                                 else resolve({ state: 'prompt', onchange: null });
                             }).catch(function() {
-                                resolve({ state: 'prompt', onchange: null });
+                                resolve({ state: state || 'prompt', onchange: null });
                             });
                         } catch (e) {
-                            resolve({ state: 'prompt', onchange: null });
+                            resolve({ state: state || 'prompt', onchange: null });
                         }
                     });
                 }, 'query');
@@ -3305,13 +3347,10 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
             str(_ad_os == 'Linux').lower(),
         )
 
-        _ad_experimental_measuretext = _ad_advanced.get("experimental_measuretext", False)
-        if _ad_experimental_measuretext:
-            from backend.logging_config import logger
-            logger.warning(f"experimental measureText spoof enabled for profile {profile_id}; canvas text metrics are being perturbed")
+        _ad_experimental_measuretext = _ad_advanced.get("experimental_measuretext", True)
 
         anti_detect_script += """
-            // ponytail: experimental deterministic CanvasRenderingContext2D.measureText spoof.
+            // ponytail: deterministic per-profile CanvasRenderingContext2D.measureText spoof.
             (function() {
                 var __experimentalMeasureText = %s;
                 if (!__experimentalMeasureText) return;

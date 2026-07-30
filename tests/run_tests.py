@@ -1362,6 +1362,13 @@ async def run_tests():
         )
         surface_stdout, surface_stderr = await asyncio.wait_for(surface_proc.communicate(), timeout=300)
         collector.add_check("AI declared surface audit passes", surface_proc.returncode == 0)
+
+        anti_detect_proc = await asyncio.create_subprocess_exec(
+            sys.executable, "tests/test_anti_detect_surface_coverage.py",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
+        anti_detect_stdout, anti_detect_stderr = await asyncio.wait_for(anti_detect_proc.communicate(), timeout=120)
+        collector.add_check("Anti-detect surface coverage passes", anti_detect_proc.returncode == 0)
     except Exception as e:
         print(f"Exception during audio/surface regression tests: {e}")
         collector.add_check("Audio and AI-declared surface regression", False)
