@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import sys
 from importlib.metadata import version
 from pathlib import Path
 
-# Run this project-aware utility as ``python -m scripts.check_chromium_compat``
-# from the repository root so Python resolves the ``backend`` package normally.
+# Ensure backend package is resolvable when run as `python scripts/check_chromium_compat.py`
+_repo_root = Path(__file__).resolve().parents[1]
+if str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
 
 from backend.config import get_installed_chromium_major_version, get_installed_chromium_version
 

@@ -84,7 +84,7 @@ def check(label, cond, detail=""):
         _all_passed = False
         _failures.append(label)
 
-def test_js_patterns_in_source(source, patterns_dict, source_label):
+def _check_js_patterns_in_source(source, patterns_dict, source_label):
     for surface, patterns in patterns_dict.items():
         found = any(re.search(p, source) for p in patterns)
         check(f"{source_label} covers [{surface}]", found,
@@ -165,10 +165,10 @@ def main():
         bm_source = f.read()
 
     print("\n--- JS Pattern Coverage (anti_detect_script + spoofing_script) ---")
-    test_js_patterns_in_source(bm_source, REQUIRED_JS_PATTERNS, "browser_manager.py")
+    _check_js_patterns_in_source(bm_source, REQUIRED_JS_PATTERNS, "browser_manager.py")
 
     print("\n--- CDP / Python Infrastructure ---")
-    test_js_patterns_in_source(bm_source, REQUIRED_PYTHON_CDP_PATTERNS, "browser_manager.py")
+    _check_js_patterns_in_source(bm_source, REQUIRED_PYTHON_CDP_PATTERNS, "browser_manager.py")
 
     print("\n--- Surface Registry ---")
     test_surface_registry_consistency()

@@ -2544,7 +2544,7 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                     var state = defaultState;
                     if (state === 'prompt') {
                         var h = __permHash(__permSeed, name);
-                        var roll = (h % 100);
+                        var roll = (h %% 100);
                         if (roll < 5) state = 'denied';
                         else if (roll < 10) state = 'granted';
                         else state = 'prompt';
