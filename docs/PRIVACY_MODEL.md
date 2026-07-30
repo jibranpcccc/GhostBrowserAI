@@ -42,7 +42,7 @@ The operator, Chromium, Playwright, the local OS, proxy providers, extensions, a
 
 ### Storage-key limitation
 
-Live profile metadata is encrypted with a single file-based Fernet master key at `profiles_data/.master.key`, shared by all local profiles. It is not per-profile and is not DPAPI-protected. Protect the profile directory and master-key file with OS account and filesystem permissions; compromise of that key exposes all locally encrypted profile metadata.
+Live profile metadata is encrypted with a Fernet master key. On Windows the key is DPAPI-protected and stored at `profiles_data/.master.key.dpapi` (scoped to the current Windows user account). A non-DPAPI fallback at `profiles_data/.master.key` is migrated automatically. The master key is shared by all local profiles — protect the profiles directory with OS account and filesystem permissions; compromise of the key exposes all locally encrypted profile metadata.
 
 ### Profile PIN policy
 
