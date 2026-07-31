@@ -3597,11 +3597,9 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                 pass
         if isinstance(e, RuntimeError) and str(e).startswith("FAIL-CLOSED:"):
             logger.error("Fail-closed launch aborted for %s: %s", profile_id, e)
-            message = PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"]
         else:
             logger.error("Launch aborted for %s: %s", profile_id, e)
-            message = PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"]
-        return {"status": "error", "message": message}
+        return {"status": "error", "message": PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"], "code": "LAUNCH_FAILED"}
     finally:
         # Cancellation can bypass the normal Exception handler.  Never leave a
         # profile permanently marked as launching after releasing its lock.

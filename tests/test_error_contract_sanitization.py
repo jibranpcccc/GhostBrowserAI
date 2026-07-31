@@ -227,8 +227,25 @@ class TestLaunchFailClosedSanitized(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["status"], "error")
         self.assertEqual(result["message"], "Launch failed")
+        self.assertEqual(result.get("code"), "LAUNCH_FAILED")
         self.assertNotIn("FAIL-CLOSED", str(result))
         self.assertNotIn("Directory traversal", str(result))
+
+    async def test_early_return_missing_dir_collapses(self):
+        from backend import browser_manager as bm
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as td:
+            profile = {"id": "lp5", "path": str(Path(td) / "nonexistent"), "proxy": None}
+            with patch.object(bm.profile_manager, "get_profile", return_value=profile), \
+                 patch.object(bm.profile_manager, "PROFILES_DIR", Path(td).parent):
+                result = await bm._do_launch_profile("lp5")
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["message"], "Launch failed")
+        self.assertEqual(result.get("code"), "LAUNCH_FAILED")
+        self.assertNotIn("missing", str(result))
 
     async def test_early_return_provenance_collapses(self):
         from backend import browser_manager as bm
@@ -244,7 +261,29 @@ class TestLaunchFailClosedSanitized(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["status"], "error")
         self.assertEqual(result["message"], "Launch failed")
+        self.assertEqual(result.get("code"), "LAUNCH_FAILED")
         self.assertNotIn("provenance", str(result))
+
+    async def test_early_return_invalid_pinned_proxy_collapses(self):
+        from backend import browser_manager as bm
+        import tempfile
+        from pathlib import Path
+
+        def clean_scan(profile):
+            return {"status": "clean"}
+
+        with tempfile.TemporaryDirectory() as td:
+            profile = {"id": "lp6", "path": td, "proxy": None, "proxy_pin": "ftp://bad:8080"}
+            with patch.object(bm.profile_manager, "get_profile", return_value=profile), \
+                 patch.object(bm.profile_manager, "PROFILES_DIR", Path(td).parent), \
+                 patch.object(bm, "_profile_has_verified_provenance", return_value=True), \
+                 patch.object(bm.ai_scanner, "scan_profile_before_launch", clean_scan):
+                result = await bm._do_launch_profile("lp6")
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["message"], "Launch failed")
+        self.assertEqual(result.get("code"), "LAUNCH_FAILED")
+        self.assertNotIn("pinned proxy", str(result))
 
     async def test_scanner_block_collapses(self):
         from backend import browser_manager as bm
