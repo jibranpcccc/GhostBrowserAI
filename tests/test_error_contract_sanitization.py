@@ -217,6 +217,55 @@ class TestLaunchFailClosedSanitized(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["message"], "Launch failed")
         self.assertNotIn("secret wrapper detail 999", str(result))
 
+    async def test_early_return_traversal_collapses(self):
+        from backend import browser_manager as bm
+
+        profile = {"id": "lp2", "path": "C:/outside/profiles/x", "proxy": None}
+        with patch.object(bm.profile_manager, "get_profile", return_value=profile), \
+             patch.object(bm.profile_manager, "PROFILES_DIR", "C:/profiles"):
+            result = await bm._do_launch_profile("lp2")
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["message"], "Launch failed")
+        self.assertNotIn("FAIL-CLOSED", str(result))
+        self.assertNotIn("Directory traversal", str(result))
+
+    async def test_early_return_provenance_collapses(self):
+        from backend import browser_manager as bm
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as td:
+            profile = {"id": "lp3", "path": td, "proxy": None}
+            with patch.object(bm.profile_manager, "get_profile", return_value=profile), \
+                 patch.object(bm.profile_manager, "PROFILES_DIR", Path(td).parent), \
+                 patch.object(bm, "_profile_has_verified_provenance", return_value=False):
+                result = await bm._do_launch_profile("lp3")
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["message"], "Launch failed")
+        self.assertNotIn("provenance", str(result))
+
+    async def test_scanner_block_collapses(self):
+        from backend import browser_manager as bm
+        import tempfile
+        from pathlib import Path
+
+        def blocking_scan(profile):
+            return {"status": "blocked", "message": "secret scanner detail 123"}
+
+        with tempfile.TemporaryDirectory() as td:
+            profile = {"id": "lp4", "path": td, "proxy": None}
+            with patch.object(bm.profile_manager, "get_profile", return_value=profile), \
+                 patch.object(bm.profile_manager, "PROFILES_DIR", Path(td).parent), \
+                 patch.object(bm, "_profile_has_verified_provenance", return_value=True), \
+                 patch.object(bm.ai_scanner, "scan_profile_before_launch", blocking_scan):
+                result = await bm._do_launch_profile("lp4")
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["message"], "Launch failed")
+        self.assertNotIn("secret scanner detail 123", str(result))
+
 
 if __name__ == "__main__":
     unittest.main()

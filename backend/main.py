@@ -1151,8 +1151,9 @@ async def legacy_remote_sync(profile_id: str, req: LegacyRemoteSyncRequest, _aut
         result = await asyncio.to_thread(client.upload_profile, profile_id, archive_b64)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except RuntimeError:
+        _ghost_logger.exception("Remote sync upload failed for %s", profile_id)
+        raise HTTPException(status_code=502, detail="Remote sync upload failed")
     return {"remote": result}
 
 

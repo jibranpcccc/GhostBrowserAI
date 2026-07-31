@@ -359,8 +359,11 @@ def import_from_csv(csv_content: str,
                 imported += 1
             else:
                 skipped += 1
-        except Exception as exc:
+        except ValueError as exc:
             errors.append(f"row {imported+skipped+1}: {exc}")
+        except Exception as exc:
+            logger.error("CSV import row failed for %s: %s", row.get("name"), exc)
+            errors.append(f"row {imported+skipped+1}: import failed")
 
     logger.info(f"CSV import: {imported} imported, {skipped} skipped, {len(errors)} errors")
     return {"imported": imported, "skipped": skipped, "errors": errors}

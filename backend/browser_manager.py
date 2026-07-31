@@ -1884,6 +1884,7 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
 
 async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin: str = None):
     import os
+    from backend.logging_config import logger
     profile = profile_manager.get_profile(profile_id)
     if not profile:
         return {"status": "error", "message": "Profile not found"}
@@ -1907,20 +1908,21 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
     canonical_profiles_dir = os.path.normcase(os.path.realpath(profile_manager.PROFILES_DIR))
     canonical_profile_path = os.path.normcase(os.path.realpath(profile["path"]))
     if not canonical_profile_path.startswith(canonical_profiles_dir + os.sep) and canonical_profile_path != canonical_profiles_dir:
-        return {"status": "error", "message": "FAIL-CLOSED: Directory traversal blocked."}
+        logger.error("Fail-closed launch blocked for %s: profile path escapes profiles dir (%s)", profile_id, canonical_profile_path)
+        return {"status": "error", "message": PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"], "code": "LAUNCH_FAILED"}
 
     if not os.path.exists(canonical_profile_path):
-        return {"status": "error", "message": "FAIL-CLOSED: Profile directory is missing on disk."}
+        logger.error("Fail-closed launch blocked for %s: profile directory missing on disk (%s)", profile_id, canonical_profile_path)
+        return {"status": "error", "message": PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"], "code": "LAUNCH_FAILED"}
 
     if not _profile_has_verified_provenance(profile):
-        return {
-            "status": "error",
-            "message": "FAIL-CLOSED: Profile fingerprint provenance is missing or unverified.",
-        }
+        logger.error("Fail-closed launch blocked for %s: fingerprint provenance missing or unverified", profile_id)
+        return {"status": "error", "message": PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"], "code": "LAUNCH_FAILED"}
 
     scan_result = ai_scanner.scan_profile_before_launch(profile)
     if scan_result["status"] != "clean":
-        return {"status": "error", "message": f"AI Scanner blocked launch: {scan_result['message']}"}
+        logger.error("AI scanner blocked launch for %s: %s", profile_id, scan_result.get("message"))
+        return {"status": "error", "message": PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"], "code": "LAUNCH_FAILED"}
 
     fingerprint = profile.get("fingerprint") if isinstance(profile, dict) else None
     if fingerprint:
@@ -1943,7 +1945,8 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
         try:
             configured_server = parse_proxy_string(pinned_proxy_str)["server"]
         except Exception:
-            return {"status": "error", "message": "FAIL-CLOSED: The pinned proxy configuration is invalid."}
+            logger.error("Fail-closed launch blocked for %s: pinned proxy configuration invalid", profile_id)
+            return {"status": "error", "message": PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"], "code": "LAUNCH_FAILED"}
     elif explicit_proxy and isinstance(explicit_proxy, dict):
         configured_server = explicit_proxy.get("server")
     if configured_server:
@@ -3596,7 +3599,8 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
             logger.error("Fail-closed launch aborted for %s: %s", profile_id, e)
             message = PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"]
         else:
-            message = "Launch failed safely without starting an unprotected browser."
+            logger.error("Launch aborted for %s: %s", profile_id, e)
+            message = PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"]
         return {"status": "error", "message": message}
     finally:
         # Cancellation can bypass the normal Exception handler.  Never leave a

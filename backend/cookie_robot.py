@@ -313,7 +313,7 @@ class CookieRobot:
             page_data = await launch_profile(profile_id, force_headless=True)
             if page_data.get("status") == "error":
                 self._set_status(profile_id, state="failed",
-                                 error=f"Launch failed: {page_data.get('message', '')}")
+                                 error="Launch failed")
                 print(f"[CookieRobot] ❌ Launch failed for {profile_id}: {page_data}")
                 self._tasks.pop(profile_id, None)
                 return False
