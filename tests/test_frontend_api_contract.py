@@ -350,3 +350,70 @@ eval(source.slice(start, end));
         self.assertIn("script-src 'self'", csp)
         self.assertIn("style-src 'self'", csp)
         self.assertNotIn("'unsafe" + "-inline'", csp)
+
+    def test_admin_token_gate_prompts_once_then_attaches_token(self):
+        script = r"""
+const fs = require('fs');
+const source = fs.readFileSync('frontend/app.js', 'utf8');
+
+// Eval everything up to (but excluding) ensureXsrfToken: the admin-token
+// gate (let _adminToken, withAdminToken, transparent fetch/XHR interceptors,
+// showAdminTokenPrompt, verifyAdminToken, ensureAdminToken).
+const slice = source.slice(0, source.indexOf('async function ensureXsrfToken'));
+
+global.document = { cookie: '' };
+
+const calls = [];
+let seenFirstContact = false;
+const fetchImpl = async (url, init) => {
+    const headers = new Headers((init && init.headers) || undefined);
+    calls.push({ url, init });
+    if (headers.get('x-admin-token') === 'canned-token') return { ok: true, status: 200 };
+    if (!seenFirstContact) { seenFirstContact = true; return { ok: false, status: 401 }; }
+    return { ok: false, status: 401 };
+};
+global.window = { XSRF_TOKEN: '', fetch: fetchImpl };
+global.fetch = fetchImpl;
+global.escHtml = (s) => String(s);
+
+global.XMLHttpRequest = class {
+    open(method, url) { this._url = url; }
+    setRequestHeader() {}
+    send() {}
+};
+
+eval(slice);
+
+// Replace the DOM prompt with a canned token; the auth flow itself is under test.
+showAdminTokenPrompt = async () => 'canned-token';
+
+(async () => {
+    if (!await ensureAdminToken()) throw new Error('ensureAdminToken returned false with a valid token');
+
+    // First contact must NOT leak an admin token.
+    if (calls[0].url !== '/api/profiles') throw new Error('unexpected first contact URL: ' + calls[0].url);
+    if (calls[0].init && calls[0].init.headers && new Headers(calls[0].init.headers).has('x-admin-token')) {
+        throw new Error('first contact leaked admin token');
+    }
+
+    if (!await verifyAdminToken('canned-token')) throw new Error('verifyAdminToken rejected a valid token');
+    if (await verifyAdminToken('wrong-token')) throw new Error('verifyAdminToken accepted an invalid token');
+
+    // After auth the transparent interceptor must attach the token to API calls.
+    await window.fetch('/api/profiles', { method: 'POST', body: 'x' });
+    const last = calls[calls.length - 1];
+    const lastHeaders = new Headers(last.init ? last.init.headers : undefined);
+    if (lastHeaders.get('x-admin-token') !== 'canned-token') {
+        throw new Error('transparent interceptor did not attach admin token');
+    }
+})().catch((error) => { console.error(error); process.exitCode = 1; });
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

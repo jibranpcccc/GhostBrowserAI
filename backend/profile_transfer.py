@@ -424,7 +424,7 @@ def import_profiles_endpoint(payload: ImportRequest, _auth: None = Depends(requi
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         logger.error(f"Import failed: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Import failed")
 
 
 @router.post("/import/csv")

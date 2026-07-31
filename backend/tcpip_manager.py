@@ -88,7 +88,7 @@ class TcpIpManager:
             logger.info("TCP relay started on %s:%s", self._tcp_relay["host"], self._tcp_relay["port"])
         except Exception as exc:
             logger.error("TcpIpManager start failed: %s", exc)
-            return {"enabled": True, "error": str(exc)}
+            return {"enabled": True, "error": "Failed to start TCP/IP normalization services"}
         return {"enabled": True, "status": self.get_status()}
 
     def stop(self) -> None:

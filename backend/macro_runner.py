@@ -56,7 +56,7 @@ async def run_macro(profile_id: str, macro: dict):
 
             except Exception as e:
                 logger.error(f"[Macro {profile_id}] Step {i+1} Failed: {str(e)}", extra={"profile_id": profile_id})
-                return {"status": "error", "message": f"Step {i+1} ({action}) failed: {str(e)}"}
+                return {"status": "error", "message": f"Step {i+1} ({action}) failed"}
 
         return {"status": "success", "message": "Macro completed successfully"}
 

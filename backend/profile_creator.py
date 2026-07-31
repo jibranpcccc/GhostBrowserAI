@@ -432,7 +432,7 @@ async def create_healed_profile(
         return {
             "status": "success",
             "profile": profile,
-            "heal": {"skipped": True, "reason": str(exc)},
+            "heal": {"skipped": True, "reason": "Healing scan unavailable"},
         }
 
     last_scan = None

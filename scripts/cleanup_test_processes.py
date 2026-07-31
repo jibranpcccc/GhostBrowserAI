@@ -44,10 +44,6 @@ def _kill_pids(pids):
 
 
 def main():
-    if sys.platform != "win32":
-        subprocess.run(["pkill", "-f", "chrome"], capture_output=True, text=True)
-        return
-
     try:
         import psutil
     except ImportError:
@@ -59,7 +55,11 @@ def main():
     targets = []
     for proc in psutil.process_iter(["pid", "cmdline", "name"]):
         try:
-            if (proc.info.get("name") or "").lower() not in ("chrome.exe", "chrome_proxy.exe"):
+            name = (proc.info.get("name") or "").lower()
+            if sys.platform == "win32":
+                if name not in ("chrome.exe", "chrome_proxy.exe"):
+                    continue
+            elif name not in ("chrome", "chromium"):
                 continue
             if _is_ghostbrowser_proc(" ".join(proc.info.get("cmdline") or [])):
                 targets.append(proc.info["pid"])
@@ -67,7 +67,14 @@ def main():
             continue
 
     if targets:
-        _kill_pids(targets)
+        if sys.platform == "win32":
+            _kill_pids(targets)
+        else:
+            for pid in targets:
+                try:
+                    psutil.Process(pid).kill()
+                except Exception:
+                    pass
         print(f"Killed {len(targets)} orphaned GhostBrowser process(es)")
     else:
         print("No orphaned GhostBrowser processes found")

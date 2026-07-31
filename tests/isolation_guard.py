@@ -19,6 +19,14 @@ from pathlib import Path
 WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
 
 
+def _secure_temp_path(suffix: str) -> Path:
+    """Create a unique temp path without ``tempfile.mktemp``'s TOCTOU race."""
+    fd, path = tempfile.mkstemp(suffix=suffix)
+    os.close(fd)
+    os.remove(path)
+    return Path(path)
+
+
 def apply() -> None:
     """Sanitize the environment before any production module is imported."""
     os.environ["GHOSTBROWSER_ALLOW_PLAINTEXT_CREDENTIALS"] = "0"
@@ -30,11 +38,11 @@ def apply() -> None:
         sys.path.insert(0, str(WORKSPACE_ROOT))
 
     import backend.credential_store as _credential_store
-    _credential_store.DEFAULT_STORE_PATH = Path(tempfile.mktemp(suffix=".secure.json"))
+    _credential_store.DEFAULT_STORE_PATH = _secure_temp_path(".secure.json")
 
     try:
         import backend.cloudflare_manager as _cfm
-        _cfm.ACCOUNTS_FILE = str(Path(tempfile.mktemp(suffix=".txt")))
+        _cfm.ACCOUNTS_FILE = str(_secure_temp_path(".txt"))
         manager = _cfm.cloudflare_manager
         manager.accounts = []
         manager.use_secure_store = False
