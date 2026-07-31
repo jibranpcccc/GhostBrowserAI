@@ -236,7 +236,7 @@ async def create_zero_leak_profile(
         try:
             fp = await asyncio.wait_for(generate_fingerprint_ai(), timeout=AI_GENERATION_TIMEOUT)
         except asyncio.TimeoutError:
-            return {"status": "error", "code": "KIMI_TIMEOUT", "message": "AI fingerprint generation timed out."}
+            return {"status": "error", "code": "KIMI_TIMEOUT", "message": PUBLIC_CODE_MESSAGES["KIMI_TIMEOUT"]}
         except Exception as e:
             logger.error("Kimi fingerprint generation failed for attempt %s: %s", attempt + 1, type(e).__name__)
             return {
@@ -259,7 +259,7 @@ async def create_zero_leak_profile(
             print("[Orchestrator] Profile creation REFUSED. No profile is ever made without Kimi AI.")
             return {
                 "status": "error",
-                "message": "Kimi AI unavailable: all Cloudflare accounts failed or are on cooldown. Add more accounts to cloudflare_accounts.txt and retry.",
+                "message": PUBLIC_CODE_MESSAGES["KIMI_UNAVAILABLE"],
                 "code": "KIMI_UNAVAILABLE",
             }
 
@@ -338,6 +338,7 @@ async def create_zero_leak_profile(
             profile_manager._save_metadata()
         except Exception as e:
             print(f"[Orchestrator] Profile registration failed, rolling back: {e}")
+            logger.error("Profile registration failed for %s: %s", final_id, type(e).__name__, exc_info=True)
             profile_manager.profiles.pop(final_id, None)
             try:
                 profile_manager._save_metadata()
@@ -348,7 +349,7 @@ async def create_zero_leak_profile(
                     shutil.rmtree(final_path)
                 except Exception:
                     pass
-            return {"status": "error", "message": f"Profile registration failed: {e}"}
+            return {"status": "error", "code": "CREATE_FAILED", "message": PUBLIC_CODE_MESSAGES["CREATE_FAILED"]}
 
         print("[Orchestrator] Step 4: Running AI Auto Validator...")
         from backend.ai_auto_validator import auto_validator
@@ -366,7 +367,7 @@ async def create_zero_leak_profile(
                     shutil.rmtree(final_path)
                 except Exception:
                     pass
-            return {"status": "error", "code": "CREATE_FAILED", "message": "Profile creation failed safely."}
+            return {"status": "error", "code": "CREATE_FAILED", "message": PUBLIC_CODE_MESSAGES["CREATE_FAILED"]}
 
         if validation_result["decision"] != "ACCEPT":
             issues = validation_result.get("issues", [])

@@ -40,6 +40,123 @@ class TestBulkSemaphores(unittest.TestCase):
         self.assertIsInstance(bulk_operations._LAUNCH_SEM, asyncio.Semaphore)
         self.assertIsInstance(bulk_operations._CREATE_SEM, asyncio.Semaphore)
 
+    def test_single_and_bulk_create_share_one_semaphore(self):
+        from backend.main import _profile_create_sem
+
+        self.assertIs(
+            _profile_create_sem,
+            bulk_operations._CREATE_SEM,
+            "single create must share the same semaphore object as bulk create",
+        )
+
+
+class TestBulkAggregateStatus(unittest.IsolatedAsyncioTestCase):
+    async def test_launch_all_failed_reports_error(self):
+        orig_launch = bulk_operations.launch_profile
+
+        async def boom(pid):
+            raise RuntimeError("secret internal launch detail")
+
+        bulk_operations.launch_profile = boom
+        try:
+            result = await bulk_operations.bulk_launch_profiles(
+                bulk_operations.BulkProfileIdsRequest(profile_ids=["a", "b", "c"])
+            )
+        finally:
+            bulk_operations.launch_profile = orig_launch
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["succeeded"], 0)
+        self.assertEqual(result["failed"], 3)
+
+    async def test_close_partial_failure_reports_partial(self):
+        orig_close = bulk_operations.close_profile
+
+        async def half_ok(pid):
+            if pid == "ok":
+                return {"status": "success", "message": "closed"}
+            return {"status": "error", "code": "CLOSE_FAILED", "message": "Close failed"}
+
+        bulk_operations.close_profile = half_ok
+        try:
+            result = await bulk_operations.bulk_close_profiles(
+                bulk_operations.BulkProfileIdsRequest(profile_ids=["ok", "no1", "no2"])
+            )
+        finally:
+            bulk_operations.close_profile = orig_close
+
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["succeeded"], 1)
+        self.assertEqual(result["failed"], 2)
+
+    async def test_delete_all_failed_reports_error(self):
+        fake_mgr = FakeProfileManager()
+        orig_mgr = bulk_operations.profile_manager
+        orig_running = bulk_operations.is_profile_running
+        orig_close = bulk_operations.close_profile
+
+        async def close_fails(pid):
+            return {"status": "error", "code": "CLOSE_FAILED", "message": "Close failed"}
+
+        bulk_operations.profile_manager = fake_mgr
+        bulk_operations.is_profile_running = lambda pid: True
+        bulk_operations.close_profile = close_fails
+        try:
+            result = await bulk_operations.bulk_delete_profiles(
+                bulk_operations.BulkProfileIdsRequest(profile_ids=["a", "b"])
+            )
+        finally:
+            bulk_operations.profile_manager = orig_mgr
+            bulk_operations.is_profile_running = orig_running
+            bulk_operations.close_profile = orig_close
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(fake_mgr.deleted, [], "nothing may be deleted when every close fails")
+
+
+class TestCloneSharesCreateSemaphore(unittest.IsolatedAsyncioTestCase):
+    """Reviewer finding: clone must be inside the same global create semaphore
+    and must collapse unknown error codes through the public catalog."""
+
+    class TrackingSem:
+        def __init__(self):
+            self.entered = 0
+
+        async def __aenter__(self):
+            self.entered += 1
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+    async def test_clone_acquires_shared_create_semaphore(self):
+        from fastapi import HTTPException
+        from backend import main
+
+        tracking = self.TrackingSem()
+        orig_sem = main._profile_create_sem
+        orig_get = main.profile_manager.get_profile
+        orig_create = main.profile_creator.create_zero_leak_profile
+
+        async def fail_create(name, **kwargs):
+            return {"status": "error", "code": "SECRET_INTERNAL", "message": "top secret detail"}
+
+        main._profile_create_sem = tracking
+        main.profile_manager.get_profile = lambda pid: {"name": "orig", "proxy": None, "advanced": {}}
+        main.profile_creator.create_zero_leak_profile = fail_create
+        try:
+            with self.assertRaises(HTTPException) as ctx:
+                await main.clone_profile("p1", _auth=None)
+        finally:
+            main._profile_create_sem = orig_sem
+            main.profile_manager.get_profile = orig_get
+            main.profile_creator.create_zero_leak_profile = orig_create
+
+        self.assertEqual(tracking.entered, 1, "clone must acquire the shared create semaphore")
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual(ctx.exception.detail, "Profile creation failed")
+        self.assertNotIn("top secret detail", str(ctx.exception.detail))
+
 
 class TestBulkLaunchSanitizedErrors(unittest.IsolatedAsyncioTestCase):
     async def test_launch_exception_returns_stable_code(self):

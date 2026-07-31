@@ -204,7 +204,7 @@ def import_profiles(data: Any,
             else:
                 skipped += 1
         except Exception as exc:
-            errors.append(f"{prof.get('id', '?')}: {exc}")
+            errors.append(f"{prof.get('id', '?')}: import failed")
             logger.error(f"Import error for {prof.get('id')}: {exc}")
 
     logger.info(f"Import complete: {imported} imported, {skipped} skipped, {len(errors)} errors")

@@ -39,6 +39,7 @@ from backend.bulk_operations import (
 )
 from backend.cloud_sync import cloud_sync_manager, CloudSyncClient, _validate_sync_id, _get_remote_sync_client
 from backend.auth import RATE_LIMITERS, check_pin_rate_limit, get_client_key, require_admin_token
+from backend.error_codes import PUBLIC_CODE_MESSAGES, public_message_for
 from backend.update_manager import router as update_manager_router
 from backend.sbom import router as sbom_router
 from backend.detection_score import router as detection_score_router
@@ -278,7 +279,10 @@ async def create_profile(data: CreateProfileModel, _auth: None = Depends(require
 
     if result["status"] == "error":
         code = result.get("code", "CREATION_FAILED")
-        raise HTTPException(status_code=503 if code == "KIMI_UNAVAILABLE" else 400, detail=result["message"])
+        raise HTTPException(
+            status_code=503 if code == "KIMI_UNAVAILABLE" else 400,
+            detail=public_message_for(code, "Profile creation failed"),
+        )
 
     return _redact_sensitive_api_data(result["profile"])
 
@@ -357,10 +361,12 @@ async def clone_profile(profile_id: str, _auth: None = Depends(require_admin_tok
     proxy = original.get("proxy")
     advanced = original.get("advanced", {})
 
-    result = await profile_creator.create_zero_leak_profile(name=name, proxy=proxy, advanced_ui=advanced)
+    async with _profile_create_sem:
+        result = await profile_creator.create_zero_leak_profile(name=name, proxy=proxy, advanced_ui=advanced)
 
     if result["status"] == "error":
-        raise HTTPException(status_code=400, detail=result["message"])
+        code = result.get("code", "CREATE_FAILED")
+        raise HTTPException(status_code=400, detail=public_message_for(code, PUBLIC_CODE_MESSAGES["CREATE_FAILED"]))
 
     new_profile = result["profile"]
 
@@ -780,7 +786,8 @@ async def import_cookies(profile_id: str, data: CookieDataModel, _auth: None = D
         await context.add_cookies(data.cookies)
         return {"status": "success", "message": "Cookies imported successfully"}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to import cookies: {e}")
+        _ghost_logger.error("Cookie import failed for %s: %s", profile_id, type(e).__name__)
+        raise HTTPException(status_code=400, detail="Failed to import cookies")
 
 @app.get("/api/profiles/{profile_id}/cookies/export")
 async def export_cookies(profile_id: str, _auth: None = Depends(require_admin_token)):
@@ -792,7 +799,8 @@ async def export_cookies(profile_id: str, _auth: None = Depends(require_admin_to
         cookies = await context.cookies()
         return {"status": "success", "cookies": cookies}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to export cookies: {e}")
+        _ghost_logger.error("Cookie export failed for %s: %s", profile_id, type(e).__name__)
+        raise HTTPException(status_code=400, detail="Failed to export cookies")
 
 from backend.profile_rotator import rotator
 

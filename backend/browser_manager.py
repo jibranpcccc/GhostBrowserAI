@@ -17,6 +17,7 @@ from backend.engine_resolver import (
     get_chromium_executable_path_async,
 )
 from backend.logging_config import logger
+from backend.error_codes import PUBLIC_CODE_MESSAGES
 
 active_browsers = {}
 profile_states = {}
@@ -235,7 +236,7 @@ async def _probe_native_metadata_impl(force_headless: bool = True):
         exe_path = await get_chromium_executable_path_async()
         version = get_installed_chromium_version()
     except Exception as e:
-        raise RuntimeError(f"FAIL-CLOSED: Cannot resolve installed Chromium details: {e}")
+        raise RuntimeError("FAIL-CLOSED: Cannot resolve installed Chromium details") from e
 
     cache_key = (force_headless, exe_path, version)
 
@@ -722,7 +723,16 @@ def _cdp_test_mode_enabled() -> bool:
     production: when GHOSTBROWSER_PROD=1 the flag is ignored (A07)."""
     if os.getenv("GHOSTBROWSER_PROD") == "1":
         return False
-    return os.getenv("GHOSTBROWSER_CDP_TEST") in ("1", "true")
+    enabled = os.getenv("GHOSTBROWSER_CDP_TEST") in ("1", "true")
+    if enabled:
+        from backend.logging_config import logger
+
+        logger.warning(
+            "CDP test mode enabled without GHOSTBROWSER_PROD=1: the loopback CDP "
+            "endpoint is only safe for local development. Set GHOSTBROWSER_PROD=1 "
+            "in production to disable it."
+        )
+    return enabled
 
 
 def _cdp_allow_origins() -> str:
@@ -916,7 +926,7 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
                 "EXCLUDE mozilla.cloudflare-dns.com"
             )
         except Exception as e:
-            raise RuntimeError(f"FAIL-CLOSED: Invalid proxy configuration: {e}")
+            raise RuntimeError("FAIL-CLOSED: Invalid proxy configuration") from e
 
     args = _remove_args(args, '--enable-automation')
     _add_unique_arg(args, '--disable-blink-features=AutomationControlled')
@@ -1919,7 +1929,8 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
             coherence_result = coherence_validator.validate(fingerprint)
             if not coherence_result.get("passed"):
                 issues = coherence_result.get("issues", ["Coherence validation failed"])
-                raise RuntimeError(f"FAIL-CLOSED: {issues[0]}")
+                logger.error("Coherence validation failed for %s: %s", profile_id, issues)
+                raise RuntimeError("FAIL-CLOSED: Coherence validation failed")
         except ImportError:
             pass
 
@@ -2061,9 +2072,8 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                     return
                 if not future.done():
                     future.set_exception(e)
-                logger.error(f"FAIL-CLOSED: CDP setup failed for page: {e}")
-                asyncio.create_task(fail_closed_profile(profile_id, context, playwright, f"CDP UserAgentOverride failed: {e}"))
-                raise RuntimeError(f"FAIL-CLOSED: CDP UserAgentOverride failed: {e}")
+                logger.error("FAIL-CLOSED: CDP setup failed for page: %s", e)
+                raise RuntimeError("FAIL-CLOSED: CDP UserAgentOverride failed")
 
         # Listen for context close to cancel any remaining futures
         def on_context_close():
@@ -2158,7 +2168,6 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                                 break
                             else:
                                 if i % 100 == 0:
-                                    from backend.logging_config import logger
                                     logger.debug(
                                         "Routing barrier waiting for page: %s",
                                         _safe_url_for_log(request.url),
@@ -3584,7 +3593,8 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
             except Exception:
                 pass
         if isinstance(e, RuntimeError) and str(e).startswith("FAIL-CLOSED:"):
-            message = str(e)
+            logger.error("Fail-closed launch aborted for %s: %s", profile_id, e)
+            message = PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"]
         else:
             message = "Launch failed safely without starting an unprotected browser."
         return {"status": "error", "message": message}
@@ -3608,7 +3618,7 @@ async def launch_profile(profile_id: str, force_headless: bool = False, pin: str
         from backend.logging_config import logger
         logger.exception("launch_profile unhandled failure for %s", profile_id)
         _cleanup_orphan_processes(profile_id)
-        return {"status": "error", "message": f"Launch failed: {exc}"}
+        return {"status": "error", "message": PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"]}
 
     try:
         profile = profile_manager.get_profile(profile_id)
@@ -3664,7 +3674,7 @@ async def safe_launch_profile(profile_id: str, force_headless: bool = False, pin
         from backend.logging_config import logger
         logger.exception("safe_launch_profile unhandled failure for %s", profile_id)
         _cleanup_orphan_processes(profile_id)
-        return {"status": "error", "message": f"Launch failed: {exc}"}
+        return {"status": "error", "message": PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"]}
 
 def _maybe_clear_ephemeral_profile_data(profile_id: str):
     profile = profile_manager.get_profile(profile_id)

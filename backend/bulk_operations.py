@@ -25,7 +25,7 @@ from backend.auth import require_admin_token
 from backend.logging_config import logger
 from backend.profile_manager import profile_manager
 from backend.profile_creator import profile_creator
-from backend.error_codes import PUBLIC_CODE_MESSAGES, is_public_code, public_message_for
+from backend.error_codes import PUBLIC_CODE_MESSAGES, public_message_for
 from backend.browser_manager import (
     launch_profile,
     close_profile,
@@ -94,7 +94,7 @@ def bulk_tag_profiles(profile_ids: List[str], tags: List[str]):
 
     logger.info(f"Bulk tag: {success_count}/{len(profile_ids)} profiles updated")
     return {
-        "status": "success",
+        "status": "success" if success_count == len(profile_ids) else ("partial" if success_count else "error"),
         "message": f"Tagged {success_count} out of {len(profile_ids)} profiles",
         "total": len(profile_ids),
         "succeeded": success_count,
@@ -121,7 +121,7 @@ def bulk_untag_profiles(profile_ids: List[str], tags: List[str]):
 
     logger.info(f"Bulk untag: {success_count}/{len(profile_ids)} profiles updated")
     return {
-        "status": "success",
+        "status": "success" if success_count == len(profile_ids) else ("partial" if success_count else "error"),
         "message": f"Untagged {success_count} out of {len(profile_ids)} profiles",
         "total": len(profile_ids),
         "succeeded": success_count,
@@ -275,7 +275,7 @@ async def bulk_launch_profiles(req: BulkProfileIdsRequest, _auth: None = Depends
     logger.info(f"Bulk launch: {success_count}/{len(req.profile_ids)} profiles launched")
 
     return {
-        "status": "success",
+        "status": "success" if success_count == len(req.profile_ids) else ("partial" if success_count else "error"),
         "message": f"Launched {success_count} out of {len(req.profile_ids)} profiles",
         "total": len(req.profile_ids),
         "succeeded": success_count,
@@ -306,7 +306,7 @@ async def bulk_close_profiles(req: BulkProfileIdsRequest, _auth: None = Depends(
     logger.info(f"Bulk close: {success_count}/{len(req.profile_ids)} profiles closed")
 
     return {
-        "status": "success",
+        "status": "success" if success_count == len(req.profile_ids) else ("partial" if success_count else "error"),
         "message": f"Closed {success_count} out of {len(req.profile_ids)} profiles",
         "total": len(req.profile_ids),
         "succeeded": success_count,
@@ -349,7 +349,7 @@ async def bulk_delete_profiles(req: BulkProfileIdsRequest, _auth: None = Depends
     logger.info(f"Bulk delete: {success_count}/{len(req.profile_ids)} profiles deleted")
 
     return {
-        "status": "success",
+        "status": "success" if success_count == len(req.profile_ids) else ("partial" if success_count else "error"),
         "message": f"Deleted {success_count} out of {len(req.profile_ids)} profiles",
         "total": len(req.profile_ids),
         "succeeded": success_count,
@@ -380,7 +380,7 @@ def bulk_assign_folder(req: BulkAssignFolderRequest, _auth: None = Depends(requi
 
     logger.info(f"Bulk folder assign: {success_count}/{len(req.profile_ids)} profiles updated")
     return {
-        "status": "success",
+        "status": "success" if success_count == len(req.profile_ids) else ("partial" if success_count else "error"),
         "message": f"Assigned {success_count} out of {len(req.profile_ids)} profiles",
         "folder_id": req.folder_id,
         "total": len(req.profile_ids),

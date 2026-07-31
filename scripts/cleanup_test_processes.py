@@ -11,26 +11,41 @@ import sys
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
+def _user_data_dir_from(cmdline):
+    """Extract the --user-data-dir value from a command line (list of args).
+
+    Args are matched as individual tokens so paths containing spaces are
+    handled correctly (a naive whitespace split would break them).
+    """
+    for i, arg in enumerate(cmdline):
+        if arg.lower() == "--user-data-dir":
+            if i + 1 < len(cmdline):
+                return cmdline[i + 1].strip().strip('"')
+        if arg.lower().startswith("--user-data-dir="):
+            return arg.split("=", 1)[1].strip().strip('"')
+    return None
+
+
 def _is_ghostbrowser_proc(cmdline):
-    """Return True if the process belongs to this GhostBrowser project."""
+    """Return True if the process belongs to this GhostBrowser project.
+
+    ``cmdline`` is the raw argument list from psutil. Bundled Chromium shipped
+    with this project matches on the dist/GhostBrowser path. Playwright's
+    cached Chromium is a shared binary, so it only matches when its
+    --user-data-dir lives *inside* this project's profiles_data directory
+    (path-boundary checked so a sibling like ``profiles_data_backup`` is never
+    mistaken for it).
+    """
     if not cmdline:
         return False
-    lowered = cmdline.lower()
-    # Bundled Chromium shipped with this project.
+    lowered = " ".join(cmdline).lower()
     if "dist" in lowered and "ghostbrowser" in lowered and "chrome" in lowered:
         return True
-    # Playwright's cached Chromium is a shared binary, but the project only
-    # drives it with a --user-data-dir under this project's profiles_data.
-    if "--user-data-dir=" in lowered:
-        ud = None
-        for arg in cmdline.split():
-            if arg.lower().startswith("--user-data-dir="):
-                ud = arg.split("=", 1)[1].strip('"').strip()
-                break
-        if ud:
-            ud_norm = os.path.normcase(os.path.realpath(ud))
-            profiles_norm = os.path.normcase(os.path.realpath(os.path.join(PROJECT_ROOT, "profiles_data")))
-            return ud_norm.startswith(profiles_norm)
+    ud = _user_data_dir_from(cmdline)
+    if ud:
+        ud_norm = os.path.normcase(os.path.realpath(ud))
+        profiles_norm = os.path.normcase(os.path.realpath(os.path.join(PROJECT_ROOT, "profiles_data")))
+        return ud_norm == profiles_norm or ud_norm.startswith(profiles_norm + os.sep)
     return False
 
 
@@ -61,7 +76,7 @@ def main():
                     continue
             elif name not in ("chrome", "chromium"):
                 continue
-            if _is_ghostbrowser_proc(" ".join(proc.info.get("cmdline") or [])):
+            if _is_ghostbrowser_proc(proc.info.get("cmdline") or []):
                 targets.append(proc.info["pid"])
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue

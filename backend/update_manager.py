@@ -39,6 +39,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
 from backend.auth import require_admin_token
+from backend.logging_config import logger
 
 try:
     from cryptography.hazmat.primitives import serialization
@@ -808,7 +809,8 @@ async def apply_update_endpoint(req: ApplyUpdateRequest, _auth: None = Depends(r
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Update application failed: {exc}") from exc
+        logger.error("Update application failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Update application failed") from exc
 
 
 @router.post("/rollback")
@@ -820,7 +822,8 @@ async def rollback_update_endpoint(_auth: None = Depends(require_admin_token)):
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Rollback failed: {exc}") from exc
+        logger.error("Rollback failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Rollback failed") from exc
 
 
 @router.post("/download")
@@ -836,4 +839,5 @@ async def download_update_endpoint(req: DownloadUpdateRequest, _auth: None = Dep
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Update download failed: {exc}") from exc
+        logger.error("Update download failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Update download failed") from exc

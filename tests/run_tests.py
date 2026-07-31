@@ -1182,7 +1182,7 @@ async def run_tests():
             try:
                 res = await launch_profile(fail_pid, force_headless=True)
                 collector.add_check("Fail Closed on CDP failure - launch returns error", res["status"] == "error")
-                collector.add_check("Fail Closed on CDP failure - message contains CDP", "CDP" in res["message"])
+                collector.add_check("Fail Closed on CDP failure - stable message, no internal detail", res["message"] == "Launch failed" and "CDP" not in res["message"])
                 collector.add_check("Fail Closed on CDP failure - state is stopped or error", get_profile_state(fail_pid) in ("stopped", "error"), check_id="phase4.cdp_failure_fail_closed")
                 collector.add_check("Fail Closed on CDP failure - context not in active_browsers", fail_pid not in active_browsers)
                 from backend.browser_manager import find_profile_processes

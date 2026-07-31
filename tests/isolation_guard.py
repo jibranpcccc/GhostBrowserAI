@@ -18,13 +18,15 @@ from pathlib import Path
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
 
+# Private temp dir owned by this process: paths created inside it are not
+# guessable by other users, so later open() calls on those names have no
+# TOCTOU window (unlike tempfile.mktemp / mkstemp-then-unlink).
+_TEMP_DIR = Path(tempfile.mkdtemp(prefix="ghostbrowser-test-isolation-"))
 
-def _secure_temp_path(suffix: str) -> Path:
-    """Create a unique temp path without ``tempfile.mktemp``'s TOCTOU race."""
-    fd, path = tempfile.mkstemp(suffix=suffix)
-    os.close(fd)
-    os.remove(path)
-    return Path(path)
+
+def _private_temp_path(name: str) -> Path:
+    """Unique non-existent path inside a process-private temp directory."""
+    return _TEMP_DIR / name
 
 
 def apply() -> None:
@@ -38,11 +40,11 @@ def apply() -> None:
         sys.path.insert(0, str(WORKSPACE_ROOT))
 
     import backend.credential_store as _credential_store
-    _credential_store.DEFAULT_STORE_PATH = _secure_temp_path(".secure.json")
+    _credential_store.DEFAULT_STORE_PATH = _private_temp_path("test.secure.json")
 
     try:
         import backend.cloudflare_manager as _cfm
-        _cfm.ACCOUNTS_FILE = str(_secure_temp_path(".txt"))
+        _cfm.ACCOUNTS_FILE = str(_private_temp_path("test_accounts.txt"))
         manager = _cfm.cloudflare_manager
         manager.accounts = []
         manager.use_secure_store = False

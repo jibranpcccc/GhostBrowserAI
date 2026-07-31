@@ -166,5 +166,57 @@ class TestSynchronizerSanitized(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("secret sync detail 77", str(item))
 
 
+class TestLaunchFailClosedSanitized(unittest.IsolatedAsyncioTestCase):
+    """A FAIL-CLOSED launch abort must surface the stable LAUNCH_FAILED message,
+    never the raw RuntimeError text (which used to embed exception details)."""
+
+    async def test_fail_closed_launch_error_drops_internal_detail(self):
+        from backend import browser_manager as bm
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as td:
+            profile = {
+                "id": "lp1",
+                "path": td,
+                "proxy": None,
+                "fingerprint": {"os": "Windows"},
+            }
+
+            async def fake_scan(profile):
+                return {"status": "clean"}
+
+            def boom(profile, force_headless=False, forced_proxy=None):
+                raise RuntimeError("FAIL-CLOSED: secret internal launch detail 555")
+
+            async def noop_acquire(pid):
+                pass
+
+            with patch.object(bm.profile_manager, "get_profile", return_value=profile), \
+                 patch.object(bm.profile_manager, "PROFILES_DIR", Path(td).parent), \
+                 patch.object(bm, "_profile_has_verified_provenance", return_value=True), \
+                 patch.object(bm.ai_scanner, "scan_profile_before_launch", fake_scan), \
+                 patch("backend.lock_manager.lock_manager.acquire", noop_acquire), \
+                 patch.object(bm, "build_browser_launch_config", boom):
+                result = await bm.launch_profile("lp1")
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["message"], "Launch failed")
+        self.assertNotIn("secret internal launch detail 555", str(result))
+
+    async def test_wrapper_fallback_drops_exception_detail(self):
+        from backend import browser_manager as bm
+
+        async def boom(pid, force_headless=False, pin=None):
+            raise RuntimeError("secret wrapper detail 999")
+
+        with patch.object(bm, "_do_launch_profile", boom):
+            result = await bm.launch_profile("p-x", force_headless=True)
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["message"], "Launch failed")
+        self.assertNotIn("secret wrapper detail 999", str(result))
+
+
 if __name__ == "__main__":
     unittest.main()

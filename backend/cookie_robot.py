@@ -330,7 +330,7 @@ class CookieRobot:
             warm_start = time.time()
 
         except Exception as e:
-            self._set_status(profile_id, state="failed", error=f"Launch exception: {e}")
+            self._set_status(profile_id, state="failed", error="Launch exception")
             print(f"[CookieRobot] ❌ Exception launching {profile_id}: {e}")
             self._tasks.pop(profile_id, None)
             return False
