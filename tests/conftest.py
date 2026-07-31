@@ -10,14 +10,11 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 # Guard against loading production Cloudflare credentials during test discovery.
 # The autouse fixture below clears any stray singleton state for each test.
-os.environ["GHOSTBROWSER_ALLOW_PLAINTEXT_CREDENTIALS"] = "0"
-os.environ["GHOSTBROWSER_CF_ACCOUNTS_JSON"] = ""
-os.environ["GHOSTBROWSER_TEST_ENV"] = "1"
-import backend.credential_store as _credential_store
-_credential_store.DEFAULT_STORE_PATH = Path(tempfile.mktemp(suffix=".secure.json"))
+import isolation_guard  # noqa: F401  (applies import-time sanitization)
 
 
 FAKE_NATIVE_METADATA = {

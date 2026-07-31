@@ -184,7 +184,8 @@ async def broadcast_action(req: SyncActionRequest, _auth: None = Depends(require
             await _execute_action(page, req)
             return {"profile_id": pid, "status": "success"}
         except Exception as exc:
-            return {"profile_id": pid, "status": "error", "message": str(exc)}
+            logger.error("Sync action '%s' failed for profile %s: %s", req.action_type, pid, type(exc).__name__)
+            return {"profile_id": pid, "status": "error", "code": "ACTION_FAILED", "message": "Action failed"}
 
     for pid, page in pages:
         tasks.append(run_single(pid, page))

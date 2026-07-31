@@ -31,7 +31,11 @@ from backend.credential_store import store_status
 # --- API Routers ---
 from backend.synchronizer import router as synchronizer_router
 from backend.profile_folders import router as profile_folders_router
-from backend.bulk_operations import router as bulk_operations_router
+from backend.bulk_operations import (
+    router as bulk_operations_router,
+    BulkCreateRequest,
+    bulk_create_profiles,
+)
 from backend.cloud_sync import cloud_sync_manager, CloudSyncClient, _validate_sync_id, _get_remote_sync_client
 from backend.auth import RATE_LIMITERS, check_pin_rate_limit, get_client_key, require_admin_token
 from backend.update_manager import router as update_manager_router
@@ -317,50 +321,21 @@ class BulkCreateProfileModel(BaseModel):
 
 @app.post("/api/profiles/generate/bulk")
 async def generate_bulk_profiles(data: BulkCreateProfileModel, _auth: None = Depends(require_admin_token)):
-    """Generate multiple profiles concurrently via Kimi AI, with concurrency limits."""
-    count = data.count
+    """Generate multiple profiles via Kimi AI.
 
-    try:
-        proxy = data.proxy if data.proxy is not None else (parse_proxy_string(data.proxy_string) if data.proxy_string else None)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    advanced_dict = data.advanced.model_dump() if data.advanced else None
-
-    async def create_single(i):
-        name = f"{data.base_name}_{i+1}"
-        try:
-            async with _profile_create_sem:
-                result = await profile_creator.create_zero_leak_profile(
-                    name=name, proxy=proxy, advanced_ui=advanced_dict, pin=data.pin
-                )
-            if isinstance(result, dict):
-                result.setdefault("name", name)
-            return result
-        except Exception as e:
-            return {"status": "error", "message": str(e), "name": name}
-
-    tasks = [create_single(i) for i in range(count)]
-    results = await asyncio.gather(*tasks)
-
-    success_count = sum(1 for r in results if r.get("status") == "success")
-    failed_count = count - success_count
-    if success_count == count:
-        status = "success"
-    elif success_count == 0:
-        status = "error"
-    else:
-        status = "partial"
-
-    return _redact_sensitive_api_data({
-        "status": status,
-        "message": f"Successfully created {success_count} out of {count} profiles",
-        "total": count,
-        "success_count": success_count,
-        "succeeded": success_count,
-        "failed": failed_count,
-        "results": results,
-    })
+    Legacy alias of ``POST /api/profiles/bulk/create``. Both routes share a
+    single implementation (``bulk_operations.bulk_create_profiles``) so error
+    sanitization, the create semaphore, and ``skip_warming`` are identical.
+    """
+    req = BulkCreateRequest(
+        base_name=data.base_name,
+        count=data.count,
+        proxy=data.proxy,
+        proxy_string=data.proxy_string,
+        pin=data.pin,
+        advanced=data.advanced.model_dump() if data.advanced else None,
+    )
+    return await bulk_create_profiles(req)
 
 @app.get("/api/profiles")
 def list_profiles(_auth: None = Depends(require_admin_token)):
@@ -754,6 +729,24 @@ async def launch_profile_api(profile_id: str, req: LaunchProfileRequest = None, 
     if res.get("status") == "error":
         raise HTTPException(status_code=400, detail=res.get("message"))
     return res
+
+@app.get("/api/profiles/{profile_id}/cdp")
+async def get_profile_cdp(profile_id: str, _auth: None = Depends(require_admin_token)):
+    """Return the CDP endpoint for a running profile (requires GHOSTBROWSER_CDP_TEST=1)."""
+    from backend.browser_manager import active_browsers
+    browser_data = active_browsers.get(profile_id)
+    if not browser_data:
+        raise HTTPException(status_code=400, detail="Profile not running")
+    cdp_port = browser_data.get("cdp_port")
+    if not cdp_port:
+        raise HTTPException(status_code=400, detail="CDP not enabled. Set GHOSTBROWSER_CDP_TEST=1 before launching.")
+    cdp_ws_path = browser_data.get("cdp_ws_path") or "/devtools/browser/"
+    return {
+        "status": "success",
+        "profile_id": profile_id,
+        "cdp_url": f"http://127.0.0.1:{cdp_port}",
+        "cdp_ws_url": f"ws://127.0.0.1:{cdp_port}{cdp_ws_path}",
+    }
 
 @app.post("/api/profiles/{profile_id}/close")
 async def close_profile_api(profile_id: str, _auth: None = Depends(require_admin_token)):

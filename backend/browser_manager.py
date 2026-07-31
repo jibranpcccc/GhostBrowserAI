@@ -3,6 +3,7 @@ import json
 import os
 import re
 import shutil
+import time
 from urllib.parse import urlparse, unquote
 from playwright.async_api import async_playwright
 import playwright_stealth
@@ -470,6 +471,33 @@ def register_cdp_task(profile_id, task, context, playwright):
 
     task.add_done_callback(on_complete)
 
+
+async def read_devtools_active_port(profile_path: str, timeout: float = 10.0,
+                                    poll_interval: float = 0.1):
+    """Poll ``<profile_path>/DevToolsActivePort`` for the CDP endpoint.
+
+    Chromium launched with ``--remote-debugging-port=0`` keeps ``0`` in its
+    argv but writes the selected loopback port and browser WebSocket path to
+    ``DevToolsActivePort`` inside the profile directory. Returns ``(port,
+    ws_path)`` once a valid entry is observed, or ``(None, None)`` on timeout.
+    """
+    active_port_file = os.path.join(profile_path, "DevToolsActivePort")
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            if os.path.exists(active_port_file):
+                with open(active_port_file, "r", encoding="utf-8") as fh:
+                    lines = [ln.strip() for ln in fh.read().splitlines() if ln.strip()]
+                if len(lines) >= 2:
+                    port = int(lines[0])
+                    ws_path = lines[1]
+                    if port > 0 and ws_path.startswith("/devtools/browser/"):
+                        return port, ws_path
+        except (ValueError, OSError):
+            pass
+        await asyncio.sleep(poll_interval)
+    return None, None
+
 def get_profile_state(profile_id: str) -> str:
     state = profile_states.get(profile_id)
     if state in ["launching", "closing", "error"]:
@@ -906,6 +934,10 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
         memory_gb = int(memory_gb)
     except (TypeError, ValueError):
         memory_gb = 8
+
+    if os.getenv("GHOSTBROWSER_CDP_TEST") in ("1", "true"):
+        _add_unique_arg(args, "--remote-debugging-port=0")
+        _add_unique_arg(args, "--remote-allow-origins=*")
 
     canvas_noise = advanced.get("canvas_noise", True)
     webgl_noise = advanced.get("webgl_noise", True)
@@ -3443,6 +3475,15 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
         procs = find_profile_processes(canonical_profile_path)
         pid = procs[0].pid if procs else None
 
+        # CDP test mode: Chromium keeps `--remote-debugging-port=0` in its argv
+        # but writes the selected loopback port + browser WS path to
+        # <profile_dir>/DevToolsActivePort. Poll that file instead of parsing
+        # the command line (which would always read 0).
+        cdp_port = None
+        cdp_ws_path = None
+        if os.getenv("GHOSTBROWSER_CDP_TEST") in ("1", "true"):
+            cdp_port, cdp_ws_path = await read_devtools_active_port(canonical_profile_path)
+
         active_browsers[profile_id] = {
             "playwright": playwright,
             "context": context,
@@ -3450,6 +3491,8 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
             "pid": pid,
             "proxy": config.get("assigned_proxy"),
             "args": config.get("args", []),
+            "cdp_port": cdp_port,
+            "cdp_ws_path": cdp_ws_path,
         }
 
         def _on_context_close(ctx):
@@ -3719,7 +3762,7 @@ async def _do_close_profile(profile_id: str):
     except Exception as e:
         logger.error(f"Error closing profile {profile_id}: {e}", exc_info=True)
         set_profile_state(profile_id, "error")
-        return {"status": "error", "message": f"Close failed: {str(e)}"}
+        return {"status": "error", "code": "CLOSE_FAILED", "message": "Close failed"}
     finally:
         lock_manager.release(profile_id)
 

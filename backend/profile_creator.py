@@ -217,10 +217,11 @@ async def create_zero_leak_profile(
 
     try:
         get_installed_chromium_major_version()
-    except Exception as e:
+    except Exception:
+        logger.error("Cannot determine installed Chromium version", exc_info=True)
         return {
             "status": "error",
-            "message": f"Validation failed: cannot determine installed Chromium version: {e}",
+            "message": "Validation failed: cannot determine installed Chromium version",
             "code": "CHROMIUM_VERSION_MISSING",
         }
 
@@ -236,7 +237,12 @@ async def create_zero_leak_profile(
         except asyncio.TimeoutError:
             return {"status": "error", "code": "KIMI_TIMEOUT", "message": "AI fingerprint generation timed out."}
         except Exception as e:
-            return {"status": "error", "code": "KIMI_UNAVAILABLE", "message": str(e)}
+            logger.error("Kimi fingerprint generation failed for attempt %s: %s", attempt + 1, type(e).__name__)
+            return {
+                "status": "error",
+                "code": "KIMI_UNAVAILABLE",
+                "message": "Strict AI fingerprint service unavailable",
+            }
 
         fp_os = fp.get("os")
         if fp_os not in ("Windows", "Mac", "Linux"):
