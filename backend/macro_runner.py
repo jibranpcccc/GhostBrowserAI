@@ -6,12 +6,13 @@ from backend.logging_config import logger
 
 async def run_macro(profile_id: str, macro: dict):
     from backend.browser_manager import launch_profile, close_profile, active_browsers
+    from backend.error_codes import PUBLIC_CODE_MESSAGES
 
     was_running = profile_id in active_browsers
     if not was_running:
         res = await launch_profile(profile_id, force_headless=True)
         if res.get("status") == "error":
-            return {"status": "error", "message": f"Failed to launch: {res.get('message')}"}
+            return {"status": "error", "message": PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"]}
 
     try:
         browser_data = active_browsers[profile_id]
@@ -56,7 +57,7 @@ async def run_macro(profile_id: str, macro: dict):
 
             except Exception as e:
                 logger.error(f"[Macro {profile_id}] Step {i+1} Failed: {str(e)}", extra={"profile_id": profile_id})
-                return {"status": "error", "message": f"Step {i+1} ({action}) failed: {str(e)}"}
+                return {"status": "error", "message": f"Step {i+1} ({action}) failed"}
 
         return {"status": "success", "message": "Macro completed successfully"}
 

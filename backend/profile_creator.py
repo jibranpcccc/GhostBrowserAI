@@ -15,6 +15,7 @@ from backend.ai_generator import generate_fingerprint_ai, sanitize_native_surfac
 from backend.ai_coherence_validator import coherence_validator
 from backend.config import AI_GENERATION_TIMEOUT, get_installed_chromium_major_version
 from backend.ai_data_sanitizer import data_sanitizer
+from backend.error_codes import PUBLIC_CODE_MESSAGES
 from backend.logging_config import logger
 
 QUARANTINE_DIR = os.path.join(os.path.dirname(__file__), "..", "quarantined_profiles")
@@ -217,10 +218,11 @@ async def create_zero_leak_profile(
 
     try:
         get_installed_chromium_major_version()
-    except Exception as e:
+    except Exception:
+        logger.error("Cannot determine installed Chromium version", exc_info=True)
         return {
             "status": "error",
-            "message": f"Validation failed: cannot determine installed Chromium version: {e}",
+            "message": PUBLIC_CODE_MESSAGES["CHROMIUM_VERSION_MISSING"],
             "code": "CHROMIUM_VERSION_MISSING",
         }
 
@@ -234,9 +236,14 @@ async def create_zero_leak_profile(
         try:
             fp = await asyncio.wait_for(generate_fingerprint_ai(), timeout=AI_GENERATION_TIMEOUT)
         except asyncio.TimeoutError:
-            return {"status": "error", "code": "KIMI_TIMEOUT", "message": "AI fingerprint generation timed out."}
+            return {"status": "error", "code": "KIMI_TIMEOUT", "message": PUBLIC_CODE_MESSAGES["KIMI_TIMEOUT"]}
         except Exception as e:
-            return {"status": "error", "code": "KIMI_UNAVAILABLE", "message": str(e)}
+            logger.error("Kimi fingerprint generation failed for attempt %s: %s", attempt + 1, type(e).__name__)
+            return {
+                "status": "error",
+                "code": "KIMI_UNAVAILABLE",
+                "message": PUBLIC_CODE_MESSAGES["KIMI_UNAVAILABLE"],
+            }
 
         fp_os = fp.get("os")
         if fp_os not in ("Windows", "Mac", "Linux"):
@@ -252,7 +259,7 @@ async def create_zero_leak_profile(
             print("[Orchestrator] Profile creation REFUSED. No profile is ever made without Kimi AI.")
             return {
                 "status": "error",
-                "message": "Kimi AI unavailable: all Cloudflare accounts failed or are on cooldown. Add more accounts to cloudflare_accounts.txt and retry.",
+                "message": PUBLIC_CODE_MESSAGES["KIMI_UNAVAILABLE"],
                 "code": "KIMI_UNAVAILABLE",
             }
 
@@ -331,6 +338,7 @@ async def create_zero_leak_profile(
             profile_manager._save_metadata()
         except Exception as e:
             print(f"[Orchestrator] Profile registration failed, rolling back: {e}")
+            logger.error("Profile registration failed for %s: %s", final_id, type(e).__name__, exc_info=True)
             profile_manager.profiles.pop(final_id, None)
             try:
                 profile_manager._save_metadata()
@@ -341,7 +349,7 @@ async def create_zero_leak_profile(
                     shutil.rmtree(final_path)
                 except Exception:
                     pass
-            return {"status": "error", "message": f"Profile registration failed: {e}"}
+            return {"status": "error", "code": "CREATE_FAILED", "message": PUBLIC_CODE_MESSAGES["CREATE_FAILED"]}
 
         print("[Orchestrator] Step 4: Running AI Auto Validator...")
         from backend.ai_auto_validator import auto_validator
@@ -359,7 +367,7 @@ async def create_zero_leak_profile(
                     shutil.rmtree(final_path)
                 except Exception:
                     pass
-            return {"status": "error", "code": "CREATE_FAILED", "message": "Profile creation failed safely."}
+            return {"status": "error", "code": "CREATE_FAILED", "message": PUBLIC_CODE_MESSAGES["CREATE_FAILED"]}
 
         if validation_result["decision"] != "ACCEPT":
             issues = validation_result.get("issues", [])
@@ -383,8 +391,9 @@ async def create_zero_leak_profile(
                     profile_manager.delete_profile(final_profile["id"])
                     continue
 
-        mode = advanced.get("privacy_mode", "standard")
-        if not skip_warming and mode not in ("strict", "ephemeral"):
+            mode = advanced.get("privacy_mode", "standard")
+        _test_env = os.environ.get("GHOSTBROWSER_TEST_ENV", "").strip().lower() in ("1", "true")
+        if not skip_warming and not _test_env and mode not in ("strict", "ephemeral"):
             print("[Orchestrator] Step 5: AI Headless Cookie Warmer...")
             from backend.cookie_robot import cookie_robot
             await cookie_robot.start_warming([final_profile["id"]], 3, 5)
@@ -424,7 +433,7 @@ async def create_healed_profile(
         return {
             "status": "success",
             "profile": profile,
-            "heal": {"skipped": True, "reason": str(exc)},
+            "heal": {"skipped": True, "reason": "Healing scan unavailable"},
         }
 
     last_scan = None

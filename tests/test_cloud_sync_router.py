@@ -152,3 +152,24 @@ class CloudSyncRouterTests(TestCase):
             self.assertTrue(response.json()["remote"]["stored"])
             mock_export.assert_called_once_with("p1", "correct horse battery staple")
             mock_upload.assert_called_once()
+
+    @mock.patch("backend.cloud_sync.CloudSyncClient.upload_profile")
+    @mock.patch("backend.cloud_sync.cloud_sync_manager.export_profile")
+    @mock.patch("backend.profile_manager.profile_manager.get_profile")
+    def test_legacy_remote_upload_runtime_error_is_stable(self, mock_get, mock_export, mock_upload):
+        mock_get.return_value = {"id": "p1"}
+        mock_export.return_value = b"archive"
+        mock_upload.side_effect = RuntimeError("secret remote sync detail 777")
+        with self._client() as client:
+            response = client.post(
+                "/api/profiles/p1/sync/remote",
+                json={"passphrase": "correct horse battery staple"},
+                headers={**self._csrf_headers(client), **self._admin_headers()},
+            )
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json()["detail"], "Remote sync upload failed")
+        self.assertNotIn("secret remote sync detail 777", response.text)
+
+
+if __name__ == "__main__":
+    unittest.main()

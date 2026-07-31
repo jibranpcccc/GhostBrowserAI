@@ -14,7 +14,7 @@ This plan maps the feature request against the current codebase. Items are marke
 | Profile tags / bulk tagging | **DONE** | Tags stored in profile metadata; add/remove/bulk endpoints + frontend badges. |
 | Bulk operations | **DONE** | `backend/bulk_operations.py` + UI. |
 | Team roles | **DONE** | `backend/team_manager.py`. |
-| Cloud sync | **TODO** | No remote sync yet; only local encrypted storage. |
+| Cloud sync | **DONE** | Local encrypted sync dir + remote `sync_server/`; see §13. |
 
 ## 2. Keyboard/Password/Fraud Isolation (added from request)
 
@@ -177,7 +177,7 @@ Repository-side adapters/build pipelines are in place for:
 - TCP/IP fingerprint control harness (`tcpip/`)
 - Remote encrypted cloud sync server (`sync_server/`)
 - Cloud sync router endpoints protected by admin token
-- Removed insecure XOR fallback for profile encryption
+- Removed insecure XOR encryption fallback; legacy XOR-encrypted archives are rejected by default and decrypt only with explicit `GHOSTBROWSER_ALLOW_LEGACY_XOR=1` opt-in
 - Signed auto-update system with confirmation, staged apply, rollback
 - CLI entry point
 - Thread-safe API sliding-window rate limiting with global, admin-token, and PIN-verification quotas
@@ -195,6 +195,18 @@ Repository-side adapters/build pipelines are in place for:
 ## 15. What Remains
 
 All implementable repository-side work is complete. No active TODOs remain.
+
+## 16. Known Non-Blocking Frontend Items
+
+These are tracked for polish but are not release blockers:
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Dashboard Live Activity empty state | **DONE** | Shows "Waiting for events..." until first activity event. |
+| Rate-limit self-throttling for polling | **DONE** | Polling pauses when `document.hidden` is true; consolidated to single `setInterval`. |
+| Fetch wrapper normalization | **DONE** | All mutation endpoints use `requestJson`; global fetch override handles headers/XSRF/admin-token. |
+| Dashboard activity feed population | **PARTIAL** | Populated by `addActivity()` calls; empty state shown before first event. |
+| Account badge responsiveness | **DONE** | Collapsed sidebar hides badges; mobile layout shows compact icons. |
 
 External runtime dependencies that the operator must provide at deploy time:
 - A deployed production instance of `sync_server/`

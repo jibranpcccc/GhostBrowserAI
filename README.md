@@ -16,7 +16,7 @@ GhostBrowser launches isolated Chromium windows through a Playwright backend con
 - **Fingerprint spoofing** — canvas, WebGL vendor/renderer, audio context, fonts, screen resolution, DPR, `hardwareConcurrency`, `deviceMemory`, touch/pointer, media devices, battery, sensors, WebGPU, speech voices, and network information.
 - **Proxy management** — per-profile HTTP/HTTPS/SOCKS5 proxy binding, health checks, failover pool, geo-based timezone/locale auto-match, and kill-switch.
 - **Privacy modes** — Standard, Strict, and Ephemeral browsing modes with configurable storage persistence.
-- **PIN lock** — PBKDF2-hashed PIN required before launching sensitive profiles.
+- **PIN lock** — optional per-profile launch lock. New and changed PINs must be 4–6 ASCII digits and are stored as PBKDF2 hashes; existing legacy PINs remain usable for unlock until changed.
 - **Virtual keyboard** — on-screen keyboard for `data-secure="true"` inputs with shift, caps, and randomized layouts.
 - **Detection scanners** — offline anti-detect scanner plus live checks against browserleaks, whoer, creepjs, fingerprintjs, pixelscan, iphey, and sannysoft.
 - **CSRF / CSP / security headers** — FastAPI double-submit cookie CSRF protection, CSP, X-Frame-Options, Referrer-Policy, and Permissions-Policy.

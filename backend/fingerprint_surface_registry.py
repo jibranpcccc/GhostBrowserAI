@@ -66,7 +66,31 @@ SURFACES: List[Dict] = [
         "name": "navigator.webdriver masking",
         "category": "navigator",
         "status": "protected",
-        "notes": "Deleted from navigator + Playwright stealth.",
+        "notes": "Deleted from navigator + Playwright stealth; returns false via Object.defineProperty getter.",
+    },
+    {
+        "name": "navigator.vendor / product / productSub",
+        "category": "navigator",
+        "status": "protected",
+        "notes": "vendor='Google Inc.', product='Gecko' set via safeDefineProperty spoofing script.",
+    },
+    {
+        "name": "navigator.cookieEnabled / pdfViewerEnabled",
+        "category": "navigator",
+        "status": "protected",
+        "notes": "Both return true via safeDefineProperty.",
+    },
+    {
+        "name": "navigator.doNotTrack / javaEnabled",
+        "category": "navigator",
+        "status": "protected",
+        "notes": "doNotTrack=null, javaEnabled()=false.",
+    },
+    {
+        "name": "performance.memory",
+        "category": "navigator",
+        "status": "protected",
+        "notes": "jsHeapSizeLimit/totalJSHeapSize/usedJSHeapSize spoofed per-profile hardware memory.",
     },
     {
         "name": "Chrome runtime / csi / loadTimes",
@@ -78,19 +102,19 @@ SURFACES: List[Dict] = [
         "name": "Permissions API",
         "category": "navigator",
         "status": "protected",
-        "notes": "All permission queries return prompt unless denied by real permission.",
+        "notes": "Per-profile deterministic variation: 90% prompt, 5% granted, 5% denied for sensitive permissions. Non-sensitive permissions pass through to real query.",
     },
     {
         "name": "Client hints",
         "category": "navigator",
-        "status": "partial",
-        "notes": "Relies on native Chromium headers; no explicit override.",
+        "status": "protected",
+        "notes": "CDP Emulation+Network UserAgentOverride plus JS navigator.userAgentData fallback; request headers aligned via Accept-CH opt-in routing.",
     },
     {
         "name": "Canvas fingerprint noise",
         "category": "rendering",
         "status": "protected",
-        "notes": "Stable per-profile noise in toDataURL, getImageData, toBlob.",
+        "notes": "Stable per-profile noise in toDataURL, getImageData, toBlob, OffscreenCanvas, and blob/network workers.",
     },
     {
         "name": "WebGL vendor / renderer / params",
@@ -119,8 +143,8 @@ SURFACES: List[Dict] = [
     {
         "name": "Font metric spoofing",
         "category": "rendering",
-        "status": "partial",
-        "notes": "measureText not patched; DOM geometry offsets added for rect fingerprinting.",
+        "status": "protected",
+        "notes": "CanvasRenderingContext2D.measureText returns per-profile perturbed metrics matching OS cohort; configurable via experimental_measuretext.",
     },
     {
         "name": "DOM geometry / ClientRects",

@@ -188,7 +188,8 @@ class ProxyLaunchBoundaryTests(EnvironmentMixin, unittest.IsolatedAsyncioTestCas
             ) as playwright_factory:
                 result = await browser_manager.launch_profile(profile["id"])
         self.assertEqual(result["status"], "error")
-        self.assertIn("provenance", result["message"])
+        self.assertEqual(result["message"], "Launch failed")
+        self.assertNotIn("provenance", result["message"])
         playwright_factory.assert_not_called()
 
     async def test_test_environment_explicitly_allows_no_proxy(self):

@@ -106,10 +106,14 @@ def _decrypt(passphrase: str, payload: bytes) -> bytes:
             raise ValueError("Invalid passphrase or corrupted archive") from exc
 
     if payload.startswith(_HEADER_XORWARN):
+        if os.environ.get("GHOSTBROWSER_ALLOW_LEGACY_XOR", "").strip().lower() not in ("1", "true"):
+            raise RuntimeError(
+                "Legacy XOR-encrypted archive rejected. Set GHOSTBROWSER_ALLOW_LEGACY_XOR=1 to "
+                "temporarily enable decryption, then re-encrypt with AES-GCM."
+            )
         rest = payload[len(_HEADER_XORWARN) :]
         salt = rest[:_SALT_BYTES]
         obfuscated = rest[_SALT_BYTES:]
-        # This branch intentionally re-uses the same derivations as encrypt.
         key = _derive_key(passphrase, salt, 32)
         stream = _derive_key(key.hex(), salt, len(obfuscated))
         return bytes(a ^ b for a, b in zip(obfuscated, stream))
@@ -582,7 +586,8 @@ async def upload_profile_remote(req: RemoteUploadRequest, _auth: None = Depends(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        logger.error("Remote upload failed for %s: %s", req.profile_id, exc)
+        raise HTTPException(status_code=502, detail="Remote sync upload failed") from exc
 
 
 @router.get("/download/{profile_id}")
@@ -593,7 +598,8 @@ async def download_profile_remote(profile_id: str, _auth: None = Depends(require
     try:
         return await asyncio.to_thread(client.download_profile, profile_id)
     except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        logger.error("Remote download failed for %s: %s", profile_id, exc)
+        raise HTTPException(status_code=502, detail="Remote sync download failed") from exc
 
 
 @router.post("/revoke-device")
@@ -604,7 +610,8 @@ async def revoke_device_remote(req: RemoteRevokeRequest, _auth: None = Depends(r
     try:
         return await asyncio.to_thread(client.revoke_device, req.profile_id, req.reason)
     except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        logger.error("Device revoke failed for %s: %s", req.profile_id, exc)
+        raise HTTPException(status_code=502, detail="Device revoke failed") from exc
 
 
 # Module-level instance used by backend.main for local backup endpoints.

@@ -17,7 +17,7 @@ import hmac
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-from backend.profile_manager import profile_manager
+from backend.profile_manager import is_valid_new_pin, profile_manager
 from backend.browser_manager import launch_profile, close_profile, is_profile_running, active_browsers, get_profile_cookies, set_profile_cookies, parse_proxy_string
 from backend.macro_manager import macro_manager
 from backend.macro_runner import run_macro_bulk
@@ -25,13 +25,21 @@ from backend.config import get_data_dir
 from backend.scheduler_manager import SchedulerManager
 # H4+H5 FIX: Move system_monitor import to top of file (was at line 569, after its first use in lifespan)
 from backend.system_monitor import system_monitor
+from backend.device_cohorts import host_os
+from backend.credential_store import store_status
 
 # --- API Routers ---
 from backend.synchronizer import router as synchronizer_router
 from backend.profile_folders import router as profile_folders_router
-from backend.bulk_operations import router as bulk_operations_router
+from backend.bulk_operations import (
+    router as bulk_operations_router,
+    BulkCreateRequest,
+    bulk_create_profiles,
+    _CREATE_SEM,
+)
 from backend.cloud_sync import cloud_sync_manager, CloudSyncClient, _validate_sync_id, _get_remote_sync_client
 from backend.auth import RATE_LIMITERS, check_pin_rate_limit, get_client_key, require_admin_token
+from backend.error_codes import PUBLIC_CODE_MESSAGES, public_message_for
 from backend.update_manager import router as update_manager_router
 from backend.sbom import router as sbom_router
 from backend.detection_score import router as detection_score_router
@@ -57,8 +65,9 @@ async def lifespan(app: FastAPI):
     from backend.ai_generator import _shared_client
     await _shared_client.aclose()
 
-# --- Rate limiter for profile creation (max 5 concurrent) ---
-_profile_create_sem = asyncio.Semaphore(5)
+# Rate limiter for profile creation: single create and bulk create share one
+# global semaphore (A06) so combined concurrency never exceeds the limit.
+_profile_create_sem = _CREATE_SEM
 
 _is_production = os.environ.get("GHOSTBROWSER_PROD") == "1"
 app = FastAPI(
@@ -79,7 +88,7 @@ async def add_security_headers(request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self'"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
     return response
 
@@ -114,7 +123,7 @@ async def rate_limit_middleware(request: Request, call_next):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self'"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
         return response
 
@@ -153,7 +162,7 @@ async def csrf_protection_middleware(request: Request, call_next):
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["X-Frame-Options"] = "DENY"
             response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-            response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+            response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self'"
             response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
             return response
     response = await call_next(request)
@@ -174,7 +183,7 @@ async def global_exception_handler(request, exc):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self'"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
     return response
 
@@ -225,6 +234,13 @@ class CreateProfileModel(BaseModel):
             raise ValueError("name must be 120 characters or less")
         return v
 
+    @field_validator("pin")
+    @classmethod
+    def _validate_pin(cls, v):
+        if v is not None and not is_valid_new_pin(v):
+            raise ValueError("PIN must be exactly 4-6 ASCII digits")
+        return v
+
 class ProfileProxyUpdateRequest(BaseModel):
     proxy_string: Optional[str] = None
     clear_proxy: bool = False
@@ -263,7 +279,10 @@ async def create_profile(data: CreateProfileModel, _auth: None = Depends(require
 
     if result["status"] == "error":
         code = result.get("code", "CREATION_FAILED")
-        raise HTTPException(status_code=503 if code == "KIMI_UNAVAILABLE" else 400, detail=result["message"])
+        raise HTTPException(
+            status_code=503 if code == "KIMI_UNAVAILABLE" else 400,
+            detail=public_message_for(code, "Profile creation failed"),
+        )
 
     return _redact_sensitive_api_data(result["profile"])
 
@@ -277,42 +296,52 @@ class BulkCreateProfileModel(BaseModel):
     count: int = 5
     proxy: Optional[dict] = None
     proxy_string: Optional[str] = None
-    advanced: Optional[dict] = None
+    advanced: Optional[AdvancedSettingsModel] = None
     pin: Optional[str] = None
+
+    @field_validator("base_name")
+    @classmethod
+    def _validate_base_name(cls, v):
+        v = v.strip() if isinstance(v, str) else ""
+        if not v:
+            raise ValueError("base_name cannot be empty")
+        if len(v) > 120:
+            raise ValueError("base_name must be 120 characters or less")
+        return v
 
     @field_validator("count")
     @classmethod
-    def cap_count(cls, v):
-        return max(1, min(v, 50))
+    def validate_count(cls, v):
+        if not isinstance(v, int) or isinstance(v, bool):
+            raise ValueError("count must be an integer between 1 and 50")
+        if v < 1 or v > 50:
+            raise ValueError("count must be between 1 and 50")
+        return v
+
+    @field_validator("pin")
+    @classmethod
+    def _validate_pin(cls, v):
+        if v is not None and not is_valid_new_pin(v):
+            raise ValueError("PIN must be exactly 4-6 ASCII digits")
+        return v
 
 @app.post("/api/profiles/generate/bulk")
 async def generate_bulk_profiles(data: BulkCreateProfileModel, _auth: None = Depends(require_admin_token)):
-    """Generate multiple profiles concurrently via Kimi AI, with concurrency limits."""
-    count = min(data.count, 50) # Cap at 50 to prevent overload
+    """Generate multiple profiles via Kimi AI.
 
-    try:
-        proxy = data.proxy if data.proxy is not None else (parse_proxy_string(data.proxy_string) if data.proxy_string else None)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    async def create_single(i):
-        name = f"{data.base_name}_{i+1}"
-        try:
-            async with _profile_create_sem:
-                return await profile_creator.create_zero_leak_profile(name=name, proxy=proxy, advanced_ui=data.advanced, pin=data.pin)
-        except Exception as e:
-            return {"status": "error", "message": str(e), "name": name}
-
-    tasks = [create_single(i) for i in range(count)]
-    results = await asyncio.gather(*tasks)
-
-    success_count = sum(1 for r in results if r.get("status") == "success")
-
-    return _redact_sensitive_api_data({
-        "status": "success",
-        "message": f"Successfully created {success_count} out of {count} profiles",
-        "results": results
-    })
+    Legacy alias of ``POST /api/profiles/bulk/create``. Both routes share a
+    single implementation (``bulk_operations.bulk_create_profiles``) so error
+    sanitization, the create semaphore, and ``skip_warming`` are identical.
+    """
+    req = BulkCreateRequest(
+        base_name=data.base_name,
+        count=data.count,
+        proxy=data.proxy,
+        proxy_string=data.proxy_string,
+        pin=data.pin,
+        advanced=data.advanced.model_dump() if data.advanced else None,
+    )
+    return await bulk_create_profiles(req)
 
 @app.get("/api/profiles")
 def list_profiles(_auth: None = Depends(require_admin_token)):
@@ -332,10 +361,12 @@ async def clone_profile(profile_id: str, _auth: None = Depends(require_admin_tok
     proxy = original.get("proxy")
     advanced = original.get("advanced", {})
 
-    result = await profile_creator.create_zero_leak_profile(name=name, proxy=proxy, advanced_ui=advanced)
+    async with _profile_create_sem:
+        result = await profile_creator.create_zero_leak_profile(name=name, proxy=proxy, advanced_ui=advanced)
 
     if result["status"] == "error":
-        raise HTTPException(status_code=400, detail=result["message"])
+        code = result.get("code", "CREATE_FAILED")
+        raise HTTPException(status_code=400, detail=public_message_for(code, PUBLIC_CODE_MESSAGES["CREATE_FAILED"]))
 
     new_profile = result["profile"]
 
@@ -493,12 +524,25 @@ async def update_profile_tags(profile_id: str, req: ProfileTagsRequest, _auth: N
     return {"status": "success"}
 
 
-class ProfilePinRequest(BaseModel):
+class NewProfilePinRequest(BaseModel):
+    pin: str
+
+    @field_validator("pin")
+    @classmethod
+    def _validate_pin(cls, v):
+        if not is_valid_new_pin(v):
+            raise ValueError("PIN must be exactly 4-6 ASCII digits")
+        return v
+
+
+class ProfilePinVerificationRequest(BaseModel):
+    # Legacy hashes may have been created from PINs outside the current policy.
+    # Keep this request intentionally unconstrained so their owners can unlock.
     pin: str
 
 
 @app.post("/api/profiles/{profile_id}/pin/set")
-async def set_profile_pin(profile_id: str, req: ProfilePinRequest, _auth: None = Depends(require_admin_token)):
+async def set_profile_pin(profile_id: str, req: NewProfilePinRequest, _auth: None = Depends(require_admin_token)):
     if not profile_manager.set_profile_pin(profile_id, req.pin):
         raise HTTPException(status_code=404, detail="Profile not found or invalid PIN")
     return {"status": "success"}
@@ -507,7 +551,7 @@ async def set_profile_pin(profile_id: str, req: ProfilePinRequest, _auth: None =
 @app.post("/api/profiles/{profile_id}/pin/verify")
 async def verify_profile_pin(
     profile_id: str,
-    req: ProfilePinRequest,
+    req: ProfilePinVerificationRequest,
     _pin_limit: bool = Depends(check_pin_rate_limit),
     _auth: None = Depends(require_admin_token),
 ):
@@ -694,6 +738,24 @@ async def launch_profile_api(profile_id: str, req: LaunchProfileRequest = None, 
         raise HTTPException(status_code=400, detail=res.get("message"))
     return res
 
+@app.get("/api/profiles/{profile_id}/cdp")
+async def get_profile_cdp(profile_id: str, _auth: None = Depends(require_admin_token)):
+    """Return the CDP endpoint for a running profile (requires GHOSTBROWSER_CDP_TEST=1)."""
+    from backend.browser_manager import active_browsers
+    browser_data = active_browsers.get(profile_id)
+    if not browser_data:
+        raise HTTPException(status_code=400, detail="Profile not running")
+    cdp_port = browser_data.get("cdp_port")
+    if not cdp_port:
+        raise HTTPException(status_code=400, detail="CDP not enabled. Set GHOSTBROWSER_CDP_TEST=1 before launching.")
+    cdp_ws_path = browser_data.get("cdp_ws_path") or "/devtools/browser/"
+    return {
+        "status": "success",
+        "profile_id": profile_id,
+        "cdp_url": f"http://127.0.0.1:{cdp_port}",
+        "cdp_ws_url": f"ws://127.0.0.1:{cdp_port}{cdp_ws_path}",
+    }
+
 @app.post("/api/profiles/{profile_id}/close")
 async def close_profile_api(profile_id: str, _auth: None = Depends(require_admin_token)):
     res = await close_profile(profile_id)
@@ -724,7 +786,8 @@ async def import_cookies(profile_id: str, data: CookieDataModel, _auth: None = D
         await context.add_cookies(data.cookies)
         return {"status": "success", "message": "Cookies imported successfully"}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to import cookies: {e}")
+        _ghost_logger.error("Cookie import failed for %s: %s", profile_id, type(e).__name__)
+        raise HTTPException(status_code=400, detail="Failed to import cookies")
 
 @app.get("/api/profiles/{profile_id}/cookies/export")
 async def export_cookies(profile_id: str, _auth: None = Depends(require_admin_token)):
@@ -736,7 +799,8 @@ async def export_cookies(profile_id: str, _auth: None = Depends(require_admin_to
         cookies = await context.cookies()
         return {"status": "success", "cookies": cookies}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to export cookies: {e}")
+        _ghost_logger.error("Cookie export failed for %s: %s", profile_id, type(e).__name__)
+        raise HTTPException(status_code=400, detail="Failed to export cookies")
 
 from backend.profile_rotator import rotator
 
@@ -987,12 +1051,25 @@ def get_metrics(_auth: None = Depends(require_admin_token)):
         except Exception:
             pass
 
+    # Deliberately project the store status into this public contract rather
+    # than returning its provider, location, or encrypted account material.
+    try:
+        credential_status = store_status()
+        credential_store = {
+            "configured": bool(credential_status.get("configured", False)),
+            "count": int(credential_status.get("count", 0)),
+        }
+    except Exception:
+        credential_store = {"configured": False, "count": 0}
+
     return {
         "active_profiles": len(active_browsers),
         "total_profiles": len(profile_manager.list_profiles()),
         "quarantined_profiles": quarantine_count,
         "total_anomalies": anomaly_count,
-        "memory_usage_percent": system_monitor.ram_usage
+        "memory_usage_percent": system_monitor.ram_usage,
+        "host_os": host_os(),
+        "credential_store": credential_store,
     }
 
 # ---------------------------------------------------------------------------
@@ -1038,7 +1115,7 @@ async def csrf_token():
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self'"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
     return response
 
@@ -1074,8 +1151,9 @@ async def legacy_remote_sync(profile_id: str, req: LegacyRemoteSyncRequest, _aut
         result = await asyncio.to_thread(client.upload_profile, profile_id, archive_b64)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except RuntimeError:
+        _ghost_logger.exception("Remote sync upload failed for %s", profile_id)
+        raise HTTPException(status_code=502, detail="Remote sync upload failed")
     return {"remote": result}
 
 

@@ -8,7 +8,41 @@ class AILeakScanner:
     CRIT-05 FIX: Uses a TEMPORARY directory for the headless browser boot so we never
     write Playwright/Chromium browser state (cookies, localStorage, caches) into the
     real profile folder before the user ever opens it.
+
+    This class is the single canonical AI leak scanner (merged from the former
+    ``ai_scanner.py`` duplicate). ``scan_profile_before_launch`` is the fast,
+    synchronous pre-launch heuristic; ``scan`` is the full runtime leak scan.
     """
+
+    def scan_profile_before_launch(self, profile_data: dict) -> dict:
+        """
+        Pre-launch heuristic check (was ``ai_scanner.py``): verifies the profile
+        directory exists and that its advanced settings are internally consistent
+        before the browser is allowed to start.
+        """
+        path = profile_data.get("path")
+        if not path or not os.path.exists(path):
+            return {"status": "error", "message": "Profile directory does not exist. Potential leak or corruption."}
+
+        advanced = profile_data.get("advanced", {})
+        os_type = advanced.get("os", "Windows")
+        cpu = int(advanced.get("cpu_cores", 4))
+        memory = int(advanced.get("memory_gb", 8))
+        screen = advanced.get("screen_resolution", "1920x1080")
+
+        if os_type == "Mac":
+            if screen == "1366x768":
+                return {"status": "error", "message": "AI Consistency Failure: Macs rarely use 1366x768. This looks like a bot."}
+
+        if cpu > memory * 2:
+            return {"status": "error", "message": "AI Consistency Failure: CPU core count is unusually high for the given RAM."}
+
+        is_empty = len(os.listdir(path)) == 0
+
+        if is_empty:
+            return {"status": "clean", "message": "Profile directory is completely fresh and clean."}
+        else:
+            return {"status": "clean", "message": "Profile directory has existing data (returning profile). AI scan passed."}
 
     async def scan(self, profile: dict) -> dict:
         score = 100

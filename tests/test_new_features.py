@@ -7,7 +7,7 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from backend.profile_manager import ProfileManager
+from backend.profile_manager import ProfileManager, _hash_pin
 
 
 class ProfilePinAndTagTests(unittest.TestCase):
@@ -55,9 +55,26 @@ class ProfilePinAndTagTests(unittest.TestCase):
         profile = self._created_profile()
         profile_id = profile["id"]
 
-        self.assertTrue(self.manager.set_profile_pin(profile_id, "correct"))
-        self.assertFalse(self.manager.verify_profile_pin(profile_id, "wrong"))
+        self.assertTrue(self.manager.set_profile_pin(profile_id, "1234"))
+        self.assertFalse(self.manager.verify_profile_pin(profile_id, "5678"))
         self.assertFalse(self.manager.verify_profile_pin(profile_id, ""))
+
+    def test_new_pin_policy_accepts_ascii_digit_boundaries(self):
+        profile_id = self._created_profile()["id"]
+        for pin in ("1234", "123456"):
+            with self.subTest(pin=pin):
+                self.assertTrue(self.manager.set_profile_pin(profile_id, pin))
+
+    def test_new_pin_policy_rejects_invalid_values(self):
+        profile_id = self._created_profile()["id"]
+        for pin in ("123", "1234567", "12a4", "１２３４"):
+            with self.subTest(pin=pin):
+                self.assertFalse(self.manager.set_profile_pin(profile_id, pin))
+
+    def test_legacy_pin_hash_remains_verifiable(self):
+        profile_id = self._created_profile()["id"]
+        self.manager.profiles[profile_id]["pin_hash"] = _hash_pin("legacy PIN")
+        self.assertTrue(self.manager.verify_profile_pin(profile_id, "legacy PIN"))
 
     def test_normalize_tags(self):
         normalized = ProfileManager._normalize_tags([

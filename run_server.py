@@ -45,6 +45,12 @@ def _configure_process() -> None:
         sys.path.insert(0, project)
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    # Load .env from the project root (silent if absent)
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(project / ".env", override=True)
+    except Exception:
+        pass
 
 
 def _missing_modules() -> list[str]:

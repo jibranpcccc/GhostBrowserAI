@@ -81,7 +81,20 @@ Click **AI Generate** to produce a complete, coherent identity:
 
 ### PIN lock
 
-Enable **PIN Lock** to require a 4-6 digit PIN before launching the profile. The PIN is stored as a hash; it is used only to unlock the profile and does not encrypt stored browser data.
+PIN Lock is optional for each profile. Leave the PIN field blank when creating a
+profile to create it without a launch lock. To create or change a PIN, use the
+profile's **Set PIN** control, enter and confirm a new PIN, then save it. New
+and changed PINs must contain **4–6 ASCII digits** (`0`–`9`) only.
+
+A configured PIN is required before that profile can launch. Use **Remove PIN**
+in the same control to make the profile launch without a PIN again. PINs are
+stored as PBKDF2 hashes and only gate profile launch; they do not encrypt stored
+browser data.
+
+Profiles created under an earlier PIN policy remain unlockable with their
+existing PIN, including a PIN that does not meet the current 4–6 ASCII-digit
+rule. Changing such a PIN replaces it with a PIN that follows the current
+policy.
 
 ---
 
@@ -124,7 +137,8 @@ In the UI:
 
 1. Go to **Profiles** and click **Launch** on the desired profile.
 2. Select **Headed** or **Headless** mode.
-3. If PIN lock is enabled, enter the PIN.
+3. If PIN lock is enabled, enter the profile's PIN. Legacy profiles continue to
+   accept their existing PIN at this prompt until the PIN is changed.
 4. The browser opens with the configured fingerprint and proxy.
 
 ### From the command line
@@ -146,7 +160,9 @@ require the matching CSRF cookie and `X-XSRF-Token` header.
 ### PIN prompt
 
 PIN-locked profiles are managed through the UI; there is no standalone profile
-launch CLI.
+launch CLI. The unlock prompt accepts the stored legacy PIN for older profiles,
+while the set/change flow accepts only new PINs that meet the 4–6 ASCII-digit
+policy.
 
 ### Virtual keyboard
 
@@ -362,7 +378,10 @@ If PyInstaller is not installed, the script prints the install command and exits
 
 ### PIN not accepted
 
-- PIN lock compares against the stored hash. If forgotten, reset the PIN from the profile settings. Resetting the PIN does not affect browser data.
+- PIN lock compares against the stored hash. Check that the PIN is the one set
+  for that profile; older profiles may require their pre-policy PIN rather than
+  a 4–6 digit value. If forgotten, change or remove the PIN from the profile
+  settings. Changing or removing the PIN does not affect browser data.
 
 ### Need more help
 

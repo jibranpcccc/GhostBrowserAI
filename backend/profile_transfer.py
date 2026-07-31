@@ -204,7 +204,7 @@ def import_profiles(data: Any,
             else:
                 skipped += 1
         except Exception as exc:
-            errors.append(f"{prof.get('id', '?')}: {exc}")
+            errors.append(f"{prof.get('id', '?')}: import failed")
             logger.error(f"Import error for {prof.get('id')}: {exc}")
 
     logger.info(f"Import complete: {imported} imported, {skipped} skipped, {len(errors)} errors")
@@ -359,8 +359,11 @@ def import_from_csv(csv_content: str,
                 imported += 1
             else:
                 skipped += 1
-        except Exception as exc:
+        except ValueError as exc:
             errors.append(f"row {imported+skipped+1}: {exc}")
+        except Exception as exc:
+            logger.error("CSV import row failed for %s: %s", row.get("name"), exc)
+            errors.append(f"row {imported+skipped+1}: import failed")
 
     logger.info(f"CSV import: {imported} imported, {skipped} skipped, {len(errors)} errors")
     return {"imported": imported, "skipped": skipped, "errors": errors}
@@ -424,7 +427,7 @@ def import_profiles_endpoint(payload: ImportRequest, _auth: None = Depends(requi
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         logger.error(f"Import failed: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Import failed")
 
 
 @router.post("/import/csv")

@@ -1182,7 +1182,7 @@ async def run_tests():
             try:
                 res = await launch_profile(fail_pid, force_headless=True)
                 collector.add_check("Fail Closed on CDP failure - launch returns error", res["status"] == "error")
-                collector.add_check("Fail Closed on CDP failure - message contains CDP", "CDP" in res["message"])
+                collector.add_check("Fail Closed on CDP failure - stable message, no internal detail", res["message"] == "Launch failed" and "CDP" not in res["message"])
                 collector.add_check("Fail Closed on CDP failure - state is stopped or error", get_profile_state(fail_pid) in ("stopped", "error"), check_id="phase4.cdp_failure_fail_closed")
                 collector.add_check("Fail Closed on CDP failure - context not in active_browsers", fail_pid not in active_browsers)
                 from backend.browser_manager import find_profile_processes
@@ -1362,6 +1362,13 @@ async def run_tests():
         )
         surface_stdout, surface_stderr = await asyncio.wait_for(surface_proc.communicate(), timeout=300)
         collector.add_check("AI declared surface audit passes", surface_proc.returncode == 0)
+
+        anti_detect_proc = await asyncio.create_subprocess_exec(
+            sys.executable, "tests/test_anti_detect_surface_coverage.py",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
+        anti_detect_stdout, anti_detect_stderr = await asyncio.wait_for(anti_detect_proc.communicate(), timeout=120)
+        collector.add_check("Anti-detect surface coverage passes", anti_detect_proc.returncode == 0)
     except Exception as e:
         print(f"Exception during audio/surface regression tests: {e}")
         collector.add_check("Audio and AI-declared surface regression", False)

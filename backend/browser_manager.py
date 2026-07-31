@@ -3,6 +3,7 @@ import json
 import os
 import re
 import shutil
+import time
 from urllib.parse import urlparse, unquote
 from playwright.async_api import async_playwright
 import playwright_stealth
@@ -16,6 +17,7 @@ from backend.engine_resolver import (
     get_chromium_executable_path_async,
 )
 from backend.logging_config import logger
+from backend.error_codes import PUBLIC_CODE_MESSAGES
 
 active_browsers = {}
 profile_states = {}
@@ -234,7 +236,7 @@ async def _probe_native_metadata_impl(force_headless: bool = True):
         exe_path = await get_chromium_executable_path_async()
         version = get_installed_chromium_version()
     except Exception as e:
-        raise RuntimeError(f"FAIL-CLOSED: Cannot resolve installed Chromium details: {e}")
+        raise RuntimeError("FAIL-CLOSED: Cannot resolve installed Chromium details") from e
 
     cache_key = (force_headless, exe_path, version)
 
@@ -470,6 +472,33 @@ def register_cdp_task(profile_id, task, context, playwright):
 
     task.add_done_callback(on_complete)
 
+
+async def read_devtools_active_port(profile_path: str, timeout: float = 10.0,
+                                    poll_interval: float = 0.1):
+    """Poll ``<profile_path>/DevToolsActivePort`` for the CDP endpoint.
+
+    Chromium launched with ``--remote-debugging-port=0`` keeps ``0`` in its
+    argv but writes the selected loopback port and browser WebSocket path to
+    ``DevToolsActivePort`` inside the profile directory. Returns ``(port,
+    ws_path)`` once a valid entry is observed, or ``(None, None)`` on timeout.
+    """
+    active_port_file = os.path.join(profile_path, "DevToolsActivePort")
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            if os.path.exists(active_port_file):
+                with open(active_port_file, "r", encoding="utf-8") as fh:
+                    lines = [ln.strip() for ln in fh.read().splitlines() if ln.strip()]
+                if len(lines) >= 2:
+                    port = int(lines[0])
+                    ws_path = lines[1]
+                    if port > 0 and ws_path.startswith("/devtools/browser/"):
+                        return port, ws_path
+        except (ValueError, OSError):
+            pass
+        await asyncio.sleep(poll_interval)
+    return None, None
+
 def get_profile_state(profile_id: str) -> str:
     state = profile_states.get(profile_id)
     if state in ["launching", "closing", "error"]:
@@ -689,6 +718,38 @@ async def _proxy_health_loop(profile_id: str, proxy: dict):
         pass
 
 
+def _cdp_test_mode_enabled() -> bool:
+    """CDP test mode is opt-in via GHOSTBROWSER_CDP_TEST and must NEVER run in
+    production: when GHOSTBROWSER_PROD=1 the flag is ignored (A07)."""
+    if os.getenv("GHOSTBROWSER_PROD") == "1":
+        return False
+    enabled = os.getenv("GHOSTBROWSER_CDP_TEST") in ("1", "true")
+    if enabled:
+        from backend.logging_config import logger
+
+        logger.warning(
+            "CDP test mode enabled without GHOSTBROWSER_PROD=1: the loopback CDP "
+            "endpoint is only safe for local development. Set GHOSTBROWSER_PROD=1 "
+            "in production to disable it."
+        )
+    return enabled
+
+
+def _cdp_allow_origins() -> str:
+    """Origin allow-list for the test-mode CDP endpoint (A08).
+
+    Defaults to loopback-only origins. The broad ``*`` is available only by
+    explicit opt-in and logs a warning, since it lets any local webpage connect
+    to the loopback CDP socket.
+    """
+    origins = os.getenv("GHOSTBROWSER_CDP_ALLOW_ORIGINS", "http://localhost,http://127.0.0.1").strip()
+    if origins == "*":
+        from backend.logging_config import logger
+
+        logger.warning("GHOSTBROWSER_CDP_ALLOW_ORIGINS=* is set: any local page can connect to the CDP endpoint.")
+    return f"--remote-allow-origins={origins}"
+
+
 async def build_browser_launch_config(profile: dict, force_headless: bool = False, forced_proxy: dict = None) -> dict:
 
     profile_id = profile["id"]
@@ -865,7 +926,7 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
                 "EXCLUDE mozilla.cloudflare-dns.com"
             )
         except Exception as e:
-            raise RuntimeError(f"FAIL-CLOSED: Invalid proxy configuration: {e}")
+            raise RuntimeError("FAIL-CLOSED: Invalid proxy configuration") from e
 
     args = _remove_args(args, '--enable-automation')
     _add_unique_arg(args, '--disable-blink-features=AutomationControlled')
@@ -906,6 +967,10 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
         memory_gb = int(memory_gb)
     except (TypeError, ValueError):
         memory_gb = 8
+
+    if _cdp_test_mode_enabled():
+        _add_unique_arg(args, "--remote-debugging-port=0")
+        _add_unique_arg(args, _cdp_allow_origins())
 
     canvas_noise = advanced.get("canvas_noise", True)
     webgl_noise = advanced.get("webgl_noise", True)
@@ -1386,6 +1451,94 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
                         originalConvertToBlob.length
                     );
                 }}
+
+                // Inject the same OffscreenCanvas noise into dedicated/blob workers.
+                // Page init scripts do not run in worker realms; prepend a worker-safe
+                // bootstrap to JS Blob sources and data: worker URLs.
+                (function installWorkerCanvasBootstrap() {{
+                    const workerBootstrap = '(function(){{' +
+                        'if(typeof self!=="undefined"&&self.__ghostWorkerPatchInstalled)return;' +
+                        'try{{' +
+                        'var R={canvas_r_offset},G={canvas_g_offset},B={canvas_b_offset};' +
+                        'function noise(id,ox,oy,sw){{var d=id.data,seed=(Math.imul(R,73856093)^Math.imul(G,19349663)^Math.imul(B,83492791))>>>0;' +
+                        'var x0=(ox==null)?0:(ox|0),y0=(oy==null)?0:(oy|0),W=(sw==null)?id.width:(sw|0),iw=id.width;' +
+                        'for(var i=0;i<d.length;i+=4){{var li=i>>>2,lc=li%iw,lr=(li-lc)/iw,pi=(y0+lr)*W+(x0+lc);' +
+                        'var h=Math.imul(((pi^seed)>>>0),0x45d9f3b);h^=(h>>>16);' +
+                        'if((h&63)===0&&d[i+3]!==0){{var ch=(h>>>6)%3,dt=((h>>>8)&1)===0?-1:1,ti=i+ch;' +
+                        'd[ti]=Math.max(0,Math.min(255,d[ti]+dt));}}}}return id;}}' +
+                        'if(typeof OffscreenCanvas==="undefined"){{if(typeof self!=="undefined")self.__ghostWorkerPatchInstalled=true;return;}}' +
+                        'var proto=null;try{{var t=new OffscreenCanvas(1,1),c=t.getContext("2d");if(c)proto=Object.getPrototypeOf(c);}}catch(e){{}}' +
+                        'if(!proto){{if(typeof self!=="undefined")self.__ghostWorkerPatchInstalled=true;return;}}' +
+                        'var oGID=proto.getImageData,oCTB=OffscreenCanvas.prototype.convertToBlob;' +
+                        'proto.getImageData=function(x,y,w,h){{var img=oGID.apply(this,arguments);return noise(img,x|0,y|0,this.canvas?this.canvas.width:img.width);}};' +
+                        'OffscreenCanvas.prototype.convertToBlob=function(opts){{if(this.width===0||this.height===0)return oCTB.apply(this,arguments);' +
+                        'var cl=new OffscreenCanvas(this.width,this.height),cx=cl.getContext("2d");cx.drawImage(this,0,0);' +
+                        'var id=oGID.call(cx,0,0,cl.width,cl.height);noise(id,0,0,cl.width);cx.putImageData(id,0,0);return oCTB.call(cl,opts);}};' +
+                        'if(typeof self!=="undefined")self.__ghostWorkerPatchInstalled=true;' +
+                        '}}catch(_e){{try{{if(typeof self!=="undefined")self.__ghostWorkerPatchInstalled=true;}}catch(_e2){{}}}}' +
+                        '}})();';
+
+                    const isJsBlobType = (type) => {{
+                        const t = String(type || '').toLowerCase();
+                        return t.includes('javascript') || t.includes('ecmascript') || t === 'text/js' || t === 'application/js';
+                    }};
+
+                    const OrigBlob = typeof Blob !== 'undefined' ? Blob : null;
+                    if (OrigBlob) {{
+                        const PatchedBlob = function(parts, options) {{
+                            let nextParts = parts;
+                            let nextOptions = options;
+                            try {{
+                                const type = options && options.type;
+                                if (isJsBlobType(type)) {{
+                                    const list = parts == null ? [] : (Array.isArray(parts) ? parts.slice() : Array.from(parts));
+                                    list.unshift(workerBootstrap + '\\n');
+                                    nextParts = list;
+                                }}
+                            }} catch (_blobErr) {{}}
+                            return new OrigBlob(nextParts, nextOptions);
+                        }};
+                        PatchedBlob.prototype = OrigBlob.prototype;
+                        try {{ Object.defineProperty(PatchedBlob, 'name', {{ value: 'Blob', configurable: true }}); }} catch (_n) {{}}
+                        try {{ Object.defineProperty(PatchedBlob, 'length', {{ value: OrigBlob.length, configurable: true }}); }} catch (_l) {{}}
+                        self.Blob = PatchedBlob;
+                    }}
+
+                    const wrapWorkerCtor = (OrigCtor, name) => {{
+                        if (typeof OrigCtor !== 'function') return OrigCtor;
+                        const Wrapped = function(scriptURL, options) {{
+                            let url = scriptURL;
+                            try {{
+                                if (typeof scriptURL === 'string' && scriptURL.startsWith('data:')) {{
+                                    const comma = scriptURL.indexOf(',');
+                                    if (comma > 0) {{
+                                        const header = scriptURL.slice(0, comma);
+                                        const body = scriptURL.slice(comma + 1);
+                                        const isBase64 = /;base64/i.test(header);
+                                        if (!isBase64 && /javascript|ecmascript/i.test(header)) {{
+                                            url = header + ',' + encodeURIComponent(workerBootstrap + '\\n') + body;
+                                        }}
+                                    }}
+                                }}
+                            }} catch (_wErr) {{}}
+                            if (options === undefined) {{
+                                return new OrigCtor(url);
+                            }}
+                            return new OrigCtor(url, options);
+                        }};
+                        Wrapped.prototype = OrigCtor.prototype;
+                        try {{ Object.defineProperty(Wrapped, 'name', {{ value: name, configurable: true }}); }} catch (_wn) {{}}
+                        try {{ Object.defineProperty(Wrapped, 'length', {{ value: OrigCtor.length, configurable: true }}); }} catch (_wl) {{}}
+                        return Wrapped;
+                    }};
+
+                    if (typeof Worker !== 'undefined') {{
+                        self.Worker = wrapWorkerCtor(Worker, 'Worker');
+                    }}
+                    if (typeof SharedWorker !== 'undefined') {{
+                        self.SharedWorker = wrapWorkerCtor(SharedWorker, 'SharedWorker');
+                    }}
+                }})();
             }}
             if ({str(webgl_noise).lower()}) {{
                 const spoofedRenderer = '{ai_webgl_renderer}';
@@ -1642,6 +1795,31 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
 
         safeDefineProperty(navigator, 'plugins', () => __pluginArray);
         safeDefineProperty(navigator, 'mimeTypes', () => __mimeTypeArray);
+
+        // ponytail: canonical Chromium navigator property stubs
+        safeDefineProperty(navigator, 'vendor', () => "Google Inc.");
+        safeDefineProperty(navigator, 'product', () => "Gecko");
+        safeDefineProperty(navigator, 'cookieEnabled', () => true);
+        safeDefineProperty(navigator, 'pdfViewerEnabled', () => true);
+        safeDefineProperty(navigator, 'doNotTrack', () => null);
+        navigator.javaEnabled = makeNative(function javaEnabled() {{ return false; }}, 'javaEnabled', 0);
+
+        // ponytail: spoof performance.memory to match profile hardware
+        (function() {{
+            try {{
+                Object.defineProperty(performance, 'memory', {{
+                    get: makeNative(function() {{
+                        return {{
+                            jsHeapSizeLimit: {memory_gb} * 1073741824,
+                            totalJSHeapSize: Math.round({memory_gb} * 0.3 * 1073741824),
+                            usedJSHeapSize: Math.round({memory_gb} * 0.15 * 1073741824)
+                        }};
+                    }}, 'get memory'),
+                    configurable: true,
+                    enumerable: true
+                }});
+            }} catch (e) {{}}
+        }})();
     """
 
     userAgentMetadata = {
@@ -1657,6 +1835,32 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
         "wow64": False
     }
 
+    worker_canvas_patch = ""
+    if canvas_noise:
+        worker_canvas_patch = (
+            "(function(){"
+            "if(typeof self!==\"undefined\"&&self.__ghostWorkerPatchInstalled)return;"
+            "try{"
+            f"var R={int(canvas_r_offset)},G={int(canvas_g_offset)},B={int(canvas_b_offset)};"
+            "function noise(id,ox,oy,sw){var d=id.data,seed=(Math.imul(R,73856093)^Math.imul(G,19349663)^Math.imul(B,83492791))>>>0;"
+            "var x0=(ox==null)?0:(ox|0),y0=(oy==null)?0:(oy|0),W=(sw==null)?id.width:(sw|0),iw=id.width;"
+            "for(var i=0;i<d.length;i+=4){var li=i>>>2,lc=li%iw,lr=(li-lc)/iw,pi=(y0+lr)*W+(x0+lc);"
+            "var h=Math.imul(((pi^seed)>>>0),0x45d9f3b);h^=(h>>>16);"
+            "if((h&63)===0&&d[i+3]!==0){var ch=(h>>>6)%3,dt=((h>>>8)&1)===0?-1:1,ti=i+ch;"
+            "d[ti]=Math.max(0,Math.min(255,d[ti]+dt));}}}return id;}"
+            "if(typeof OffscreenCanvas===\"undefined\"){if(typeof self!==\"undefined\")self.__ghostWorkerPatchInstalled=true;return;}"
+            "var proto=null;try{var t=new OffscreenCanvas(1,1),c=t.getContext(\"2d\");if(c)proto=Object.getPrototypeOf(c);}catch(e){}"
+            "if(!proto){if(typeof self!==\"undefined\")self.__ghostWorkerPatchInstalled=true;return;}"
+            "var oGID=proto.getImageData,oCTB=OffscreenCanvas.prototype.convertToBlob;"
+            "proto.getImageData=function(x,y,w,h){var img=oGID.apply(this,arguments);return noise(img,x|0,y|0,this.canvas?this.canvas.width:img.width);};"
+            "OffscreenCanvas.prototype.convertToBlob=function(opts){if(this.width===0||this.height===0)return oCTB.apply(this,arguments);"
+            "var cl=new OffscreenCanvas(this.width,this.height),cx=cl.getContext(\"2d\");cx.drawImage(this,0,0);"
+            "var id=oGID.call(cx,0,0,cl.width,cl.height);noise(id,0,0,cl.width);cx.putImageData(id,0,0);return oCTB.call(cl,opts);};"
+            "if(typeof self!==\"undefined\")self.__ghostWorkerPatchInstalled=true;"
+            "}catch(_e){try{if(typeof self!==\"undefined\")self.__ghostWorkerPatchInstalled=true;}catch(_e2){}}"
+            "})();"
+        )
+
     return {
         "headless": playwright_headless,
         "args": args,
@@ -1669,6 +1873,7 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
         "device_scale_factor": device_scale_factor,
         "webrtc_mode": webrtc_mode,
         "spoofing_script": spoofing_script,
+        "worker_canvas_patch": worker_canvas_patch,
         "proxy_warning": None,
         "block_trackers": advanced.get("block_trackers", False),
         "extra_http_headers": extra_http_headers,
@@ -1679,6 +1884,7 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
 
 async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin: str = None):
     import os
+    from backend.logging_config import logger
     profile = profile_manager.get_profile(profile_id)
     if not profile:
         return {"status": "error", "message": "Profile not found"}
@@ -1702,20 +1908,21 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
     canonical_profiles_dir = os.path.normcase(os.path.realpath(profile_manager.PROFILES_DIR))
     canonical_profile_path = os.path.normcase(os.path.realpath(profile["path"]))
     if not canonical_profile_path.startswith(canonical_profiles_dir + os.sep) and canonical_profile_path != canonical_profiles_dir:
-        return {"status": "error", "message": "FAIL-CLOSED: Directory traversal blocked."}
+        logger.error("Fail-closed launch blocked for %s: profile path escapes profiles dir (%s)", profile_id, canonical_profile_path)
+        return {"status": "error", "message": PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"], "code": "LAUNCH_FAILED"}
 
     if not os.path.exists(canonical_profile_path):
-        return {"status": "error", "message": "FAIL-CLOSED: Profile directory is missing on disk."}
+        logger.error("Fail-closed launch blocked for %s: profile directory missing on disk (%s)", profile_id, canonical_profile_path)
+        return {"status": "error", "message": PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"], "code": "LAUNCH_FAILED"}
 
     if not _profile_has_verified_provenance(profile):
-        return {
-            "status": "error",
-            "message": "FAIL-CLOSED: Profile fingerprint provenance is missing or unverified.",
-        }
+        logger.error("Fail-closed launch blocked for %s: fingerprint provenance missing or unverified", profile_id)
+        return {"status": "error", "message": PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"], "code": "LAUNCH_FAILED"}
 
     scan_result = ai_scanner.scan_profile_before_launch(profile)
     if scan_result["status"] != "clean":
-        return {"status": "error", "message": f"AI Scanner blocked launch: {scan_result['message']}"}
+        logger.error("AI scanner blocked launch for %s: %s", profile_id, scan_result.get("message"))
+        return {"status": "error", "message": PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"], "code": "LAUNCH_FAILED"}
 
     fingerprint = profile.get("fingerprint") if isinstance(profile, dict) else None
     if fingerprint:
@@ -1724,7 +1931,8 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
             coherence_result = coherence_validator.validate(fingerprint)
             if not coherence_result.get("passed"):
                 issues = coherence_result.get("issues", ["Coherence validation failed"])
-                raise RuntimeError(f"FAIL-CLOSED: {issues[0]}")
+                logger.error("Coherence validation failed for %s: %s", profile_id, issues)
+                raise RuntimeError("FAIL-CLOSED: Coherence validation failed")
         except ImportError:
             pass
 
@@ -1737,7 +1945,8 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
         try:
             configured_server = parse_proxy_string(pinned_proxy_str)["server"]
         except Exception:
-            return {"status": "error", "message": "FAIL-CLOSED: The pinned proxy configuration is invalid."}
+            logger.error("Fail-closed launch blocked for %s: pinned proxy configuration invalid", profile_id)
+            return {"status": "error", "message": PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"], "code": "LAUNCH_FAILED"}
     elif explicit_proxy and isinstance(explicit_proxy, dict):
         configured_server = explicit_proxy.get("server")
     if configured_server:
@@ -1846,11 +2055,16 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                 logger.debug("Page CDP session created")
                 await session.send("Network.enable")
 
-                await session.send("Network.setUserAgentOverride", {
+                ua_override = {
                     "userAgent": config["user_agent"],
+                    "acceptLanguage": config.get("locale") or "en-US",
                     "platform": config["userAgentMetadata"]["platform"],
-                    "userAgentMetadata": config["userAgentMetadata"]
-                })
+                    "userAgentMetadata": config["userAgentMetadata"],
+                }
+                # Emulation populates navigator.userAgent / userAgentData;
+                # Network keeps request headers coherent with the same metadata.
+                await session.send("Emulation.setUserAgentOverride", ua_override)
+                await session.send("Network.setUserAgentOverride", ua_override)
                 if not future.done():
                     future.set_result(True)
                 logger.debug("CDP user-agent metadata override applied")
@@ -1861,9 +2075,8 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                     return
                 if not future.done():
                     future.set_exception(e)
-                logger.error(f"FAIL-CLOSED: CDP setup failed for page: {e}")
-                asyncio.create_task(fail_closed_profile(profile_id, context, playwright, f"CDP Network.setUserAgentOverride failed: {e}"))
-                raise RuntimeError(f"FAIL-CLOSED: CDP Network.setUserAgentOverride failed: {e}")
+                logger.error("FAIL-CLOSED: CDP setup failed for page: %s", e)
+                raise RuntimeError("FAIL-CLOSED: CDP UserAgentOverride failed")
 
         # Listen for context close to cancel any remaining futures
         def on_context_close():
@@ -1926,6 +2139,28 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                     target_future = futures[0]
                 else:
                     target_future = profile_page_futures.get(profile_id, {}).get(owning_page)
+
+                # Prepend canvas noise bootstrap to network-loaded classic worker scripts.
+                worker_patch = config.get("worker_canvas_patch") or ""
+                if worker_patch and request.resource_type in ("worker", "sharedworker"):
+                    try:
+                        await asyncio.wait_for(target_future, timeout=3.0)
+                        response = await route.fetch()
+                        content_type = (response.headers.get("content-type") or "").lower()
+                        if "javascript" in content_type or "ecmascript" in content_type or request.url.endswith(".js"):
+                            body = await response.text()
+                            headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
+                            await route.fulfill(
+                                status=response.status,
+                                headers=headers,
+                                body=worker_patch + "\n" + body,
+                            )
+                            return
+                        await route.fulfill(response=response)
+                        return
+                    except Exception as worker_inject_err:
+                        from backend.logging_config import logger as _wlog
+                        _wlog.debug("Worker script inject skipped: %s", worker_inject_err)
             else:
                 for i in range(300):
                     try:
@@ -1936,7 +2171,6 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                                 break
                             else:
                                 if i % 100 == 0:
-                                    from backend.logging_config import logger
                                     logger.debug(
                                         "Routing barrier waiting for page: %s",
                                         _safe_url_for_log(request.url),
@@ -2216,6 +2450,88 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                 configurable: true
             });
 
+            // Ensure navigator.userAgentData exists and matches launch metadata.
+            // Playwright UA overrides can strip Client Hints; CDP Emulation should
+            // restore them, and this is the fail-closed JS fallback.
+            (function() {
+                var meta = %s;
+                if (!meta || typeof meta !== 'object') return;
+                var brands = Array.isArray(meta.brands) ? meta.brands.slice() : [];
+                var fullVersionList = Array.isArray(meta.fullVersionList) ? meta.fullVersionList.slice() : brands.slice();
+                var mobile = !!meta.mobile;
+                var platform = String(meta.platform || 'Windows');
+                function freezeBrandList(list) {
+                    return Object.freeze(list.map(function(b) {
+                        return Object.freeze({
+                            brand: String(b.brand || ''),
+                            version: String(b.version || '')
+                        });
+                    }));
+                }
+                var frozenBrands = freezeBrandList(brands);
+                var frozenFull = freezeBrandList(fullVersionList);
+                var highEntropy = {
+                    architecture: String(meta.architecture || 'x86'),
+                    bitness: String(meta.bitness || '64'),
+                    model: String(meta.model || ''),
+                    platform: platform,
+                    platformVersion: String(meta.platformVersion || ''),
+                    uaFullVersion: String(meta.fullVersion || meta.uaFullVersion || ''),
+                    fullVersionList: frozenFull,
+                    mobile: mobile,
+                    wow64: !!meta.wow64
+                };
+                function makeUAData() {
+                    var data = {
+                        brands: frozenBrands,
+                        mobile: mobile,
+                        platform: platform,
+                        getHighEntropyValues: __makeNative(function(hints) {
+                            var out = {
+                                brands: frozenBrands,
+                                mobile: mobile,
+                                platform: platform
+                            };
+                            var wanted = Array.isArray(hints) ? hints : [];
+                            for (var i = 0; i < wanted.length; i++) {
+                                var key = wanted[i];
+                                if (Object.prototype.hasOwnProperty.call(highEntropy, key)) {
+                                    out[key] = highEntropy[key];
+                                }
+                            }
+                            return Promise.resolve(out);
+                        }, 'getHighEntropyValues'),
+                        toJSON: __makeNative(function() {
+                            return { brands: frozenBrands, mobile: mobile, platform: platform };
+                        }, 'toJSON')
+                    };
+                    try {
+                        if (typeof NavigatorUAData !== 'undefined' && NavigatorUAData.prototype) {
+                            Object.setPrototypeOf(data, NavigatorUAData.prototype);
+                        }
+                    } catch (e) {}
+                    return data;
+                }
+                try {
+                    var existing = navigator.userAgentData;
+                    if (!existing || !existing.brands || !existing.brands.length) {
+                        Object.defineProperty(navigator, 'userAgentData', {
+                            get: __makeNative(function() { return makeUAData(); }, 'get userAgentData'),
+                            configurable: true,
+                            enumerable: true
+                        });
+                    }
+                } catch (e) {
+                    try {
+                        Object.defineProperty(navigator, 'userAgentData', {
+                            get: __makeNative(function() { return makeUAData(); }, 'get userAgentData'),
+                            configurable: true,
+                            enumerable: true
+                        });
+                    } catch (e2) {}
+                }
+            })();
+
             // ponytail: realistic Chromium loadTimes/csi values, wrapped or created as needed.
             function __chromeLoadTimes() {
                 var t = performance.now() / 1000;
@@ -2274,26 +2590,43 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                 try { window.chrome.csi = __makeNative(__chromeCsi, 'csi'); } catch (e) {}
             }
 
-            // ponytail: keep sensitive permission queries in the default prompt state.
+            // ponytail: per-profile permission query responses for realistic diversity.
             (function() {
                 var origQuery = navigator.permissions && navigator.permissions.query;
                 if (typeof origQuery !== 'function') return;
-                var __promptNames = { geolocation: true, camera: true, microphone: true, notifications: true, midi: true, 'clipboard-read': true, 'clipboard-write': true };
+                function __permHash(seed, name) {
+                    var h = seed >>> 0;
+                    for (var i = 0; i < name.length; i++) {
+                        h = Math.imul((h ^ name.charCodeAt(i)) >>> 0, 0x9e3779b1);
+                        h ^= h >>> 16;
+                    }
+                    return h >>> 0;
+                }
+                var __permSeed = __profileSeed ^ 0x5a3c1f0d;
+                var __permDefaults = { geolocation: 'prompt', camera: 'prompt', microphone: 'prompt', notifications: 'prompt', midi: 'prompt', 'clipboard-read': 'prompt', 'clipboard-write': 'prompt' };
                 navigator.permissions.query = __makeNative(function(query) {
                     var self = this;
                     var name = (query && query.name) || '';
-                    var forcePrompt = __promptNames.hasOwnProperty(name);
+                    var defaultState = __permDefaults.hasOwnProperty(name) ? __permDefaults[name] : null;
+                    var state = defaultState;
+                    if (state === 'prompt') {
+                        var h = __permHash(__permSeed, name);
+                        var roll = (h %% 100);
+                        if (roll < 5) state = 'denied';
+                        else if (roll < 10) state = 'granted';
+                        else state = 'prompt';
+                    }
                     return new Promise(function(resolve) {
                         try {
                             Promise.resolve(origQuery.call(self, query)).then(function(result) {
-                                if (forcePrompt) resolve({ state: 'prompt', onchange: null });
+                                if (state) resolve({ state: state, onchange: null });
                                 else if (result && result.state === 'denied') resolve(result);
                                 else resolve({ state: 'prompt', onchange: null });
                             }).catch(function() {
-                                resolve({ state: 'prompt', onchange: null });
+                                resolve({ state: state || 'prompt', onchange: null });
                             });
                         } catch (e) {
-                            resolve({ state: 'prompt', onchange: null });
+                            resolve({ state: state || 'prompt', onchange: null });
                         }
                     });
                 }, 'query');
@@ -2840,6 +3173,7 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
             });
         """ % (
             _ad_seed,
+            json.dumps(config.get("userAgentMetadata") or {}),
             str(_ad_has_device_values).lower(),
             _ad_cpu,
             _ad_mem,
@@ -3080,13 +3414,10 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
             str(_ad_os == 'Linux').lower(),
         )
 
-        _ad_experimental_measuretext = _ad_advanced.get("experimental_measuretext", False)
-        if _ad_experimental_measuretext:
-            from backend.logging_config import logger
-            logger.warning(f"experimental measureText spoof enabled for profile {profile_id}; canvas text metrics are being perturbed")
+        _ad_experimental_measuretext = _ad_advanced.get("experimental_measuretext", True)
 
         anti_detect_script += """
-            // ponytail: experimental deterministic CanvasRenderingContext2D.measureText spoof.
+            // ponytail: deterministic per-profile CanvasRenderingContext2D.measureText spoof.
             (function() {
                 var __experimentalMeasureText = %s;
                 if (!__experimentalMeasureText) return;
@@ -3179,6 +3510,15 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
         procs = find_profile_processes(canonical_profile_path)
         pid = procs[0].pid if procs else None
 
+        # CDP test mode: Chromium keeps `--remote-debugging-port=0` in its argv
+        # but writes the selected loopback port + browser WS path to
+        # <profile_dir>/DevToolsActivePort. Poll that file instead of parsing
+        # the command line (which would always read 0).
+        cdp_port = None
+        cdp_ws_path = None
+        if _cdp_test_mode_enabled():
+            cdp_port, cdp_ws_path = await read_devtools_active_port(canonical_profile_path)
+
         active_browsers[profile_id] = {
             "playwright": playwright,
             "context": context,
@@ -3186,6 +3526,8 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
             "pid": pid,
             "proxy": config.get("assigned_proxy"),
             "args": config.get("args", []),
+            "cdp_port": cdp_port,
+            "cdp_ws_path": cdp_ws_path,
         }
 
         def _on_context_close(ctx):
@@ -3254,10 +3596,10 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
             except Exception:
                 pass
         if isinstance(e, RuntimeError) and str(e).startswith("FAIL-CLOSED:"):
-            message = str(e)
+            logger.error("Fail-closed launch aborted for %s: %s", profile_id, e)
         else:
-            message = "Launch failed safely without starting an unprotected browser."
-        return {"status": "error", "message": message}
+            logger.error("Launch aborted for %s: %s", profile_id, e)
+        return {"status": "error", "message": PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"], "code": "LAUNCH_FAILED"}
     finally:
         # Cancellation can bypass the normal Exception handler.  Never leave a
         # profile permanently marked as launching after releasing its lock.
@@ -3278,7 +3620,7 @@ async def launch_profile(profile_id: str, force_headless: bool = False, pin: str
         from backend.logging_config import logger
         logger.exception("launch_profile unhandled failure for %s", profile_id)
         _cleanup_orphan_processes(profile_id)
-        return {"status": "error", "message": f"Launch failed: {exc}"}
+        return {"status": "error", "message": PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"]}
 
     try:
         profile = profile_manager.get_profile(profile_id)
@@ -3334,7 +3676,7 @@ async def safe_launch_profile(profile_id: str, force_headless: bool = False, pin
         from backend.logging_config import logger
         logger.exception("safe_launch_profile unhandled failure for %s", profile_id)
         _cleanup_orphan_processes(profile_id)
-        return {"status": "error", "message": f"Launch failed: {exc}"}
+        return {"status": "error", "message": PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"]}
 
 def _maybe_clear_ephemeral_profile_data(profile_id: str):
     profile = profile_manager.get_profile(profile_id)
@@ -3455,7 +3797,7 @@ async def _do_close_profile(profile_id: str):
     except Exception as e:
         logger.error(f"Error closing profile {profile_id}: {e}", exc_info=True)
         set_profile_state(profile_id, "error")
-        return {"status": "error", "message": f"Close failed: {str(e)}"}
+        return {"status": "error", "code": "CLOSE_FAILED", "message": "Close failed"}
     finally:
         lock_manager.release(profile_id)
 

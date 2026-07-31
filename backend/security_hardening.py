@@ -3,8 +3,19 @@ import json
 from backend.logging_config import logger
 
 
+# Extension permissions that are too dangerous to load without an explicit allowlist.
+_DANGEROUS_PERMISSIONS = {"<all_urls>", "*://*/*", "debugger", "webRequest", "webRequestBlocking", "nativeMessaging", "management"}
+
+# Explicit allowlist for extensions that may legitimately need broad permissions.
+_ALLOWLISTED_EXTENSIONS = set(os.environ.get("GHOSTBROWSER_EXTENSION_ALLOWLIST", "").strip().lower().split(",")) - {""}
+
+
 def validate_extensions(extensions_dir: str) -> list:
-    """Return a list of valid, safe extension paths under extensions_dir."""
+    """Return a list of safe extension paths under extensions_dir.
+
+    Extensions that request dangerous permissions are refused unless they
+    appear in the GHOSTBROWSER_EXTENSION_ALLOWLIST env var (comma-separated names).
+    """
     valid_paths = []
     if not os.path.exists(extensions_dir):
         return valid_paths
@@ -21,9 +32,15 @@ def validate_extensions(extensions_dir: str) -> list:
                 with open(manifest_path, "r", encoding="utf-8") as f:
                     manifest = json.load(f)
 
-                permissions = manifest.get("permissions", [])
-                if "<all_urls>" in permissions or "*://*/*" in permissions:
-                    logger.warning(f"Extension '{item}' requests highly broad permissions.", extra={"event_type": "security_warning"})
+                permissions = set(manifest.get("permissions", []) + manifest.get("host_permissions", []))
+                dangerous = permissions & _DANGEROUS_PERMISSIONS
+                if dangerous and item.lower() not in _ALLOWLISTED_EXTENSIONS:
+                    logger.warning(
+                        f"Extension '{item}' blocked: requests dangerous permissions {sorted(dangerous)}. "
+                        "Add to GHOSTBROWSER_EXTENSION_ALLOWLIST to override.",
+                        extra={"event_type": "security_warning"},
+                    )
+                    continue
 
                 valid_paths.append(item_path)
                 logger.info(f"Extension '{item}' validated successfully.")

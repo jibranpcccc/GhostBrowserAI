@@ -1,6 +1,7 @@
 /* ===== GhostBrowser App.js — Full Frontend Logic ===== */
 
 const API = '';  // Same origin — FastAPI serves frontend
+const SUPPORTED_HOST_OSES = new Set(['Windows', 'Mac', 'Linux']);
 
 function getCookie(name) {
     const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
@@ -19,7 +20,9 @@ function isApiUrl(resource) {
 
 function withAdminToken(headers) {
     if (!_adminToken) return headers;
-    return { ...headers, 'X-Admin-Token': _adminToken };
+    const normalizedHeaders = new Headers(headers || undefined);
+    normalizedHeaders.set('X-Admin-Token', _adminToken);
+    return normalizedHeaders;
 }
 
 // Transparently add the XSRF token to every non-GET/HEAD fetch.
@@ -28,9 +31,11 @@ window.fetch = function (...args) {
     const [resource, rawInit = {}] = args;
     const init = { ...rawInit };
     const method = (init.method || (typeof resource === 'object' ? resource.method : 'GET') || 'GET').toUpperCase();
-    if (window.XSRF_TOKEN && method !== 'GET' && method !== 'HEAD') {
-        init.headers = { ...init.headers, 'X-XSRF-Token': window.XSRF_TOKEN };
+    const headers = new Headers(init.headers || undefined);
+    if (window.XSRF_TOKEN && method !== 'GET' && method !== 'HEAD' && !headers.has('X-XSRF-Token')) {
+        headers.append('X-XSRF-Token', window.XSRF_TOKEN);
     }
+    init.headers = headers;
     if (isApiUrl(resource)) {
         init.headers = withAdminToken(init.headers);
     }
@@ -64,16 +69,16 @@ function showAdminTokenPrompt(message) {
 
         const modal = document.createElement('div');
         modal.id = 'admin-token-modal';
-        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:99999;';
+        modal.className = 'admin-token-overlay';
         modal.innerHTML = `
-            <div style="background:var(--surface,#1f2937);padding:1.5rem;border-radius:8px;min-width:320px;max-width:90vw;box-shadow:0 20px 25px -5px rgba(0,0,0,0.3);font-family:sans-serif;">
-                <h3 style="margin:0 0 0.5rem 0;color:var(--text);">Admin Token Required</h3>
-                ${message ? `<p style="color:var(--danger,#ef4444);font-size:0.85rem;margin:0.25rem 0;">${escHtml(message)}</p>` : ''}
-                <p style="color:var(--text-muted);font-size:0.85rem;margin:0.25rem 0;">The backend is protected by <code style="background:rgba(255,255,255,0.1);padding:0.1rem 0.3rem;border-radius:4px;">GHOSTBROWSER_ADMIN_TOKEN</code>. Your token stays in memory only and is never persisted.</p>
-                <input id="admin-token-input" type="password" placeholder="Paste X-Admin-Token" autocomplete="off" style="width:100%;padding:0.5rem;margin:0.5rem 0;background:var(--input-bg);border:1px solid var(--border);border-radius:4px;color:var(--text);box-sizing:border-box;">
-                <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.75rem;">
-                    <button id="admin-token-cancel" style="padding:0.4rem 0.8rem;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;">Skip</button>
-                    <button id="admin-token-submit" style="padding:0.4rem 0.8rem;border-radius:4px;border:none;background:var(--primary,#6366f1);color:#fff;cursor:pointer;">Authenticate</button>
+            <div class="admin-token-dialog">
+                <h3 class="admin-token-title">Admin Token Required</h3>
+                ${message ? `<p class="admin-token-error">${escHtml(message)}</p>` : ''}
+                <p class="admin-token-copy">The backend is protected by <code>GHOSTBROWSER_ADMIN_TOKEN</code>. Your token stays in memory only and is never persisted.</p>
+                <input id="admin-token-input" class="admin-token-input" type="password" placeholder="Paste X-Admin-Token" autocomplete="off">
+                <div class="admin-token-actions">
+                    <button id="admin-token-cancel" class="admin-token-cancel">Skip</button>
+                    <button id="admin-token-submit" class="admin-token-submit">Authenticate</button>
                 </div>
             </div>
         `;
@@ -98,22 +103,24 @@ function showAdminTokenPrompt(message) {
 async function verifyAdminToken(token) {
     try {
         const res = await _originalFetch(`${API}/api/profiles`, { headers: { 'X-Admin-Token': token } });
-        return res.status !== 401 && res.status !== 403;
+        return res.ok;
     } catch (_) {
-        return true;
+        return false;
     }
 }
 
 async function ensureAdminToken() {
     if (_adminToken) return true;
 
-    // First contact: a 401 means the backend requires a token.
+    // First contact: 401 means token required; 503 means token not configured.
     let needsAuth;
+    let message = '';
     try {
         const res = await _originalFetch(`${API}/api/profiles`);
-        needsAuth = res.status === 401;
+        needsAuth = res.status === 401 || res.status === 503;
+        if (res.status === 503) message = 'The server has no admin token configured. Set GHOSTBROWSER_ADMIN_TOKEN in .env and restart.';
     } catch (_) {
-        return true;
+        return false;
     }
     if (!needsAuth) return true;
 
@@ -160,10 +167,11 @@ let vkCurrentInput = null;
 async function requestJson(url, options = {}, fallbackMessage = 'Request failed') {
     options = options || {};
     const method = (options.method || 'GET').toUpperCase();
+    const headers = new Headers(options.headers || undefined);
     if (window.XSRF_TOKEN && method !== 'GET' && method !== 'HEAD') {
-        options.headers = { ...options.headers, 'X-XSRF-Token': window.XSRF_TOKEN };
+        headers.append('X-XSRF-Token', window.XSRF_TOKEN);
     }
-    const response = await fetch(url, options);
+    const response = await fetch(url, { ...options, headers });
     let payload = {};
     try {
         payload = await response.json();
@@ -172,7 +180,10 @@ async function requestJson(url, options = {}, fallbackMessage = 'Request failed'
     }
     if (!response.ok) {
         const detail = payload.detail || payload.message || `${fallbackMessage} (HTTP ${response.status})`;
-        throw new Error(detail);
+        const err = new Error(typeof detail === 'string' ? detail : (detail.message || fallbackMessage));
+        err.status = response.status;
+        err.detail = detail;
+        throw err;
     }
     return payload;
 }
@@ -263,33 +274,40 @@ async function fetchMetrics() {
         document.getElementById('stat-quarantine').textContent = data.quarantined_profiles;
         document.getElementById('stat-ram').textContent = `${data.memory_usage_percent.toFixed(1)}%`;
         document.getElementById('topbar-ram').textContent = `${data.memory_usage_percent.toFixed(1)}%`;
+        const hostOs = SUPPORTED_HOST_OSES.has(data.host_os) ? data.host_os : null;
         const osSelect = document.getElementById('new-profile-os');
-        if (osSelect && data.host_os) {
-            const icon = data.host_os === 'Mac' ? '🍎' : (data.host_os === 'Linux' ? '🐧' : '🪟');
-            osSelect.innerHTML = `<option value="${escAttr(data.host_os)}">${icon} ${escHtml(data.host_os)} (Host matched)</option>`;
+        if (osSelect && hostOs) {
+            const icon = hostOs === 'Mac' ? '🍎' : (hostOs === 'Linux' ? '🐧' : '🪟');
+            osSelect.innerHTML = `<option value="${escAttr(hostOs)}">${icon} ${escHtml(hostOs)} (Host matched)</option>`;
             osSelect.disabled = true;
             osSelect.title = 'Profiles use the host operating system to prevent cross-OS fingerprint contradictions.';
         }
         const credentialStatus = document.getElementById('setting-credential-store');
-        if (credentialStatus && data.credential_store) {
-            credentialStatus.value = data.credential_store.configured
-                ? `Windows DPAPI protected — ${data.credential_store.count} accounts`
-                : 'Protected credential store is not configured';
+        if (credentialStatus) {
+            const credentialStore = data.credential_store || {};
+            const accountCount = Number.isSafeInteger(credentialStore.count) && credentialStore.count >= 0
+                ? credentialStore.count
+                : 0;
+            if (hostOs === 'Windows') {
+                credentialStatus.value = credentialStore.configured === true
+                    ? `Windows DPAPI protected — ${accountCount} accounts`
+                    : 'Windows DPAPI credential store is not configured';
+            } else if (hostOs) {
+                credentialStatus.value = 'Credential store unavailable — Windows DPAPI requires Windows';
+            } else {
+                credentialStatus.value = 'Credential store status unavailable';
+            }
         }
 
         const health = document.getElementById('system-health');
         const dot = health.querySelector('.health-dot');
         if (data.memory_usage_percent > 85) {
             dot.className = 'health-dot critical';
-            health.style.background = 'rgba(239,68,68,0.1)';
-            health.style.borderColor = 'rgba(239,68,68,0.2)';
-            health.style.color = 'var(--danger)';
+            health.classList.add('critical');
             health.querySelector('span').textContent = 'System Critical';
         } else {
             dot.className = 'health-dot healthy';
-            health.style.background = '';
-            health.style.borderColor = '';
-            health.style.color = '';
+            health.classList.remove('critical');
             health.querySelector('span').textContent = 'System Healthy';
         }
     } catch (e) {
@@ -297,9 +315,7 @@ async function fetchMetrics() {
         if (health) {
             const dot = health.querySelector('.health-dot');
             if (dot) dot.className = 'health-dot offline';
-            health.style.background = 'rgba(239,68,68,0.1)';
-            health.style.borderColor = 'rgba(239,68,68,0.2)';
-            health.style.color = 'var(--danger)';
+            health.classList.add('critical');
             const label = health.querySelector('span');
             if (label) label.textContent = 'Backend Offline';
         }
@@ -321,8 +337,7 @@ async function fetchCFStatus() {
         const offset = circumference * (1 - pct);
         const arc = document.getElementById('cf-ring-arc');
         if (arc) {
-            arc.style.strokeDashoffset = offset;
-            arc.style.transition = 'stroke-dashoffset 1s ease';
+            arc.setAttribute('stroke-dashoffset', offset);
         }
         const pctEl = document.getElementById('cf-ring-pct');
         if (pctEl) pctEl.textContent = `${Math.round(pct * 100)}%`;
@@ -409,17 +424,21 @@ function renderProfiles(profiles) {
     const grid = document.getElementById('profiles-grid');
     if (!grid) return;
 
+    const profilesPage = document.getElementById('page-profiles');
+    const tableContainer = profilesPage
+        ? profilesPage.querySelector('.table-container')
+        : document.querySelector('#page-profiles .table-container');
     if (profiles.length === 0) {
         grid.innerHTML = '';
-        document.querySelector('.table-container').style.display = 'none';
+        if (tableContainer) tableContainer.hidden = true;
         const emptyState = document.getElementById('profiles-empty');
-        if (emptyState) emptyState.style.display = 'flex';
+        if (emptyState) emptyState.hidden = false;
         return;
     }
 
-    document.querySelector('.table-container').style.display = 'block';
+    if (tableContainer) tableContainer.hidden = false;
     const emptyState = document.getElementById('profiles-empty');
-    if (emptyState) emptyState.style.display = 'none';
+    if (emptyState) emptyState.hidden = true;
 
     const displayedProfiles = [...profiles].sort(
         (left, right) => Number(Boolean(right.pinned)) - Number(Boolean(left.pinned))
@@ -443,13 +462,13 @@ function renderProfiles(profiles) {
         const pinTitle = p.pinned ? 'Unpin profile' : 'Pin profile to top';
 
         return `
-            <tr id="card-${escAttr(id)}" class="profile-row ${p.pinned ? 'profile-row-pinned' : ''}" style="--profile-color:${profileColor}">
+            <tr id="card-${escAttr(id)}" class="profile-row ${p.pinned ? 'profile-row-pinned' : ''}" data-profile-color="${profileColor}">
                 <td><input type="checkbox" class="profile-checkbox" value="${escAttr(id)}" data-action="update-bulk-actions"></td>
                 <td>
                     <div class="td-name">
                         <div class="profile-icon-wrapper">${initials}</div>
                         <div>
-                            <div style="display: flex; align-items: center; gap: 4px;">
+                            <div class="profile-name-actions">
                                 ${escHtml(p.name)}
                                 <button class="btn-icon profile-pin-button ${p.pinned ? 'active' : ''}" data-action="toggle-profile-pin" data-profile-id="${escAttr(id)}" data-pinned="${p.pinned ? 'false' : 'true'}" title="${pinTitle}" aria-label="${pinTitle}">
                                     <svg width="13" height="13" viewBox="0 0 24 24" fill="${p.pinned ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M12 17v5M5 3h14l-3 7 3 4H5l3-4-3-7z"/></svg>
@@ -458,7 +477,7 @@ function renderProfiles(profiles) {
                                     ⚙️
                                 </button>
                             </div>
-                            <div style="display: flex; gap: 4px; margin-top: 4px;">
+                            <div class="profile-meta-row">
                                 <span class="td-id">${escHtml(idShort)}</span>
                                 ${proxyPinBadge}
                                 ${pinLockBadge}
@@ -491,9 +510,9 @@ function renderProfiles(profiles) {
                     ${isRunning
                         ? `<button class="btn-secondary btn-sm" data-action="stop-profile" data-profile-id="${escAttr(id)}">⏹ Stop</button>`
                         : `<button class="btn-primary btn-sm" data-action="launch-profile" data-profile-id="${escAttr(id)}">▶ Launch</button>`}
-                    <button class="btn-secondary btn-sm" data-action="scan-profile" data-profile-id="${escAttr(id)}" title="Scan Fingerprint Risk" aria-label="Scan fingerprint risk" style="padding: 0.25rem 0.5rem; color: var(--primary);">🛡️</button>
-                    <button class="btn-secondary btn-sm" data-action="open-metadata-modal" data-profile-id="${escAttr(id)}" title="Tags, notes and pinning" aria-label="Edit tags, notes and pinning" style="padding: 0.25rem 0.5rem;">🏷️</button>
-                    <button class="btn-secondary btn-sm" data-action="tag-profile" data-profile-id="${escAttr(id)}" title="Quick tag" aria-label="Quick tag" style="padding: 0.25rem 0.5rem;">+ Tag</button>
+                    <button class="btn-secondary btn-sm compact-action primary-action" data-action="scan-profile" data-profile-id="${escAttr(id)}" title="Scan Fingerprint Risk" aria-label="Scan fingerprint risk">🛡️</button>
+                    <button class="btn-secondary btn-sm compact-action" data-action="open-metadata-modal" data-profile-id="${escAttr(id)}" title="Tags, notes and pinning" aria-label="Edit tags, notes and pinning">🏷️</button>
+                    <button class="btn-secondary btn-sm compact-action" data-action="tag-profile" data-profile-id="${escAttr(id)}" title="Quick tag" aria-label="Quick tag">+ Tag</button>
                     <button class="btn-secondary btn-sm" data-action="clone-profile" data-profile-id="${escAttr(id)}" title="Clone Profile" aria-label="Clone profile">🧬</button>
                     <button class="btn-secondary btn-sm" data-action="open-cookie-modal" data-profile-id="${escAttr(id)}" title="Manage Cookies" aria-label="Manage cookies">🍪</button>
                     <button class="btn-secondary btn-sm" data-action="open-set-pin-modal" data-profile-id="${escAttr(id)}" title="Set PIN" aria-label="Set PIN">🔒</button>
@@ -524,14 +543,14 @@ async function toggleProfilePin(id, pinned) {
 let currentEditProfileId = null;
 
 function switchEditModalTab(tab) {
-    document.getElementById('edit-tab-overview').style.display = 'none';
-    document.getElementById('edit-tab-network').style.display = 'none';
-    document.getElementById('edit-tab-stealth').style.display = 'none';
+    document.getElementById('edit-tab-overview').classList.remove('active');
+    document.getElementById('edit-tab-network').classList.remove('active');
+    document.getElementById('edit-tab-stealth').classList.remove('active');
     document.getElementById('edit-tab-btn-overview').classList.remove('active');
     document.getElementById('edit-tab-btn-network').classList.remove('active');
     document.getElementById('edit-tab-btn-stealth').classList.remove('active');
 
-    document.getElementById(`edit-tab-${tab}`).style.display = 'block';
+    document.getElementById(`edit-tab-${tab}`).classList.add('active');
     document.getElementById(`edit-tab-btn-${tab}`).classList.add('active');
 }
 
@@ -722,8 +741,14 @@ function openSetPinModal(id) {
     document.getElementById('pin-input').value = '';
     document.getElementById('pin-confirm').value = '';
     document.getElementById('pin-error').textContent = '';
-    document.getElementById('pin-confirm-group').style.display = 'block';
-    document.getElementById('pin-remove-btn').style.display = 'inline-block';
+    document.getElementById('pin-confirm-group').hidden = false;
+    document.getElementById('pin-remove-btn').hidden = false;
+    const pinInput = document.getElementById('pin-input');
+    pinInput.placeholder = 'Enter 4-6 digit PIN';
+    pinInput.inputMode = 'numeric';
+    pinInput.setAttribute('pattern', '[0-9]{4,6}');
+    pinInput.setAttribute('minlength', '4');
+    pinInput.setAttribute('maxlength', '6');
     const p = allProfiles.find(x => x.id === id);
     document.getElementById('pin-modal-title').textContent = `${p?.name || 'Profile'} PIN 🔒`;
     document.getElementById('pin-save-btn').textContent = 'Save PIN';
@@ -738,8 +763,15 @@ function openPinPrompt(id) {
     document.getElementById('pin-input').value = '';
     document.getElementById('pin-confirm').value = '';
     document.getElementById('pin-error').textContent = '';
-    document.getElementById('pin-confirm-group').style.display = 'none';
-    document.getElementById('pin-remove-btn').style.display = 'none';
+    document.getElementById('pin-confirm-group').hidden = true;
+    document.getElementById('pin-remove-btn').hidden = true;
+    const pinInput = document.getElementById('pin-input');
+    // Legacy hashes may have been created from non-policy PINs.
+    pinInput.placeholder = 'Enter PIN';
+    pinInput.inputMode = 'text';
+    pinInput.removeAttribute('pattern');
+    pinInput.removeAttribute('minlength');
+    pinInput.removeAttribute('maxlength');
     document.getElementById('pin-modal-title').textContent = 'Enter PIN to Launch 🔒';
     document.getElementById('pin-save-btn').textContent = 'Unlock & Launch';
     document.getElementById('pin-modal').classList.add('show');
@@ -778,7 +810,7 @@ async function saveProfilePin() {
     if (!currentPinProfileId) return;
     const pin = document.getElementById('pin-input').value;
     const confirm = document.getElementById('pin-confirm').value;
-    if (!pin) { err.textContent = 'Enter a PIN.'; return; }
+    if (!/^[0-9]{4,6}$/.test(pin)) { err.textContent = 'PIN must be exactly 4-6 ASCII digits.'; return; }
     if (pin !== confirm) { err.textContent = 'PINs do not match.'; return; }
     try {
         await requestJson(`${API}/api/profiles/${currentPinProfileId}/pin/set`, {
@@ -895,13 +927,9 @@ async function cloneProfile(id) {
     if(!confirm("Are you sure you want to duplicate this profile?")) return;
     showToast('Cloning profile...', 'info');
     try {
-        const res = await fetch(`${API}/api/profiles/${id}/clone`, { method: 'POST' });
-        if(res.ok) {
-            showToast('Profile Cloned!', 'success');
-            fetchProfiles();
-        } else {
-            showToast('Failed to clone', 'error');
-        }
+        await requestJson(`${API}/api/profiles/${id}/clone`, { method: 'POST' }, 'Profile clone failed');
+        showToast('Profile Cloned!', 'success');
+        fetchProfiles();
     } catch(e) {
         showToast('Clone error: ' + e.message, 'error');
     }
@@ -909,27 +937,25 @@ async function cloneProfile(id) {
 
 async function scanProfile(id) {
     document.getElementById('scan-modal').classList.add('show');
-    document.getElementById('scan-loading').style.display = 'block';
-    document.getElementById('scan-results').style.display = 'none';
+    document.getElementById('scan-loading').hidden = false;
+    document.getElementById('scan-results').hidden = true;
 
     try {
         const res = await fetch(`${API}/api/profiles/${id}/scan`);
         const data = await res.json();
 
         if (res.ok && data.status === 'success') {
-            document.getElementById('scan-loading').style.display = 'none';
-            document.getElementById('scan-results').style.display = 'block';
+            document.getElementById('scan-loading').hidden = true;
+            document.getElementById('scan-results').hidden = false;
 
             const scan = data.scan;
             const score = scan.ai_score || 0;
             const circle = document.getElementById('scan-circle');
             const offset = 100 - score;
-            circle.style.strokeDasharray = `${score}, 100`;
+            circle.setAttribute('stroke-dasharray', `${score}, 100`);
 
             // Color based on score
-            if (score > 80) circle.style.stroke = 'var(--primary)'; // Green
-            else if (score > 50) circle.style.stroke = '#fbbf24'; // Yellow
-            else circle.style.stroke = 'var(--danger)'; // Red
+            circle.className.baseVal = score > 80 ? 'scan-score-good' : (score > 50 ? 'scan-score-warning' : 'scan-score-danger');
 
             document.getElementById('scan-score').textContent = score;
             document.getElementById('scan-verdict').textContent = scan.overall_verdict || 'Unknown';
@@ -938,8 +964,8 @@ async function scanProfile(id) {
             // Breakdown
             const issues = scan.detected_issues || [];
             const breakdownHtml = issues.length > 0
-                ? issues.map(i => `<div style="color:var(--danger);">- ${escHtml(i)}</div>`).join('')
-                : '<div style="color:var(--primary);">No major issues detected.</div>';
+                ? issues.map(i => `<div class="scan-issue">- ${escHtml(i)}</div>`).join('')
+                : '<div class="scan-ok">No major issues detected.</div>';
             document.getElementById('scan-breakdown').innerHTML = breakdownHtml;
 
         } else {
@@ -1005,12 +1031,11 @@ async function saveCookies() {
 
     showToast('Saving and importing cookies...', 'info');
     try {
-        const res = await fetch(`${API}/api/profiles/${currentCookieProfileId}/cookies`, {
+        const data = await requestJson(`${API}/api/profiles/${currentCookieProfileId}/cookies`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ cookies: cookies })
-        });
-        const data = await res.json();
+        }, 'Cookie import failed');
         if (data.status === 'success') {
             showToast('Cookies imported successfully!', 'success');
             closeCookieModal();
@@ -1018,7 +1043,7 @@ async function saveCookies() {
             showToast('Error: ' + data.message, 'error');
         }
     } catch (e) {
-        showToast('Network error: ' + e.message, 'error');
+        showToast('Error: ' + e.message, 'error');
     }
 }
 
@@ -1029,7 +1054,7 @@ function toggleSelectAll() {
     checkboxes.forEach(cb => {
         // only check if row is visible (handle search filter)
         const tr = cb.closest('tr');
-        if (tr && tr.style.display !== 'none') {
+        if (tr && !tr.hidden) {
             cb.checked = isChecked;
         }
     });
@@ -1040,9 +1065,9 @@ function updateBulkActions() {
     const checked = document.querySelectorAll('.profile-checkbox:checked').length;
     const bulkDiv = document.getElementById('bulk-actions');
     if (checked > 0) {
-        bulkDiv.style.display = 'flex';
+        bulkDiv.hidden = false;
     } else {
-        bulkDiv.style.display = 'none';
+        bulkDiv.hidden = true;
         document.getElementById('select-all').checked = false;
     }
     updateAutomationSelectionCounts();
@@ -1212,32 +1237,122 @@ async function setPrivacyMode(id, mode) {
 // =========================================================
 // CREATE PROFILE MODAL
 // =========================================================
-function openCreateModal() {
-    document.getElementById('create-modal').classList.add('active');
+let createSubmitInFlight = false;
+let createModalTrigger = null;
+
+function setChipState(id, key, active) {
+    chipState[key] = Boolean(active);
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('active', chipState[key]);
+}
+
+function clearCreateFieldErrors() {
+    ['new-profile-name', 'new-profile-count', 'new-profile-pin', 'new-profile-proxy'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('field-error');
+        const err = document.getElementById(`${id}-error`);
+        if (err) err.textContent = '';
+    });
+}
+
+function showCreateFieldError(id, message, tabName = 'overview') {
+    const el = document.getElementById(id);
+    if (el) {
+        el.classList.add('field-error');
+        el.focus({ preventScroll: true });
+    }
+    const err = document.getElementById(`${id}-error`);
+    if (err) err.textContent = message;
+    const tabBtn = document.querySelector(`#modal-form .modal-tab[data-params*="${tabName}"]`)
+        || document.querySelector(`#modal-form .modal-tab`);
+    switchModalTab(tabName, tabBtn);
+    showToast(message, 'warning');
+}
+
+function resetCreateModalForm() {
+    clearCreateFieldErrors();
+    const nameEl = document.getElementById('new-profile-name');
+    const proxyEl = document.getElementById('new-profile-proxy');
+    const pinEl = document.getElementById('new-profile-pin');
+    const privacyEl = document.getElementById('new-privacy-mode');
+    const countEl = document.getElementById('new-profile-count');
+    const templateEl = document.getElementById('new-profile-template');
+    const webrtcEl = document.getElementById('new-profile-webrtc');
+    if (nameEl) nameEl.value = '';
+    if (proxyEl) proxyEl.value = '';
+    if (pinEl) pinEl.value = '';
+    if (privacyEl) privacyEl.value = 'standard';
+    if (countEl) countEl.value = '1';
+    if (templateEl) templateEl.value = 'custom';
+    if (webrtcEl) webrtcEl.value = 'protected';
+    setChipState('chip-canvas', 'canvas', true);
+    setChipState('chip-webgl', 'webgl', true);
+    setChipState('chip-audio', 'audio', true);
+    setChipState('chip-headless', 'headless', false);
+    setChipState('chip-trackers', 'trackers', false);
+    resetProxyTest('new-profile-proxy', 'new-proxy-test-result');
+    resetProgressSteps();
+    const preview = document.getElementById('success-profile-preview');
+    if (preview) preview.innerHTML = '';
+    const errMsg = document.getElementById('modal-error-msg');
+    if (errMsg) errMsg.textContent = '';
+    createdProfileId = null;
+    createSubmitInFlight = false;
+    const submitBtn = document.getElementById('create-profile-submit-btn');
+    if (submitBtn) submitBtn.disabled = false;
     showModalSection('modal-form');
     const overviewTab = document.querySelector('#modal-form .modal-tab');
     switchModalTab('overview', overviewTab);
-    resetProxyTest('new-profile-proxy', 'new-proxy-test-result');
+}
+
+function openCreateModal() {
+    createModalTrigger = document.activeElement;
+    resetCreateModalForm();
+    // Auto-suggest next name from existing profile count
+    try {
+        const next = Math.max(1, (allProfiles || []).length + 1);
+        const nameEl = document.getElementById('new-profile-name');
+        if (nameEl && !nameEl.value) nameEl.placeholder = `e.g. Profile ${next}`;
+        const savedCount = localStorage.getItem('gb_last_create_count');
+        const countEl = document.getElementById('new-profile-count');
+        if (countEl && savedCount && /^[0-9]+$/.test(savedCount)) {
+            const n = Math.min(50, Math.max(1, parseInt(savedCount, 10)));
+            countEl.value = String(n);
+        }
+        const savedPrivacy = localStorage.getItem('gb_last_privacy_mode');
+        const privacyEl = document.getElementById('new-privacy-mode');
+        if (privacyEl && savedPrivacy && ['standard', 'strict', 'ephemeral'].includes(savedPrivacy)) {
+            privacyEl.value = savedPrivacy;
+        }
+    } catch (_) {}
+    const modal = document.getElementById('create-modal');
+    modal.classList.add('active');
+    modal.setAttribute('aria-hidden', 'false');
+    showModalSection('modal-form');
+    setTimeout(() => {
+        const nameEl = document.getElementById('new-profile-name');
+        if (nameEl) nameEl.focus();
+    }, 50);
 }
 
 function closeCreateModal() {
-    document.getElementById('create-modal').classList.remove('active');
-    // Reset form
+    if (createSubmitInFlight) return;
+    const modal = document.getElementById('create-modal');
+    modal.classList.remove('active');
+    modal.setAttribute('aria-hidden', 'true');
     setTimeout(() => {
-        document.getElementById('new-profile-name').value = '';
-        document.getElementById('new-profile-proxy').value = '';
-        document.getElementById('new-profile-pin').value = '';
-        document.getElementById('new-privacy-mode').value = 'standard';
-        resetProxyTest('new-profile-proxy', 'new-proxy-test-result');
-        showModalSection('modal-form');
-        createdProfileId = null;
-    }, 300);
+        resetCreateModalForm();
+        if (createModalTrigger && typeof createModalTrigger.focus === 'function') {
+            try { createModalTrigger.focus(); } catch (_) {}
+        }
+        createModalTrigger = null;
+    }, 200);
 }
 
 function showModalSection(id) {
     ['modal-form', 'modal-progress', 'modal-success', 'modal-error'].forEach(s => {
         const el = document.getElementById(s);
-        if (el) el.style.display = s === id ? '' : 'none';
+        if (el) el.hidden = s !== id;
     });
 }
 
@@ -1256,62 +1371,84 @@ function removeMacroStep(el) {
     if (step) step.remove();
 }
 
-function backToForm() { showModalSection('modal-form'); }
+function backToForm() {
+    createSubmitInFlight = false;
+    const submitBtn = document.getElementById('create-profile-submit-btn');
+    if (submitBtn) submitBtn.disabled = false;
+    showModalSection('modal-form');
+}
 
-async function applyProfileTemplate() {
+function applyProfileTemplate() {
     const val = document.getElementById('new-profile-template').value;
-    const canvasChip = document.getElementById('chip-canvas');
-    const webglChip = document.getElementById('chip-webgl');
-    const audioChip = document.getElementById('chip-audio');
-    const headlessChip = document.getElementById('chip-headless');
-    const trackersChip = document.getElementById('chip-trackers');
     const webrtc = document.getElementById('new-profile-webrtc');
 
     if (val === 'ecommerce') {
-        canvasChip.classList.add('active');
-        webglChip.classList.add('active');
-        audioChip.classList.add('active');
-        headlessChip.classList.remove('active');
-        trackersChip.classList.add('active');
-        webrtc.value = 'protected';
+        setChipState('chip-canvas', 'canvas', true);
+        setChipState('chip-webgl', 'webgl', true);
+        setChipState('chip-audio', 'audio', true);
+        setChipState('chip-headless', 'headless', false);
+        setChipState('chip-trackers', 'trackers', true);
+        if (webrtc) webrtc.value = 'protected';
     } else if (val === 'social') {
-        canvasChip.classList.remove('active'); // some social flags canvas noise
-        webglChip.classList.add('active');
-        audioChip.classList.add('active');
-        headlessChip.classList.remove('active');
-        trackersChip.classList.remove('active');
-        webrtc.value = 'protected';
+        setChipState('chip-canvas', 'canvas', false);
+        setChipState('chip-webgl', 'webgl', true);
+        setChipState('chip-audio', 'audio', true);
+        setChipState('chip-headless', 'headless', false);
+        setChipState('chip-trackers', 'trackers', false);
+        if (webrtc) webrtc.value = 'protected';
     } else if (val === 'research') {
-        canvasChip.classList.remove('active');
-        webglChip.classList.remove('active');
-        audioChip.classList.remove('active');
-        headlessChip.classList.add('active');
-        trackersChip.classList.add('active');
-        webrtc.value = 'protected';
+        setChipState('chip-canvas', 'canvas', false);
+        setChipState('chip-webgl', 'webgl', false);
+        setChipState('chip-audio', 'audio', false);
+        setChipState('chip-headless', 'headless', true);
+        setChipState('chip-trackers', 'trackers', true);
+        if (webrtc) webrtc.value = 'protected';
+    } else {
+        setChipState('chip-canvas', 'canvas', true);
+        setChipState('chip-webgl', 'webgl', true);
+        setChipState('chip-audio', 'audio', true);
+        setChipState('chip-headless', 'headless', false);
+        setChipState('chip-trackers', 'trackers', false);
+        if (webrtc) webrtc.value = 'protected';
     }
 }
 
-async function submitCreateProfile() {
+function validateCreateProfileForm() {
+    clearCreateFieldErrors();
     const name = document.getElementById('new-profile-name').value.trim();
     if (!name) {
-        showToast('Please enter a profile name.', 'warning');
-        return;
+        showCreateFieldError('new-profile-name', 'Please enter a profile name.', 'overview');
+        return null;
+    }
+    if (name.length > 120) {
+        showCreateFieldError('new-profile-name', 'Name must be 120 characters or less.', 'overview');
+        return null;
+    }
+
+    const countRaw = document.getElementById('new-profile-count').value;
+    const count = Number.parseInt(String(countRaw), 10);
+    if (!Number.isInteger(count) || String(count) !== String(countRaw).trim() || count < 1 || count > 50) {
+        showCreateFieldError('new-profile-count', 'Quantity must be a whole number from 1 to 50.', 'overview');
+        return null;
+    }
+
+    const pinRaw = document.getElementById('new-profile-pin').value.trim() || null;
+    if (pinRaw !== null && !/^[0-9]{4,6}$/.test(pinRaw)) {
+        showCreateFieldError('new-profile-pin', 'PIN must be exactly 4-6 ASCII digits.', 'overview');
+        return null;
     }
 
     const proxyRaw = document.getElementById('new-profile-proxy').value.trim();
     if (proxyRaw && !proxyWasTested('new-profile-proxy')) {
-        showToast('Test this exact proxy successfully before creating the profile.', 'warning');
-        switchModalTab('network', document.querySelector('#modal-form .modal-tab:nth-child(2)'));
-        return;
+        showCreateFieldError('new-profile-proxy', 'Test this exact proxy successfully before creating the profile.', 'network');
+        return null;
     }
-    const count = parseInt(document.getElementById('new-profile-count').value) || 1;
 
-    const pinRaw = document.getElementById('new-profile-pin').value.trim() || null;
-
-    const payload = {
-        name: name,
-        proxy_string: proxyRaw || null,
-        pin: pinRaw,
+    return {
+        name,
+        count,
+        pinRaw,
+        proxyRaw,
         advanced: {
             os: document.getElementById('new-profile-os').value,
             webrtc_mode: document.getElementById('new-profile-webrtc').value,
@@ -1326,13 +1463,49 @@ async function submitCreateProfile() {
             screen_resolution: '1920x1080'
         }
     };
+}
 
-    // Show progress
+function formatCreateErrorDetail(detail, status) {
+    const value = detail && detail.detail !== undefined ? detail.detail : detail;
+    if (Array.isArray(value)) {
+        return value.map((item) => item.msg || item.message || JSON.stringify(item)).join('; ');
+    }
+    if (value && typeof value === 'object') {
+        return value.message || value.detail || JSON.stringify(value);
+    }
+    if (typeof value === 'string' && value) return value;
+    if (status === 401 || status === 403) return 'Authentication required. Check admin token and try again.';
+    if (status === 422) return 'Validation failed. Check name, quantity, PIN, and proxy.';
+    if (status === 429) return 'Rate limited. Wait a moment and retry.';
+    if (status === 503) return 'AI generation temporarily unavailable. Retry shortly.';
+    return `Profile creation failed (HTTP ${status || '?'})`;
+}
+
+async function submitCreateProfile() {
+    if (createSubmitInFlight) return;
+    const form = validateCreateProfileForm();
+    if (!form) return;
+
+    const { name, count, pinRaw, proxyRaw, advanced } = form;
+    try {
+        localStorage.setItem('gb_last_create_count', String(count));
+        localStorage.setItem('gb_last_privacy_mode', advanced.privacy_mode);
+    } catch (_) {}
+
+    createSubmitInFlight = true;
+    const submitBtn = document.getElementById('create-profile-submit-btn');
+    if (submitBtn) submitBtn.disabled = true;
+
+    const payload = {
+        name,
+        proxy_string: proxyRaw || null,
+        pin: pinRaw,
+        advanced
+    };
+
     showModalSection('modal-progress');
     resetProgressSteps();
-
     addLogLine(`Starting validated profile creation (${count > 1 ? 'Bulk Mode: ' + count + ' profiles' : 'Single Mode'})...`);
-
     setStepActive(1);
     addLogLine('Calling Kimi AI via Cloudflare Workers...');
 
@@ -1340,57 +1513,66 @@ async function submitCreateProfile() {
     const requestController = new AbortController();
     const requestTimeout = setTimeout(() => requestController.abort(), 120000);
     try {
-        let resPromise;
+        let data;
         if (count > 1) {
-            // Bulk creation
-            resPromise = fetch(`${API}/api/profiles/generate/bulk`, {
+            data = await requestJson(`${API}/api/profiles/generate/bulk`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 signal: requestController.signal,
                 body: JSON.stringify({
                     base_name: name,
-                    count: count,
+                    count,
                     proxy_string: proxyRaw || null,
-                    advanced: payload.advanced
+                    pin: pinRaw,
+                    advanced
                 })
-            });
+            }, 'Bulk profile creation failed');
         } else {
-            // Single creation
-            resPromise = fetch(`${API}/api/profiles/generate`, {
+            data = await requestJson(`${API}/api/profiles/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 signal: requestController.signal,
                 body: JSON.stringify(payload)
-            });
-        }
-
-        addLogLine('Request submitted. Waiting for the backend result; no unverified test claims will be shown.');
-        const res = await resPromise;
-        const data = await res.json().catch(() => ({}));
-
-        if (!res.ok) {
-            setStepError(1);
-            const detail = data.detail || data.message || `Profile creation failed (HTTP ${res.status})`;
-            addLogLine(`❌ Error: ${detail}`);
-            document.getElementById('modal-error-msg').textContent = detail;
-            showModalSection('modal-error');
-            addActivity(`Profile creation failed: ${detail}`, 'error');
-            addLogEntry('error', detail);
-            return;
+            }, 'Profile creation failed');
         }
 
         profile = data;
+        const successCount = Number(profile.success_count ?? profile.succeeded ?? 0);
         const failedResults = count > 1 && Array.isArray(profile.results)
             ? profile.results.filter(result => result.status !== 'success')
             : [];
-        if (count > 1 && (profile.status === 'partial' || profile.status === 'error' || failedResults.length > 0)) {
+        const isPartial = count > 1 && (
+            profile.status === 'partial'
+            || profile.status === 'error'
+            || failedResults.length > 0
+            || (successCount > 0 && successCount < count)
+        );
+
+        if (count > 1 && profile.status === 'error' && successCount === 0) {
             for (let step = 1; step <= 3; step++) setStepDone(step);
             setStepError(4);
-            const detail = data.message || 'Bulk creation completed only partially.';
+            const detail = profile.message || 'Bulk creation failed.';
             addLogLine(`❌ ${detail}`);
-            document.getElementById('modal-error-msg').textContent = `${detail}. Review the Profiles list for any profiles that were created.`;
+            document.getElementById('modal-error-msg').textContent = detail;
+            showModalSection('modal-error');
+            addActivity(detail, 'error');
+            createSubmitInFlight = false;
+            if (submitBtn) submitBtn.disabled = false;
+            return;
+        }
+
+        if (isPartial) {
+            for (let step = 1; step <= 3; step++) setStepDone(step);
+            setStepError(4);
+            const detail = profile.message || `Created ${successCount} of ${count} profiles.`;
+            addLogLine(`⚠️ ${detail}`);
+            document.getElementById('modal-error-msg').textContent =
+                `${detail} Open Profiles to review created items, then retry failed ones.`;
             showModalSection('modal-error');
             addActivity(detail, 'warning');
+            await fetchProfiles();
+            createSubmitInFlight = false;
+            if (submitBtn) submitBtn.disabled = false;
             return;
         }
 
@@ -1400,32 +1582,38 @@ async function submitCreateProfile() {
 
     } catch (e) {
         setStepError(1);
-        addLogLine(`❌ Network error: ${e.message}`);
         const detail = e.name === 'AbortError'
             ? 'Profile generation timed out after 120 seconds. Please retry; exhausted Kimi accounts will be skipped automatically.'
-            : 'Could not reach backend: ' + e.message;
+            : formatCreateErrorDetail(e.detail || e.message, e.status);
+        addLogLine(`❌ ${detail}`);
         document.getElementById('modal-error-msg').textContent = detail;
         showModalSection('modal-error');
+        addActivity(`Profile creation failed: ${detail}`, 'error');
+        createSubmitInFlight = false;
+        if (submitBtn) submitBtn.disabled = false;
         return;
     } finally {
         clearTimeout(requestTimeout);
     }
 
-    // Show success
     await delay(400);
     const preview = document.getElementById('success-profile-preview');
     const launchButton = document.getElementById('launch-created-profile-btn');
-    if (launchButton) launchButton.style.display = createdProfileId ? 'inline-flex' : 'none';
+    const viewButton = document.getElementById('view-created-profiles-btn');
+    if (launchButton) launchButton.hidden = !createdProfileId;
+    if (viewButton) viewButton.hidden = false;
+
     if (count > 1) {
+        const successCount = Number(profile.success_count ?? profile.succeeded ?? count);
         if (preview) {
             preview.innerHTML = `
                 <b>Bulk Creation Complete</b><br>
-                ${escHtml(profile.message || 'Multiple profiles created successfully.')}<br>
-                Check the Profiles list to view them.
+                ${escHtml(profile.message || `Created ${successCount} of ${count} profiles.`)}<br>
+                Created: ${escHtml(successCount)} / ${escHtml(count)}
             `;
         }
-        addActivity(`Bulk created ${profile.success_count} profiles`, 'success');
-        addLogEntry('info', `Bulk profile creation finished.`);
+        addActivity(`Bulk created ${successCount} profiles`, 'success');
+        addLogEntry('info', `Bulk profile creation finished: ${successCount}/${count}.`);
     } else {
         if (preview) {
             preview.innerHTML = `
@@ -1441,16 +1629,36 @@ async function submitCreateProfile() {
     }
 
     showModalSection('modal-success');
-    fetchProfiles();
+    createSubmitInFlight = false;
+    if (submitBtn) submitBtn.disabled = false;
+    try {
+        await fetchProfiles();
+    } catch (_) {
+        showToast('Profiles created, but the list could not refresh yet.', 'warning');
+    }
 }
 
 async function launchNewProfile() {
     if (createdProfileId) {
+        const id = createdProfileId;
         closeCreateModal();
         navigate('profiles');
         await delay(300);
-        launchProfile(createdProfileId);
+        launchProfile(id);
     }
+}
+
+function viewCreatedProfiles() {
+    closeCreateModal();
+    navigate('profiles');
+}
+
+function setCreateQuantity(n) {
+    const countEl = document.getElementById('new-profile-count');
+    if (!countEl) return;
+    const value = Math.min(50, Math.max(1, Number.parseInt(n, 10) || 1));
+    countEl.value = String(value);
+    clearCreateFieldErrors();
 }
 
 // Progress step helpers
@@ -1538,7 +1746,7 @@ async function fetchTitanProxies() {
         if (!grid) return;
 
         if (!data.proxies || data.proxies.length === 0) {
-            grid.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-muted);">No proxies found in Titan Database. Run the scraper first.</td></tr>';
+            grid.innerHTML = '<tr><td colspan="6" class="table-empty">No proxies found in Titan Database. Run the scraper first.</td></tr>';
             return;
         }
 
@@ -1552,16 +1760,16 @@ async function fetchTitanProxies() {
             }
             if (p.status === 'dead' || p.latency_ms === -1) {
                 pingColor = 'var(--danger)';
-                statusBadge = '<span style="color:var(--danger);font-size:0.75rem;font-weight:600;background:rgba(239,68,68,0.1);padding:2px 6px;border-radius:4px;">Dead</span>';
+                statusBadge = '<span class="proxy-status-dead">Dead</span>';
             }
 
             return `
                 <tr>
                     <td class="mono">${escHtml(p.ip)}</td>
                     <td class="mono">${escHtml(p.port)}</td>
-                    <td><span style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:4px;font-size:0.75rem;">${escHtml(String(p.protocol || 'unknown').toUpperCase())}</span></td>
+                    <td><span class="protocol-pill">${escHtml(String(p.protocol || 'unknown').toUpperCase())}</span></td>
                     <td>${escHtml(p.city || 'Unknown')}, ${escHtml(p.country || 'Unknown')}</td>
-                    <td class="mono" style="color:${pingColor};">${escHtml(p.latency_ms)}ms</td>
+                    <td class="mono ping-${pingColor === 'var(--success)' ? 'fast' : (pingColor === 'var(--warning)' ? 'medium' : 'slow')}">${escHtml(p.latency_ms)}ms</td>
                     <td>${statusBadge}</td>
                 </tr>
             `;
@@ -1588,18 +1796,15 @@ async function importProxies() {
     if (proxies.length === 0) { showToast('No valid proxies found.', 'error'); return; }
 
     try {
-        const res = await fetch(`${API}/api/proxies`, {
+        const data = await requestJson(`${API}/api/proxies`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ proxies })
-        });
-        if (res.ok) {
-            const data = await res.json();
-            showToast(`${data.added} proxies imported!`, 'success');
-            addActivity(`${data.added} proxies added to pool`, 'success');
-            document.getElementById('proxy-import-text').value = '';
-            fetchProxies();
-        }
+        }, 'Proxy import failed');
+        showToast(`${data.added} proxies imported!`, 'success');
+        addActivity(`${data.added} proxies added to pool`, 'success');
+        document.getElementById('proxy-import-text').value = '';
+        fetchProxies();
     } catch (e) { showToast('Import failed: ' + e.message, 'error'); }
 }
 
@@ -1609,15 +1814,10 @@ async function testAllProxies() {
     if (btn) { btn.disabled = true; btn.textContent = 'Testing...'; }
     showToast('Running health check on all proxies...', 'info');
     try {
-        const res = await fetch(`${API}/api/proxies/test`, { method: 'POST' });
-        if (res.ok) {
-            const data = await res.json();
-            showToast(data.message || 'Proxy health check complete', 'success');
-            addActivity(data.message || 'Proxy health check complete', 'success');
-            fetchProxies();
-        } else {
-            showToast('Health check failed', 'error');
-        }
+        const data = await requestJson(`${API}/api/proxies/test`, { method: 'POST' }, 'Proxy health check failed');
+        showToast(data.message || 'Proxy health check complete', 'success');
+        addActivity(data.message || 'Proxy health check complete', 'success');
+        fetchProxies();
     } catch(e) {
         showToast('Health check failed: ' + e.message, 'error');
     } finally {
@@ -1629,28 +1829,21 @@ async function scrapeFreeProxies() {
     const btn = document.getElementById('btn-scrape-proxies');
     const originalText = btn.innerHTML;
 
-    btn.innerHTML = `<div class="spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:8px;"></div> Scraping & Testing...`;
+    btn.innerHTML = '<div class="spinner button-spinner"></div> Scraping & Testing...';
     btn.disabled = true;
     showToast('Auto-scraper started. This will take a few minutes...', 'info');
 
     try {
-        const res = await fetch(`${API}/api/proxies/scrape`, {
+        const data = await requestJson(`${API}/api/proxies/scrape`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ target_count: 50 })
-        });
-
-        if (res.ok) {
-            const data = await res.json();
-            showToast(data.message, 'success');
-            addActivity(data.message, 'success');
-            fetchProxies();
-        } else {
-            const err = await res.json();
-            showToast('Scraping failed: ' + err.detail, 'error');
-        }
+        }, 'Scraping failed');
+        showToast(data.message, 'success');
+        addActivity(data.message, 'success');
+        fetchProxies();
     } catch (e) {
-        showToast('Network error during scrape: ' + e.message, 'error');
+        showToast('Scraping failed: ' + e.message, 'error');
     } finally {
         btn.innerHTML = originalText;
         btn.disabled = false;
@@ -1776,9 +1969,7 @@ function showToast(msg, type = 'info') {
     container.appendChild(toast);
 
     setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateX(20px)';
-        toast.style.transition = 'all 0.3s ease';
+        toast.classList.add('leaving');
         setTimeout(() => toast.remove(), 300);
     }, 3500);
 }
@@ -1818,19 +2009,14 @@ async function executeBulkMacro() {
     closeRunMacroModal();
 
     try {
-        const res = await fetch(`${API}/api/macros/run/bulk`, {
+        const data = await requestJson(`${API}/api/macros/run/bulk`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ profile_ids: checked, macro_id: macroId })
-        });
-        const data = await res.json();
-        if (res.ok) {
-            showToast(data.message, 'success');
-        } else {
-            showToast('Error: ' + data.detail, 'error');
-        }
+        }, 'Failed to execute macro');
+        showToast(data.message, 'success');
     } catch(e) {
-        showToast('Failed to start macro', 'error');
+        showToast('Error: ' + e.message, 'error');
     }
 }
 
@@ -1849,7 +2035,7 @@ function switchAutomationTab(tabName) {
 
     ['macros', 'schedules', 'cookie-robot', 'sync'].forEach(name => {
         const actions = document.getElementById(`automation-${name}-actions`);
-        if (actions) actions.style.display = name === tabName ? 'block' : 'none';
+        if (actions) actions.hidden = name !== tabName;
     });
 
     if (tabName === 'macros') fetchMacros();
@@ -1867,7 +2053,7 @@ async function fetchMacros() {
         grid.innerHTML = '';
 
         if (currentMacros.length === 0) {
-            grid.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--text-muted);">No macros found. Create one!</td></tr>`;
+            grid.innerHTML = '<tr><td colspan="4" class="table-empty">No macros found. Create one!</td></tr>';
             return;
         }
 
@@ -1876,9 +2062,9 @@ async function fetchMacros() {
             tr.innerHTML = `
                 <td><strong>${escHtml(m.name)}</strong></td>
                 <td>${escHtml(m.description) || '-'}</td>
-                <td><span class="mono" style="background:rgba(255,255,255,0.1);padding:0.2rem 0.5rem;border-radius:4px;">${Array.isArray(m.steps) ? m.steps.length : 0} steps</span></td>
+                <td><span class="mono code-pill">${Array.isArray(m.steps) ? m.steps.length : 0} steps</span></td>
                 <td>
-                    <button class="btn-secondary" style="padding:0.25rem 0.5rem;font-size:0.8rem;border-color:var(--danger);color:var(--danger);" data-action="delete-macro" data-macro-id="${escAttr(m.id)}">Delete</button>
+                    <button class="btn-secondary danger-compact-action" data-action="delete-macro" data-macro-id="${escAttr(m.id)}">Delete</button>
                 </td>
             `;
             grid.appendChild(tr);
@@ -1895,7 +2081,7 @@ async function fetchSchedules() {
         grid.innerHTML = '';
 
         if (currentSchedules.length === 0) {
-            grid.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted);">No active cron schedules.</td></tr>`;
+            grid.innerHTML = '<tr><td colspan="5" class="table-empty">No active cron schedules.</td></tr>';
             return;
         }
 
@@ -1904,12 +2090,12 @@ async function fetchSchedules() {
             const macro = currentMacros.find(m => m.id === s.macro_id);
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td><span class="mono" style="background:rgba(255,255,255,0.1);padding:0.2rem 0.5rem;border-radius:4px;">${escHtml(s.cron)}</span></td>
+                <td><span class="mono code-pill">${escHtml(s.cron)}</span></td>
                 <td>${escHtml(macro?.name || s.macro_id)}</td>
                 <td>${profileIds.includes('*') ? 'All Profiles' : profileIds.length + ' Profiles'}</td>
-                <td><span style="color:var(--success);">Active</span></td>
+                <td><span class="text-success">Active</span></td>
                 <td>
-                    <button class="btn-secondary" style="padding:0.25rem 0.5rem;font-size:0.8rem;border-color:var(--danger);color:var(--danger);" data-action="delete-schedule" data-schedule-id="${escAttr(s.id)}">Stop</button>
+                    <button class="btn-secondary danger-compact-action" data-action="delete-schedule" data-schedule-id="${escAttr(s.id)}">Stop</button>
                 </td>
             `;
             grid.appendChild(tr);
@@ -1933,9 +2119,9 @@ function updateMacroStepFields(selectEl) {
     const step = selectEl.closest('.macro-step');
     const valInput = step.querySelector('.step-value');
     if (['type', 'wait'].includes(selectEl.value)) {
-        valInput.style.display = 'block';
+        valInput.hidden = false;
     } else {
-        valInput.style.display = 'none';
+        valInput.hidden = true;
         valInput.value = '';
     }
 }
@@ -1970,20 +2156,15 @@ async function submitCreateMacro() {
     }
 
     try {
-        const res = await fetch(`${API}/api/macros`, {
+        await requestJson(`${API}/api/macros`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, description: desc, steps })
-        });
-        if (res.ok) {
-            showToast('Macro saved successfully!', 'success');
-            closeMacroModal();
-            fetchMacros();
-        } else {
-            const data = await res.json();
-            showToast('Error: ' + data.detail, 'error');
-        }
-    } catch(e) { showToast('Error saving macro', 'error'); }
+        }, 'Failed to save macro');
+        showToast('Macro saved successfully!', 'success');
+        closeMacroModal();
+        fetchMacros();
+    } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
 async function deleteMacro(id) {
@@ -2011,14 +2192,14 @@ async function openScheduleModal() {
     // Populate profiles
     const pContainer = document.getElementById('schedule-profiles-list');
     pContainer.innerHTML = `
-        <label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0;cursor:pointer;">
+        <label class="schedule-profile-option">
             <input type="checkbox" value="*" id="schedule-all-profiles">
             <strong>* (All Existing & Future Profiles)</strong>
         </label>
     `;
 
     pContainer.insertAdjacentHTML('beforeend', allProfiles.map(p => `
-            <label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0;cursor:pointer;">
+            <label class="schedule-profile-option">
                 <input type="checkbox" class="schedule-profile-cb" value="${escAttr(p.id)}">
                 ${escHtml(p.name)}
             </label>
@@ -2158,7 +2339,7 @@ function openVirtualKeyboard(inputField) {
     vkCurrentInput = inputField;
     const keyboard = document.getElementById('virtual-keyboard');
     if (!keyboard) return;
-    keyboard.style.display = 'flex';
+    keyboard.classList.add('open');
     renderVirtualKeyboard();
     // Position after layout is computed
     requestAnimationFrame(() => {
@@ -2170,7 +2351,7 @@ function openVirtualKeyboard(inputField) {
 function closeVirtualKeyboard() {
     const keyboard = document.getElementById('virtual-keyboard');
     if (keyboard) {
-        keyboard.style.display = 'none';
+        keyboard.classList.remove('open');
         keyboard.innerHTML = '';
     }
     vkCurrentInput = null;
@@ -2194,8 +2375,7 @@ function positionVirtualKeyboard() {
     const maxLeft = window.innerWidth - keyboard.offsetWidth - pad;
     if (left > maxLeft) left = maxLeft;
     if (left < pad) left = pad;
-    keyboard.style.top = `${top}px`;
-    keyboard.style.left = `${left}px`;
+    keyboard.dataset.position = top < rect.top ? 'above' : 'below';
 }
 
 function getVirtualKeyboardLayout() {
@@ -2327,16 +2507,18 @@ function virtualBackspace() {
 // =========================================================
 // AUTO REFRESH
 // =========================================================
+let _pollIntervalId = null;
+
 function startPolling() {
+    if (_pollIntervalId) return;
     fetchMetrics();
     fetchCFStatus();
 
-    // Refresh every 5 seconds
-    setInterval(() => {
+    _pollIntervalId = setInterval(() => {
+        if (document.hidden) return;
         fetchMetrics();
         fetchCFStatus();
 
-        // Only refresh profiles if on that page
         const profilesPage = document.getElementById('page-profiles');
         if (profilesPage && profilesPage.classList.contains('active')) {
             fetchProfiles();
@@ -2347,6 +2529,8 @@ function startPolling() {
             fetchTitanProxies();
             fetchProxies();
         }
+
+        fetchCookieRobotStatus();
     }, 5000);
 }
 
@@ -2354,8 +2538,7 @@ function startPolling() {
 // INIT
 // =========================================================
 document.addEventListener('DOMContentLoaded', () => {
-    // Dynamic rows cannot use inline event attributes: the strict CSP permits
-    // scripts from this application but intentionally blocks unsafe-inline.
+    // Dynamic rows use delegated listeners so the strict CSP can block inline handlers.
     document.addEventListener('click', (event) => {
         const control = event.target.closest('[data-action]');
         if (!control) return;
@@ -2394,6 +2577,22 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!control) return;
         if (control.dataset.action === 'update-bulk-actions') updateBulkActions();
         if (control.dataset.action === 'set-privacy-mode') setPrivacyMode(control.dataset.profileId, control.value);
+        if (control.dataset.action === 'toggleAutoReplenish') toggleAutoReplenish();
+        if (control.dataset.action === 'applyProfileTemplate') applyProfileTemplate();
+        if (control.dataset.action === 'toggleEditProxyRemoval') toggleEditProxyRemoval();
+        if (control.dataset.action === 'updateMacroStepFields') updateMacroStepFields(control);
+    });
+    document.addEventListener('input', (event) => {
+        const control = event.target.closest('[data-action]');
+        if (!control) return;
+        if (control.dataset.action === 'filterProfiles') filterProfiles();
+        if (control.dataset.action === 'updateRangeValue') {
+            const target = document.getElementById(control.dataset.target);
+            if (target) target.textContent = control.value;
+        }
+        if (control.dataset.action === 'resetProxyTest') {
+            try { resetProxyTest(...JSON.parse(control.dataset.params || '[]')); } catch (_) {}
+        }
     });
     // Bind navigation in JavaScript as well as retaining the markup fallback.
     // This keeps sidebar controls functional in packaged and hardened runtimes
@@ -2431,9 +2630,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize virtual keyboard for secure inputs
     initVirtualKeyboard();
 
-    // Close modal on overlay click
-    document.getElementById('create-modal').addEventListener('click', function(e) {
-        if (e.target === this) closeCreateModal();
+    // Close modal on overlay click / Escape
+    const createModal = document.getElementById('create-modal');
+    if (createModal) {
+        createModal.addEventListener('click', function(e) {
+            if (e.target === this && !createSubmitInFlight) closeCreateModal();
+        });
+        createModal.setAttribute('aria-hidden', 'true');
+    }
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        const modal = document.getElementById('create-modal');
+        if (modal && modal.classList.contains('active') && !createSubmitInFlight) {
+            e.preventDefault();
+            closeCreateModal();
+        }
     });
 });
 
@@ -2510,7 +2721,7 @@ async function fetchCookieRobotStatus() {
                 const pct = Math.max(0, Math.min(100, Number(status.sites_visited) / Number(status.sites_total) * 100 || 0));
                 return `<div class="cookie-robot-widget">
                     <span>${escHtml(pid.slice(0,8))}: ${escHtml(status.state)}</span>
-                    <div class="warming-progress"><div class="warming-progress-bar" style="width:${pct}%"></div></div>
+                    <progress class="warming-progress" max="100" value="${pct}"></progress>
                 </div>`;
             }).join('');
         }
@@ -2590,7 +2801,7 @@ async function applyRiskBadges(profiles) {
 
 async function openSurfacesModal() {
     const modal = document.getElementById('surfaces-modal');
-    if (modal) modal.style.display = 'flex';
+    if (modal) modal.classList.add('show');
     const tbody = document.getElementById('surfaces-table-body');
     const scoreEl = document.getElementById('surfaces-score');
     if (!tbody) return;
@@ -2604,10 +2815,10 @@ async function openSurfacesModal() {
         tbody.innerHTML = surfaces.map(s => {
             const statusClass = s.status === 'protected' ? 'status-success' : (s.status === 'partial' ? 'status-warning' : 'status-danger');
             const statusLabel = s.status === 'protected' ? 'protected' : (s.status === 'partial' ? 'partial' : 'not protected');
-            return `<tr style="border-bottom:1px solid var(--border);">
-                <td style="padding:0.4rem 0;" title="${escAttr(s.notes || '')}">${escHtml(s.name)}</td>
-                <td style="padding:0.4rem 0;">${escHtml(s.category)}</td>
-                <td style="padding:0.4rem 0;"><span class="${statusClass}" style="padding:2px 6px;border-radius:99px;font-size:0.7rem;font-weight:600;">${statusLabel}</span></td>
+            return `<tr class="surface-row">
+                <td class="surface-cell" title="${escAttr(s.notes || '')}">${escHtml(s.name)}</td>
+                <td class="surface-cell">${escHtml(s.category)}</td>
+                <td class="surface-cell"><span class="surface-status ${statusClass}">${statusLabel}</span></td>
             </tr>`;
         }).join('');
     } catch (e) {
@@ -2617,7 +2828,7 @@ async function openSurfacesModal() {
 
 function closeSurfacesModal() {
     const modal = document.getElementById('surfaces-modal');
-    if (modal) modal.style.display = 'none';
+    if (modal) modal.classList.remove('show');
 }
 
 // Close modal on outside click
@@ -2626,16 +2837,12 @@ window.addEventListener('click', function(e) {
     if (modal && e.target === modal) closeSurfacesModal();
 });
 
-setInterval(() => {
-    fetchCookieRobotStatus();
-}, 5000);
-
 // =========================================================
 // ACCESS LOG
 // =========================================================
 async function openAccessLogModal() {
     const modal = document.getElementById('access-log-modal');
-    if (modal) modal.style.display = 'flex';
+    if (modal) modal.classList.add('show');
     try {
         const data = await requestJson(`${API}/api/sites/access-log`, {}, 'Could not load access log');
         renderAccessLog(data);
@@ -2646,7 +2853,7 @@ async function openAccessLogModal() {
 
 function closeAccessLogModal() {
     const modal = document.getElementById('access-log-modal');
-    if (modal) modal.style.display = 'none';
+    if (modal) modal.classList.remove('show');
 }
 
 async function clearAccessLog() {
@@ -2670,13 +2877,13 @@ function renderAccessLog(data, errorMessage) {
     const tbody = document.getElementById('access-log-table-body');
     if (!tbody) return;
     if (errorMessage) {
-        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--danger);">Could not load access log: ${escHtml(errorMessage)}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="4" class="table-error">Could not load access log: ${escHtml(errorMessage)}</td></tr>`;
         return;
     }
     const sites = data && typeof data.sites === 'object' ? data.sites : {};
     const entries = Object.entries(sites);
     if (entries.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);">No tracked API calls yet.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" class="table-empty">No tracked API calls yet.</td></tr>';
         return;
     }
     const rows = entries.map(([origin, calls]) => {
