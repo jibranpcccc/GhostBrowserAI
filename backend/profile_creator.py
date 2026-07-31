@@ -15,6 +15,7 @@ from backend.ai_generator import generate_fingerprint_ai, sanitize_native_surfac
 from backend.ai_coherence_validator import coherence_validator
 from backend.config import AI_GENERATION_TIMEOUT, get_installed_chromium_major_version
 from backend.ai_data_sanitizer import data_sanitizer
+from backend.error_codes import PUBLIC_CODE_MESSAGES
 from backend.logging_config import logger
 
 QUARANTINE_DIR = os.path.join(os.path.dirname(__file__), "..", "quarantined_profiles")
@@ -221,7 +222,7 @@ async def create_zero_leak_profile(
         logger.error("Cannot determine installed Chromium version", exc_info=True)
         return {
             "status": "error",
-            "message": "Validation failed: cannot determine installed Chromium version",
+            "message": PUBLIC_CODE_MESSAGES["CHROMIUM_VERSION_MISSING"],
             "code": "CHROMIUM_VERSION_MISSING",
         }
 
@@ -241,7 +242,7 @@ async def create_zero_leak_profile(
             return {
                 "status": "error",
                 "code": "KIMI_UNAVAILABLE",
-                "message": "Strict AI fingerprint service unavailable",
+                "message": PUBLIC_CODE_MESSAGES["KIMI_UNAVAILABLE"],
             }
 
         fp_os = fp.get("os")

@@ -35,6 +35,7 @@ from backend.bulk_operations import (
     router as bulk_operations_router,
     BulkCreateRequest,
     bulk_create_profiles,
+    _CREATE_SEM,
 )
 from backend.cloud_sync import cloud_sync_manager, CloudSyncClient, _validate_sync_id, _get_remote_sync_client
 from backend.auth import RATE_LIMITERS, check_pin_rate_limit, get_client_key, require_admin_token
@@ -63,8 +64,9 @@ async def lifespan(app: FastAPI):
     from backend.ai_generator import _shared_client
     await _shared_client.aclose()
 
-# --- Rate limiter for profile creation (max 5 concurrent) ---
-_profile_create_sem = asyncio.Semaphore(5)
+# Rate limiter for profile creation: single create and bulk create share one
+# global semaphore (A06) so combined concurrency never exceeds the limit.
+_profile_create_sem = _CREATE_SEM
 
 _is_production = os.environ.get("GHOSTBROWSER_PROD") == "1"
 app = FastAPI(

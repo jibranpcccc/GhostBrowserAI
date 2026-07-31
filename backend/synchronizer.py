@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
 from backend.auth import require_admin_token
+from backend.error_codes import PUBLIC_CODE_MESSAGES
 from backend.logging_config import logger
 from backend.browser_manager import active_browsers, is_profile_running
 
@@ -185,7 +186,12 @@ async def broadcast_action(req: SyncActionRequest, _auth: None = Depends(require
             return {"profile_id": pid, "status": "success"}
         except Exception as exc:
             logger.error("Sync action '%s' failed for profile %s: %s", req.action_type, pid, type(exc).__name__)
-            return {"profile_id": pid, "status": "error", "code": "ACTION_FAILED", "message": "Action failed"}
+            return {
+                "profile_id": pid,
+                "status": "error",
+                "code": "ACTION_FAILED",
+                "message": PUBLIC_CODE_MESSAGES["ACTION_FAILED"],
+            }
 
     for pid, page in pages:
         tasks.append(run_single(pid, page))

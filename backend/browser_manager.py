@@ -717,6 +717,29 @@ async def _proxy_health_loop(profile_id: str, proxy: dict):
         pass
 
 
+def _cdp_test_mode_enabled() -> bool:
+    """CDP test mode is opt-in via GHOSTBROWSER_CDP_TEST and must NEVER run in
+    production: when GHOSTBROWSER_PROD=1 the flag is ignored (A07)."""
+    if os.getenv("GHOSTBROWSER_PROD") == "1":
+        return False
+    return os.getenv("GHOSTBROWSER_CDP_TEST") in ("1", "true")
+
+
+def _cdp_allow_origins() -> str:
+    """Origin allow-list for the test-mode CDP endpoint (A08).
+
+    Defaults to loopback-only origins. The broad ``*`` is available only by
+    explicit opt-in and logs a warning, since it lets any local webpage connect
+    to the loopback CDP socket.
+    """
+    origins = os.getenv("GHOSTBROWSER_CDP_ALLOW_ORIGINS", "http://localhost,http://127.0.0.1").strip()
+    if origins == "*":
+        from backend.logging_config import logger
+
+        logger.warning("GHOSTBROWSER_CDP_ALLOW_ORIGINS=* is set: any local page can connect to the CDP endpoint.")
+    return f"--remote-allow-origins={origins}"
+
+
 async def build_browser_launch_config(profile: dict, force_headless: bool = False, forced_proxy: dict = None) -> dict:
 
     profile_id = profile["id"]
@@ -935,9 +958,9 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
     except (TypeError, ValueError):
         memory_gb = 8
 
-    if os.getenv("GHOSTBROWSER_CDP_TEST") in ("1", "true"):
+    if _cdp_test_mode_enabled():
         _add_unique_arg(args, "--remote-debugging-port=0")
-        _add_unique_arg(args, "--remote-allow-origins=*")
+        _add_unique_arg(args, _cdp_allow_origins())
 
     canvas_noise = advanced.get("canvas_noise", True)
     webgl_noise = advanced.get("webgl_noise", True)
@@ -3481,7 +3504,7 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
         # the command line (which would always read 0).
         cdp_port = None
         cdp_ws_path = None
-        if os.getenv("GHOSTBROWSER_CDP_TEST") in ("1", "true"):
+        if _cdp_test_mode_enabled():
             cdp_port, cdp_ws_path = await read_devtools_active_port(canonical_profile_path)
 
         active_browsers[profile_id] = {

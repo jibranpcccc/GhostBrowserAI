@@ -25,12 +25,16 @@ from backend.auth import require_admin_token
 from backend.logging_config import logger
 from backend.profile_manager import profile_manager
 from backend.profile_creator import profile_creator
+from backend.error_codes import PUBLIC_CODE_MESSAGES, is_public_code, public_message_for
 from backend.browser_manager import (
     launch_profile,
     close_profile,
     is_profile_running,
     parse_proxy_string,
 )
+
+# Backward-compatible alias for existing tests/callers.
+_PUBLIC_CODE_MESSAGES = PUBLIC_CODE_MESSAGES
 
 router = APIRouter(tags=["bulk-operations"])
 
@@ -48,24 +52,10 @@ def _bulk_error(pid: str, code: str, message: str) -> dict:
 
 # Known public error codes that are safe to surface verbatim. Anything else is
 # collapsed into the per-operation default code + message so internal details
-# never reach API clients.
-_PUBLIC_CODE_MESSAGES = {
-    "PIN_REQUIRED": "PIN required to launch this profile",
-    "PIN_INVALID": "Incorrect PIN",
-    "NOT_FOUND": "Profile not found",
-    "KIMI_UNAVAILABLE": "Strict AI fingerprint service unavailable",
-    "KIMI_TIMEOUT": "AI fingerprint generation timed out",
-    "CHROMIUM_VERSION_MISSING": "Cannot determine installed Chromium version",
-    "CREATE_FAILED": "Profile creation failed",
-    "LAUNCH_FAILED": "Launch failed",
-    "CLOSE_FAILED": "Close failed",
-    "DELETE_FAILED": "Delete failed",
-}
-
-
+# never reach API clients. Catalog lives in ``backend.error_codes`` (A05).
 def _public_message_for(code: str, default: str) -> str:
     """Map a stable public code to its canonical message, collapsing unknowns."""
-    return _PUBLIC_CODE_MESSAGES.get(code, default)
+    return public_message_for(code, default)
 
 
 def _normalize_op_result(pid: str, res, default_code: str, default_message: str) -> dict:

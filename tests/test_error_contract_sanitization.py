@@ -112,7 +112,7 @@ class TestProfileCreatorSanitized(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["status"], "error")
         self.assertEqual(result["code"], "CHROMIUM_VERSION_MISSING")
-        self.assertEqual(result["message"], "Validation failed: cannot determine installed Chromium version")
+        self.assertEqual(result["message"], "Cannot determine installed Chromium version")
         self.assertNotIn("secret version detail 99", str(result))
 
 

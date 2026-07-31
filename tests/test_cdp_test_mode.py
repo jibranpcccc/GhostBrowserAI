@@ -184,5 +184,59 @@ class ProfileCdpEndpointTests(unittest.TestCase):
             self.assertEqual(resp.json()["cdp_ws_url"], "ws://127.0.0.1:43211/devtools/browser/")
 
 
+class CdpTestModeGuardTests(unittest.IsolatedAsyncioTestCase):
+    """A07/A08: CDP test mode must never run in production, and the
+    allow-origins default is loopback-only unless explicitly overridden."""
+
+    def setUp(self):
+        self.orig_prod = os.environ.get("GHOSTBROWSER_PROD")
+        self.orig_cdp = os.environ.get("GHOSTBROWSER_CDP_TEST")
+        self.orig_origins = os.environ.get("GHOSTBROWSER_CDP_ALLOW_ORIGINS")
+        os.environ["GHOSTBROWSER_CDP_TEST"] = "1"
+
+    def tearDown(self):
+        for name, orig in (
+            ("GHOSTBROWSER_PROD", self.orig_prod),
+            ("GHOSTBROWSER_CDP_TEST", self.orig_cdp),
+            ("GHOSTBROWSER_CDP_ALLOW_ORIGINS", self.orig_origins),
+        ):
+            if orig is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = orig
+
+    async def test_cdp_disabled_when_prod(self):
+        from backend.browser_manager import _cdp_test_mode_enabled, build_browser_launch_config
+
+        os.environ["GHOSTBROWSER_PROD"] = "1"
+        self.assertFalse(_cdp_test_mode_enabled())
+
+        config = await build_browser_launch_config(
+            {"id": "abcd1234", "path": ".", "advanced": {}}, force_headless=True
+        )
+        self.assertNotIn("--remote-debugging-port=0", config["args"])
+
+    async def test_cdp_enabled_in_test_env(self):
+        from backend.browser_manager import _cdp_test_mode_enabled
+
+        os.environ.pop("GHOSTBROWSER_PROD", None)
+        self.assertTrue(_cdp_test_mode_enabled())
+
+    async def test_allow_origins_defaults_to_loopback_only(self):
+        from backend.browser_manager import _cdp_allow_origins
+
+        os.environ.pop("GHOSTBROWSER_CDP_ALLOW_ORIGINS", None)
+        arg = _cdp_allow_origins()
+        self.assertNotIn("*", arg)
+        self.assertIn("http://localhost", arg)
+        self.assertIn("http://127.0.0.1", arg)
+
+    async def test_allow_origins_broad_only_by_explicit_override(self):
+        from backend.browser_manager import _cdp_allow_origins
+
+        os.environ["GHOSTBROWSER_CDP_ALLOW_ORIGINS"] = "*"
+        self.assertIn("--remote-allow-origins=*", _cdp_allow_origins())
+
+
 if __name__ == "__main__":
     unittest.main()
