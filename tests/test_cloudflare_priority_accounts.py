@@ -85,6 +85,10 @@ class CloudflarePriorityGeneratorTests(unittest.IsolatedAsyncioTestCase):
     async def test_generation_order_is_priority_then_hermes_then_standard(self):
         priority_result = {"source": "priority"}
         with patch.object(
+            ai_generator, "_call_zen_deepseek_api", new=AsyncMock(return_value=None)
+        ) as zen, patch.object(
+            ai_generator, "_call_mistral_api", new=AsyncMock(return_value=None)
+        ) as mistral, patch.object(
             ai_generator, "_call_direct_cloudflare", new=AsyncMock(return_value=priority_result)
         ) as direct, patch.object(
             ai_generator, "_call_via_racing_proxy", new=AsyncMock()
@@ -94,11 +98,17 @@ class CloudflarePriorityGeneratorTests(unittest.IsolatedAsyncioTestCase):
             result = await ai_generator.generate_fingerprint_ai("Windows", "Chrome", 139)
 
         self.assertEqual(result, priority_result)
+        zen.assert_awaited_once()
+        mistral.assert_awaited_once()
         self.assertEqual(direct.await_count, 1)
         self.assertTrue(direct.await_args.kwargs["priority"])
         racing.assert_not_awaited()
 
         with patch.object(
+            ai_generator, "_call_zen_deepseek_api", new=AsyncMock(return_value=None)
+        ), patch.object(
+            ai_generator, "_call_mistral_api", new=AsyncMock(return_value=None)
+        ), patch.object(
             ai_generator, "_call_direct_cloudflare", new=AsyncMock(side_effect=[None, {"source": "standard"}])
         ) as direct, patch.object(
             ai_generator, "_call_via_racing_proxy", new=AsyncMock(return_value=None)
