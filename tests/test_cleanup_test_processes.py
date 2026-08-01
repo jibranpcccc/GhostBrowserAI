@@ -36,6 +36,11 @@ class GhostBrowserProcDetectionTests(unittest.TestCase):
         args = ["/usr/bin/chromium", "--user-data-dir", ud]
         self.assertTrue(ctp._is_ghostbrowser_proc(args))
 
+    def test_quoted_single_token_value_matches(self):
+        ud = os.path.join(PROJECT_ROOT, "profiles_data", "profile with spaces")
+        args = ["/usr/bin/chromium", f'--user-data-dir="{ud}"']
+        self.assertTrue(ctp._is_ghostbrowser_proc(args))
+
     def test_prefix_sibling_profiles_data_does_not_match(self):
         ud = os.path.join(PROJECT_ROOT, "profiles_data_backup", "p1")
         args = ["/usr/bin/chromium", f"--user-data-dir={ud}"]
