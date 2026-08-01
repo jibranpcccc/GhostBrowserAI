@@ -15,6 +15,7 @@ PUBLIC_CODE_MESSAGES = {
     "KIMI_TIMEOUT": "AI fingerprint generation timed out",
     "CHROMIUM_VERSION_MISSING": "Cannot determine installed Chromium version",
     "CREATE_FAILED": "Profile creation failed",
+    "FINGERPRINT_MISMATCH": "Generated fingerprint failed environment validation",
     "LAUNCH_FAILED": "Launch failed",
     "CLOSE_FAILED": "Close failed",
     "DELETE_FAILED": "Delete failed",

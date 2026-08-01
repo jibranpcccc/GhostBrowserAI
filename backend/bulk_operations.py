@@ -345,8 +345,14 @@ async def bulk_delete_profiles(req: BulkProfileIdsRequest, _auth: None = Depends
                     if profile and profile.get("path"):
                         from backend.browser_manager import find_profile_processes
                         running = bool(find_profile_processes(profile["path"]))
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.error(
+                        "Bulk delete: orphan probe failed for profile %s: %s",
+                        pid, type(exc).__name__,
+                    )
+                    # Fail closed: if we cannot determine whether a browser is
+                    # up, do not delete.
+                    return _bulk_error(pid, "CLOSE_FAILED", "Close failed before delete; aborting")
             if running:
                 try:
                     close_res = await close_profile(pid)

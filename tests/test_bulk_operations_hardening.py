@@ -249,6 +249,9 @@ class TestBulkDeleteFailClosed(unittest.IsolatedAsyncioTestCase):
 
     async def test_delete_error_returns_stable_code(self):
         class BoomManager:
+            def get_profile(self, pid):
+                return {"id": pid, "path": "C:/profiles/boom"}
+
             def delete_profile(self, pid):
                 raise RuntimeError("secret internal delete detail")
 
@@ -344,6 +347,42 @@ class TestBulkDeleteFailClosed(unittest.IsolatedAsyncioTestCase):
         item = result["results"][0]
         self.assertEqual(item["status"], "success")
         self.assertEqual(fake_mgr.deleted, ["abc"])
+
+    async def test_delete_aborts_when_orphan_probe_raises(self):
+        """Fail-closed: if the orphan check itself blows up, the profile must
+        not be deleted."""
+        fake_mgr = FakeProfileManager()
+        orig_mgr = bulk_operations.profile_manager
+        orig_running = bulk_operations.is_profile_running
+
+        bulk_operations.is_profile_running = lambda pid: False
+
+        class StubManager:
+            def get_profile(self, pid):
+                return {"id": pid, "path": "C:/profiles/abc"}
+
+            def delete_profile(self, pid):
+                fake_mgr.deleted.append(pid)
+                return True
+
+        bulk_operations.profile_manager = StubManager()
+        try:
+            with mock.patch(
+                "backend.browser_manager.find_profile_processes",
+                side_effect=RuntimeError("probe exploded"),
+            ):
+                result = await bulk_operations.bulk_delete_profiles(
+                    bulk_operations.BulkProfileIdsRequest(profile_ids=["abc"])
+                )
+        finally:
+            bulk_operations.profile_manager = orig_mgr
+            bulk_operations.is_profile_running = orig_running
+
+        item = result["results"][0]
+        self.assertEqual(item["status"], "error")
+        self.assertEqual(item["code"], "CLOSE_FAILED")
+        self.assertEqual(fake_mgr.deleted, [], "Probe failure must block deletion")
+        self.assertNotIn("probe exploded", item["message"])
 
 
 class TestNormalizeOpResult(unittest.TestCase):

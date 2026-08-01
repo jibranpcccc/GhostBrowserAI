@@ -528,12 +528,18 @@ def find_profile_processes(profile_path: str) -> list:
         try:
             cmdline = proc.info.get('cmdline')
             if cmdline:
-                for arg in cmdline:
-                    if arg.lower().startswith('--user-data-dir='):
-                        val = arg.split('=', 1)[1]
-                        if os.path.realpath(val).lower() == normalized_path:
-                            procs.append(proc)
-                            break
+                ud_dir = None
+                for i, arg in enumerate(cmdline):
+                    lowered = arg.lower()
+                    if lowered == '--user-data-dir' and i + 1 < len(cmdline):
+                        ud_dir = cmdline[i + 1]
+                        break
+                    if lowered.startswith('--user-data-dir='):
+                        ud_dir = arg.split('=', 1)[1]
+                        break
+                if ud_dir:
+                    if os.path.realpath(ud_dir).lower() == normalized_path:
+                        procs.append(proc)
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             pass
     return procs

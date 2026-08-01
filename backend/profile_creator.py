@@ -247,12 +247,9 @@ async def create_zero_leak_profile(
 
         fp_os = fp.get("os")
         if fp_os not in ("Windows", "Mac", "Linux"):
-            return {"status": "error", "message": f"Validation failed: Generated fingerprint OS is unsupported: '{fp_os}'"}
+            return {"status": "error", "code": "FINGERPRINT_MISMATCH", "message": PUBLIC_CODE_MESSAGES["FINGERPRINT_MISMATCH"]}
         if fp_os != host_os:
-            return {
-                "status": "error",
-                "message": f"Validation failed: Generated fingerprint OS '{fp_os}' does not match host OS '{host_os}'",
-            }
+            return {"status": "error", "code": "FINGERPRINT_MISMATCH", "message": PUBLIC_CODE_MESSAGES["FINGERPRINT_MISMATCH"]}
 
         if fp.get("_is_fallback"):
             print("[Orchestrator] STRICT MODE: Kimi AI unavailable. All Cloudflare accounts exhausted.")

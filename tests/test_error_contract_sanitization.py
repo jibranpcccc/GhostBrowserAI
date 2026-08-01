@@ -115,6 +115,24 @@ class TestProfileCreatorSanitized(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["message"], "Cannot determine installed Chromium version")
         self.assertNotIn("secret version detail 99", str(result))
 
+    async def test_ai_os_mismatch_uses_catalog_code_not_raw_os(self):
+        from backend import profile_creator
+
+        async def bad_fp(*args, **kwargs):
+            return {"os": "FreeBSD-raw-value", "screen_resolution": "1920x1080",
+                    "cpu_cores": 8, "memory_gb": 16, "timezone": "UTC",
+                    "locale": "en-US", "languages": ["en"], "userAgent": "ua",
+                    "webgl_vendor": "v", "webgl_renderer": "r", "canvas": "c"}
+
+        with patch.object(profile_creator, "get_installed_chromium_major_version", return_value=140), \
+             patch.object(profile_creator, "generate_fingerprint_ai", bad_fp):
+            result = await profile_creator.create_zero_leak_profile(name="FpSanitized")
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["code"], "FINGERPRINT_MISMATCH")
+        self.assertEqual(result["message"], "Generated fingerprint failed environment validation")
+        self.assertNotIn("FreeBSD-raw-value", str(result))
+
 
 class TestCloseProfileSanitized(unittest.IsolatedAsyncioTestCase):
     async def test_close_failure_drops_exception_detail(self):

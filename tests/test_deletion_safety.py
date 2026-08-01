@@ -84,6 +84,41 @@ async def test_delete_running_profile(temporary_profile_manager):
     assert profile_manager.get_profile(pid) is not None
     print(" -> PASS: Blocked deletion of a mocked running profile.")
 
+
+@pytest.mark.parametrize("separated", [False, True])
+def test_find_profile_processes_matches_both_flag_forms(tmp_path, separated):
+    from backend.browser_manager import find_profile_processes
+
+    profile_path = os.path.join(tmp_path, "p1")
+    os.makedirs(profile_path, exist_ok=True)
+
+    if separated:
+        cmdline = ["chrome.exe", "--user-data-dir", profile_path]
+    else:
+        cmdline = ["chrome.exe", f"--user-data-dir={profile_path}"]
+
+    class FakeProc:
+        info = {"pid": 1, "name": "chrome.exe", "cmdline": cmdline}
+
+    with patch("psutil.process_iter", return_value=[FakeProc()]):
+        procs = find_profile_processes(profile_path)
+    assert len(procs) == 1
+
+
+def test_find_profile_processes_ignores_other_dirs(tmp_path):
+    from backend.browser_manager import find_profile_processes
+
+    profile_path = os.path.join(tmp_path, "p1")
+    os.makedirs(profile_path, exist_ok=True)
+
+    class FakeProc:
+        info = {"pid": 2, "name": "chrome.exe",
+                "cmdline": ["chrome.exe", f"--user-data-dir={os.path.join(tmp_path, 'p2')}"]}
+
+    with patch("psutil.process_iter", return_value=[FakeProc()]):
+        procs = find_profile_processes(profile_path)
+    assert procs == []
+
 async def main():
     try:
         await test_deletion_traversal()

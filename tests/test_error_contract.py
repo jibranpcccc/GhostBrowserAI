@@ -168,3 +168,17 @@ class ProfileCreateErrorContractTests(TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(resp.json()["detail"], "Profile creation failed")
         self.assertNotIn("secret clone detail 888", resp.text)
+
+    def test_clone_kimi_unavailable_maps_to_503(self):
+        from backend.profile_manager import profile_manager
+        self._set_create({"status": "error", "code": "KIMI_UNAVAILABLE", "message": "raw noise"})
+        orig_get = profile_manager.get_profile
+        profile_manager.get_profile = lambda pid: {"id": "abc", "name": "Base", "proxy": None, "advanced": {}}
+        try:
+            with TestClient(self._app) as client:
+                resp = client.post("/api/profiles/abc/clone", headers=self._headers(client))
+        finally:
+            profile_manager.get_profile = orig_get
+        self.assertEqual(resp.status_code, 503)
+        self.assertEqual(resp.json()["detail"], "Strict AI fingerprint service unavailable")
+        self.assertNotIn("raw noise", resp.text)
