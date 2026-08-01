@@ -278,10 +278,18 @@ async def create_profile(data: CreateProfileModel, _auth: None = Depends(require
         result = await profile_creator.create_zero_leak_profile(name=data.name, proxy=proxy_dict, advanced_ui=advanced_dict, pin=data.pin)
 
     if result["status"] == "error":
-        code = result.get("code", "CREATION_FAILED")
+        code = result.get("code")
+        if code in PUBLIC_CODE_MESSAGES:
+            detail = PUBLIC_CODE_MESSAGES[code]
+        else:
+            # Controlled client-safe validation text (static strings raised by
+            # profile_creator._validate_inputs) is preserved; everything else
+            # collapses to the catalog default so internals never leak.
+            message = result.get("message", "")
+            detail = message if message.startswith("Validation failed:") else "Profile creation failed"
         raise HTTPException(
             status_code=503 if code == "KIMI_UNAVAILABLE" else 400,
-            detail=public_message_for(code, "Profile creation failed"),
+            detail=detail,
         )
 
     return _redact_sensitive_api_data(result["profile"])
@@ -365,8 +373,13 @@ async def clone_profile(profile_id: str, _auth: None = Depends(require_admin_tok
         result = await profile_creator.create_zero_leak_profile(name=name, proxy=proxy, advanced_ui=advanced)
 
     if result["status"] == "error":
-        code = result.get("code", "CREATE_FAILED")
-        raise HTTPException(status_code=400, detail=public_message_for(code, PUBLIC_CODE_MESSAGES["CREATE_FAILED"]))
+        code = result.get("code")
+        if code in PUBLIC_CODE_MESSAGES:
+            detail = PUBLIC_CODE_MESSAGES[code]
+        else:
+            message = result.get("message", "")
+            detail = message if message.startswith("Validation failed:") else PUBLIC_CODE_MESSAGES["CREATE_FAILED"]
+        raise HTTPException(status_code=400, detail=detail)
 
     new_profile = result["profile"]
 
@@ -740,15 +753,21 @@ async def launch_profile_api(profile_id: str, req: LaunchProfileRequest = None, 
 
 @app.get("/api/profiles/{profile_id}/cdp")
 async def get_profile_cdp(profile_id: str, _auth: None = Depends(require_admin_token)):
-    """Return the CDP endpoint for a running profile (requires GHOSTBROWSER_CDP_TEST=1)."""
-    from backend.browser_manager import active_browsers
+    """Return the CDP endpoint for a running profile (requires GHOSTBROWSER_CDP_TEST=1).
+
+    Fails closed: no synthetic WS path is ever fabricated, and the endpoint is
+    refused unless CDP test mode is enabled right now.
+    """
+    from backend.browser_manager import active_browsers, _cdp_test_mode_enabled
+    if not _cdp_test_mode_enabled():
+        raise HTTPException(status_code=403, detail="CDP test mode is disabled")
     browser_data = active_browsers.get(profile_id)
     if not browser_data:
         raise HTTPException(status_code=400, detail="Profile not running")
     cdp_port = browser_data.get("cdp_port")
-    if not cdp_port:
-        raise HTTPException(status_code=400, detail="CDP not enabled. Set GHOSTBROWSER_CDP_TEST=1 before launching.")
-    cdp_ws_path = browser_data.get("cdp_ws_path") or "/devtools/browser/"
+    cdp_ws_path = browser_data.get("cdp_ws_path")
+    if not cdp_port or not cdp_ws_path:
+        raise HTTPException(status_code=400, detail="CDP endpoint unavailable for this profile")
     return {
         "status": "success",
         "profile_id": profile_id,

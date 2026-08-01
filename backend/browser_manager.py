@@ -492,7 +492,7 @@ async def read_devtools_active_port(profile_path: str, timeout: float = 10.0,
                 if len(lines) >= 2:
                     port = int(lines[0])
                     ws_path = lines[1]
-                    if port > 0 and ws_path.startswith("/devtools/browser/"):
+                    if 0 < port <= 65535 and ws_path.startswith("/devtools/browser/"):
                         return port, ws_path
         except (ValueError, OSError):
             pass
@@ -3620,7 +3620,7 @@ async def launch_profile(profile_id: str, force_headless: bool = False, pin: str
         from backend.logging_config import logger
         logger.exception("launch_profile unhandled failure for %s", profile_id)
         _cleanup_orphan_processes(profile_id)
-        return {"status": "error", "message": PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"]}
+        return {"status": "error", "message": PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"], "code": "LAUNCH_FAILED"}
 
     try:
         profile = profile_manager.get_profile(profile_id)
@@ -3676,7 +3676,7 @@ async def safe_launch_profile(profile_id: str, force_headless: bool = False, pin
         from backend.logging_config import logger
         logger.exception("safe_launch_profile unhandled failure for %s", profile_id)
         _cleanup_orphan_processes(profile_id)
-        return {"status": "error", "message": PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"]}
+        return {"status": "error", "message": PUBLIC_CODE_MESSAGES["LAUNCH_FAILED"], "code": "LAUNCH_FAILED"}
 
 def _maybe_clear_ephemeral_profile_data(profile_id: str):
     profile = profile_manager.get_profile(profile_id)

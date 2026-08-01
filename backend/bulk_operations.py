@@ -19,7 +19,7 @@ from typing import List, Optional
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from backend.auth import require_admin_token
 from backend.logging_config import logger
@@ -136,7 +136,7 @@ def bulk_untag_profiles(profile_ids: List[str], tags: List[str]):
 
 class BulkCreateRequest(BaseModel):
     base_name: str
-    count: int = 5
+    count: int = Field(5, ge=1, le=100)
     proxy: Optional[dict] = None
     proxy_string: Optional[str] = None
     pin: Optional[str] = None
@@ -221,8 +221,19 @@ async def bulk_create_profiles(req: BulkCreateRequest, _auth: None = Depends(req
                     skip_warming=True,
                 )
                 if result.get("status") != "success":
-                    code = result.get("code", "CREATE_FAILED")
+                    code = result.get("code")
                     if code not in _PUBLIC_CODE_MESSAGES:
+                        message = result.get("message", "")
+                        if message.startswith("Validation failed:"):
+                            # Controlled client-safe validation text (static
+                            # strings from _validate_inputs) is preserved.
+                            return {
+                                "index": i,
+                                "name": name,
+                                "status": "error",
+                                "code": "VALIDATION_FAILED",
+                                "message": message,
+                            }
                         code = "CREATE_FAILED"
                     return {
                         "index": i,
@@ -325,7 +336,18 @@ async def bulk_delete_profiles(req: BulkProfileIdsRequest, _auth: None = Depends
         async with _DELETE_SEM:
             # Close if running. Fail-closed: never delete a profile whose
             # browser may still be up (locked files / orphaned Chromium).
-            if is_profile_running(pid):
+            # is_profile_running only knows active_browsers, so also check the
+            # process table for an orphaned browser on disk.
+            running = is_profile_running(pid)
+            if not running:
+                try:
+                    profile = profile_manager.get_profile(pid)
+                    if profile and profile.get("path"):
+                        from backend.browser_manager import find_profile_processes
+                        running = bool(find_profile_processes(profile["path"]))
+                except Exception:
+                    pass
+            if running:
                 try:
                     close_res = await close_profile(pid)
                 except Exception as exc:

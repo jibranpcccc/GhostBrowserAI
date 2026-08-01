@@ -8,6 +8,7 @@ import asyncio
 import os
 import sys
 import unittest
+from unittest import mock
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
@@ -25,12 +26,6 @@ class FakeProfileManager:
     def delete_profile(self, pid):
         self.deleted.append(pid)
         return True
-
-
-class FakeLaunchResult:
-    def __init__(self, status="success", message="ok"):
-        self.status = status
-        self.message = message
 
 
 class TestBulkSemaphores(unittest.TestCase):
@@ -274,6 +269,82 @@ class TestBulkDeleteFailClosed(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(item["code"], "DELETE_FAILED")
         self.assertNotIn("secret internal delete detail", item["message"])
 
+    async def test_delete_aborts_when_orphaned_browser_process_found(self):
+        """Fail-closed: a profile not in active_browsers but with a live
+        Chromium process on disk must have close attempted; a failed close
+        must block deletion."""
+        fake_mgr = FakeProfileManager()
+        orig_mgr = bulk_operations.profile_manager
+        orig_close = bulk_operations.close_profile
+        orig_running = bulk_operations.is_profile_running
+
+        async def close_fails(pid):
+            return {"status": "error", "message": "Close failed"}
+
+        bulk_operations.close_profile = close_fails
+        bulk_operations.is_profile_running = lambda pid: False
+
+        class StubManager:
+            def get_profile(self, pid):
+                return {"id": pid, "path": "C:/profiles/abc"}
+
+            def delete_profile(self, pid):
+                fake_mgr.deleted.append(pid)
+                return True
+
+        bulk_operations.profile_manager = StubManager()
+        try:
+            with mock.patch(
+                "backend.browser_manager.find_profile_processes",
+                return_value=[{"pid": 999}],
+            ):
+                result = await bulk_operations.bulk_delete_profiles(
+                    bulk_operations.BulkProfileIdsRequest(profile_ids=["abc"])
+                )
+        finally:
+            bulk_operations.profile_manager = orig_mgr
+            bulk_operations.close_profile = orig_close
+            bulk_operations.is_profile_running = orig_running
+
+        item = result["results"][0]
+        self.assertEqual(item["status"], "error")
+        self.assertEqual(item["code"], "CLOSE_FAILED")
+        self.assertEqual(fake_mgr.deleted, [], "Orphaned browser must block deletion")
+
+    async def test_delete_succeeds_without_orphaned_process(self):
+        """No live process anywhere: delete proceeds even when the profile is
+        not in active_browsers."""
+        fake_mgr = FakeProfileManager()
+        orig_mgr = bulk_operations.profile_manager
+        orig_running = bulk_operations.is_profile_running
+
+        bulk_operations.is_profile_running = lambda pid: False
+
+        class StubManager:
+            def get_profile(self, pid):
+                return {"id": pid, "path": "C:/profiles/abc"}
+
+            def delete_profile(self, pid):
+                fake_mgr.deleted.append(pid)
+                return True
+
+        bulk_operations.profile_manager = StubManager()
+        try:
+            with mock.patch(
+                "backend.browser_manager.find_profile_processes",
+                return_value=[],
+            ):
+                result = await bulk_operations.bulk_delete_profiles(
+                    bulk_operations.BulkProfileIdsRequest(profile_ids=["abc"])
+                )
+        finally:
+            bulk_operations.profile_manager = orig_mgr
+            bulk_operations.is_profile_running = orig_running
+
+        item = result["results"][0]
+        self.assertEqual(item["status"], "success")
+        self.assertEqual(fake_mgr.deleted, ["abc"])
+
 
 class TestNormalizeOpResult(unittest.TestCase):
     def test_success_passthrough(self):
@@ -485,6 +556,44 @@ class TestBulkCreateApiContract(unittest.TestCase):
         self.assertEqual(item["code"], "CREATE_FAILED")
         self.assertNotIn("secret internal detail ABC", resp.text)
 
+    def test_bulk_create_rejects_zero_count(self):
+        from fastapi.testclient import TestClient
+        from backend.main import app
+
+        with TestClient(app) as client:
+            csrf = client.get("/api/system/csrf-token").json()["token"]
+            resp = client.post(
+                "/api/profiles/bulk/create",
+                json={"base_name": "bulk", "count": 0},
+                headers={"X-Admin-Token": "bulk-contract-token", "X-XSRF-Token": csrf},
+            )
+        self.assertEqual(resp.status_code, 422)
+
+    def test_bulk_create_validation_message_preserved(self):
+        from fastapi.testclient import TestClient
+        from backend.main import app
+
+        async def validate_fail(name, **kwargs):
+            return {"status": "error", "message": "Validation failed: Profile name already exists"}
+
+        orig = bulk_operations.profile_creator.create_zero_leak_profile
+        bulk_operations.profile_creator.create_zero_leak_profile = validate_fail
+        try:
+            with TestClient(app) as client:
+                csrf = client.get("/api/system/csrf-token").json()["token"]
+                resp = client.post(
+                    "/api/profiles/bulk/create",
+                    json={"base_name": "bulk", "count": 1},
+                    headers={"X-Admin-Token": "bulk-contract-token", "X-XSRF-Token": csrf},
+                )
+        finally:
+            bulk_operations.profile_creator.create_zero_leak_profile = orig
+
+        self.assertEqual(resp.status_code, 200)
+        item = resp.json()["results"][0]
+        self.assertEqual(item["code"], "VALIDATION_FAILED")
+        self.assertEqual(item["message"], "Validation failed: Profile name already exists")
+
     def test_legacy_and_new_routes_share_sanitized_contract(self):
         async def fail_create(name, **kwargs):
             return {"status": "error", "code": "KIMI_UNAVAILABLE", "message": "strictly unavailable"}
@@ -568,7 +677,11 @@ class TestBulkCreateIntegrationN10(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(kwargs["proxy"]["host"], "127.0.0.1")
             self.assertEqual(kwargs["proxy"]["port"], 1234)
             self.assertEqual(kwargs["proxy"]["scheme"], "socks5")
-            self.assertNotIn("password", str(kwargs["proxy"]) if isinstance(kwargs["proxy"], str) else "")
+            # parse_proxy_string intentionally keeps credentials in the runtime
+            # dict (needed for proxy auth at launch); they must never appear in
+            # the HTTP response, which only carries profile_id (verified in
+            # TestBulkCreateApiContract.test_legacy_alias_does_not_leak...).
+            self.assertEqual(kwargs["proxy"]["password"], "pass")
             self.assertEqual(kwargs["advanced_ui"]["timezone"], "Europe/London")
             self.assertEqual(kwargs["advanced_ui"]["locale"], "en-GB")
             self.assertEqual(kwargs["advanced_ui"]["os"], "Mac")

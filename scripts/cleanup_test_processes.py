@@ -38,9 +38,18 @@ def _is_ghostbrowser_proc(cmdline):
     """
     if not cmdline:
         return False
-    lowered = " ".join(cmdline).lower()
-    if "dist" in lowered and "ghostbrowser" in lowered and "chrome" in lowered:
-        return True
+    # Bundled Chromium only matches when the EXECUTABLE itself lives under
+    # <PROJECT_ROOT>/dist/GhostBrowser/ (path-boundary checked). Substring
+    # matching over the whole command line is forbidden: a real Chrome process
+    # opened on a URL containing e.g. dist/ghostbrowser/chrome would match and
+    # get taskkill'd.
+    try:
+        exe_norm = os.path.normcase(os.path.realpath(cmdline[0]))
+        dist_norm = os.path.normcase(os.path.realpath(os.path.join(PROJECT_ROOT, "dist", "GhostBrowser")))
+        if exe_norm == dist_norm or exe_norm.startswith(dist_norm + os.sep):
+            return True
+    except Exception:
+        pass
     ud = _user_data_dir_from(cmdline)
     if ud:
         ud_norm = os.path.normcase(os.path.realpath(ud))

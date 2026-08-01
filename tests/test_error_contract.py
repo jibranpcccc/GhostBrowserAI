@@ -89,3 +89,82 @@ def test_environment_isolation(sanitize_env):
 
     # GHOSTBROWSER_ADMIN_TOKEN is sanitized for this test only.
     assert os.environ.get("GHOSTBROWSER_ADMIN_TOKEN") == sanitize_env
+
+
+class ProfileCreateErrorContractTests(TestCase):
+    """POST /api/profiles and /clone must collapse internal error text into
+    stable catalog messages, preserving only controlled Validation failed:
+    text, and map KIMI_UNAVAILABLE to 503."""
+
+    def setUp(self):
+        self._orig_token = os.environ.get("GHOSTBROWSER_ADMIN_TOKEN")
+        os.environ["GHOSTBROWSER_ADMIN_TOKEN"] = "test-error-token"
+        from backend.profile_creator import profile_creator
+        self._orig_create = profile_creator.create_zero_leak_profile
+        self._orig_sem = None
+        from backend import main
+        self._app = main.app
+
+    def tearDown(self):
+        from backend.profile_creator import profile_creator
+        profile_creator.create_zero_leak_profile = self._orig_create
+        if self._orig_token is None:
+            os.environ.pop("GHOSTBROWSER_ADMIN_TOKEN", None)
+        else:
+            os.environ["GHOSTBROWSER_ADMIN_TOKEN"] = self._orig_token
+
+    def _set_create(self, result):
+        from backend.profile_creator import profile_creator
+
+        async def fake_create(name, **kwargs):
+            return result
+
+        profile_creator.create_zero_leak_profile = fake_create
+
+    def _headers(self, client):
+        hdrs = _with_csrf(client)
+        hdrs["X-Admin-Token"] = "test-error-token"
+        return hdrs
+
+    def test_unknown_internal_code_collapses_to_catalog_message(self):
+        self._set_create(
+            {"status": "error", "code": "SECRET_INTERNAL", "message": "secret internal create detail 777"}
+        )
+        with TestClient(self._app) as client:
+            resp = client.post("/api/profiles", json={"name": "x"}, headers=self._headers(client))
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json()["detail"], "Profile creation failed")
+        self.assertNotIn("secret internal create detail 777", resp.text)
+
+    def test_validation_failed_text_is_preserved(self):
+        self._set_create(
+            {"status": "error", "code": "CUSTOM", "message": "Validation failed: Profile name already exists"}
+        )
+        with TestClient(self._app) as client:
+            resp = client.post("/api/profiles", json={"name": "x"}, headers=self._headers(client))
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json()["detail"], "Validation failed: Profile name already exists")
+
+    def test_kimi_unavailable_maps_to_503_with_catalog_message(self):
+        self._set_create({"status": "error", "code": "KIMI_UNAVAILABLE", "message": "raw noise"})
+        with TestClient(self._app) as client:
+            resp = client.post("/api/profiles", json={"name": "x"}, headers=self._headers(client))
+        self.assertEqual(resp.status_code, 503)
+        self.assertEqual(resp.json()["detail"], "Strict AI fingerprint service unavailable")
+        self.assertNotIn("raw noise", resp.text)
+
+    def test_clone_unknown_internal_code_collapses_to_catalog_message(self):
+        from backend.profile_manager import profile_manager
+        self._set_create(
+            {"status": "error", "code": "SECRET_INTERNAL", "message": "secret clone detail 888"}
+        )
+        orig_get = profile_manager.get_profile
+        profile_manager.get_profile = lambda pid: {"id": "abc", "name": "Base", "proxy": None, "advanced": {}}
+        try:
+            with TestClient(self._app) as client:
+                resp = client.post("/api/profiles/abc/clone", headers=self._headers(client))
+        finally:
+            profile_manager.get_profile = orig_get
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json()["detail"], "Profile creation failed")
+        self.assertNotIn("secret clone detail 888", resp.text)

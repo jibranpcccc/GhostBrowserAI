@@ -90,7 +90,9 @@ class ReadDevToolsActivePortTests(unittest.IsolatedAsyncioTestCase):
 class ProfileCdpEndpointTests(unittest.TestCase):
     def setUp(self):
         self.orig_token = os.environ.get("GHOSTBROWSER_ADMIN_TOKEN")
+        self.orig_cdp = os.environ.get("GHOSTBROWSER_CDP_TEST")
         os.environ["GHOSTBROWSER_ADMIN_TOKEN"] = ADMIN_TOKEN
+        os.environ["GHOSTBROWSER_CDP_TEST"] = "1"
         self._patchers = [
             mock.patch("backend.system_monitor.system_monitor.start", new=mock.AsyncMock()),
             mock.patch("backend.system_monitor.system_monitor.stop", new=mock.Mock()),
@@ -108,6 +110,10 @@ class ProfileCdpEndpointTests(unittest.TestCase):
             os.environ.pop("GHOSTBROWSER_ADMIN_TOKEN", None)
         else:
             os.environ["GHOSTBROWSER_ADMIN_TOKEN"] = self.orig_token
+        if self.orig_cdp is None:
+            os.environ.pop("GHOSTBROWSER_CDP_TEST", None)
+        else:
+            os.environ["GHOSTBROWSER_CDP_TEST"] = self.orig_cdp
 
     def _get_cdp(self, client, token=None, profile_id=PROFILE_ID):
         headers = {}
@@ -144,17 +150,19 @@ class ProfileCdpEndpointTests(unittest.TestCase):
             self.assertEqual(resp.status_code, 400)
             self.assertEqual(resp.json()["detail"], "Profile not running")
 
-    def test_cdp_disabled_returns_400(self):
+    def test_cdp_disabled_returns_403(self):
         from backend.main import app
 
-        with TestClient(app) as client, mock.patch.dict(
-            "backend.browser_manager.active_browsers",
-            {PROFILE_ID: self._running_browser(cdp_port=None)},
-            clear=True,
-        ):
-            resp = self._get_cdp(client, token=ADMIN_TOKEN)
-            self.assertEqual(resp.status_code, 400)
-            self.assertIn("CDP not enabled", resp.json()["detail"])
+        with mock.patch.dict(os.environ, {}, clear=False) as env:
+            env.pop("GHOSTBROWSER_CDP_TEST", None)
+            with TestClient(app) as client, mock.patch.dict(
+                "backend.browser_manager.active_browsers",
+                {PROFILE_ID: self._running_browser(cdp_port=43210)},
+                clear=True,
+            ):
+                resp = self._get_cdp(client, token=ADMIN_TOKEN)
+                self.assertEqual(resp.status_code, 403)
+                self.assertIn("CDP test mode is disabled", resp.json()["detail"])
 
     def test_returns_cdp_urls_with_stored_ws_path(self):
         from backend.main import app
@@ -171,7 +179,7 @@ class ProfileCdpEndpointTests(unittest.TestCase):
             self.assertEqual(body["cdp_url"], "http://127.0.0.1:43210")
             self.assertEqual(body["cdp_ws_url"], "ws://127.0.0.1:43210/devtools/browser/uuid123")
 
-    def test_defaults_ws_path_when_missing(self):
+    def test_missing_ws_path_fails_closed(self):
         from backend.main import app
 
         with TestClient(app) as client, mock.patch.dict(
@@ -180,8 +188,8 @@ class ProfileCdpEndpointTests(unittest.TestCase):
             clear=True,
         ):
             resp = self._get_cdp(client, token=ADMIN_TOKEN)
-            self.assertEqual(resp.status_code, 200)
-            self.assertEqual(resp.json()["cdp_ws_url"], "ws://127.0.0.1:43211/devtools/browser/")
+            self.assertEqual(resp.status_code, 400)
+            self.assertEqual(resp.json()["detail"], "CDP endpoint unavailable for this profile")
 
 
 class CdpTestModeGuardTests(unittest.IsolatedAsyncioTestCase):

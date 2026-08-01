@@ -55,6 +55,24 @@ class GhostBrowserProcDetectionTests(unittest.TestCase):
         args = ["C:/Program Files/Google/Chrome/Application/chrome.exe", "--user-data-dir=C:/Users/me/AppData/Local/Google/Chrome"]
         self.assertFalse(ctp._is_ghostbrowser_proc(args))
 
+    def test_real_chrome_with_dist_substrings_does_not_match(self):
+        args = [
+            "C:/Program Files/Google/Chrome/Application/chrome.exe",
+            "https://example.com/dist/ghostbrowser/chrome/index.html",
+            "--user-data-dir=C:/Users/me/AppData/Local/Google/Chrome/Default",
+        ]
+        self.assertFalse(ctp._is_ghostbrowser_proc(args))
+
+    def test_real_chrome_with_project_dir_in_arguments_does_not_match(self):
+        dist_abs = os.path.join(PROJECT_ROOT, "dist", "GhostBrowser")
+        ud_abs = os.path.join(PROJECT_ROOT, "profiles_data")
+        args = [
+            "C:/Program Files/Google/Chrome/Application/chrome.exe",
+            f"https://example.com/open?ref={dist_abs}&profile={ud_abs}/p1",
+            "--user-data-dir=C:/Users/me/AppData/Local/Google/Chrome/Default",
+        ]
+        self.assertFalse(ctp._is_ghostbrowser_proc(args))
+
     def test_empty_cmdline_does_not_match(self):
         self.assertFalse(ctp._is_ghostbrowser_proc([]))
         self.assertFalse(ctp._is_ghostbrowser_proc(None))
