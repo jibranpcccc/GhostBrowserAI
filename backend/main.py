@@ -379,10 +379,7 @@ async def clone_profile(profile_id: str, _auth: None = Depends(require_admin_tok
         else:
             message = result.get("message", "")
             detail = message if message.startswith("Validation failed:") else PUBLIC_CODE_MESSAGES["CREATE_FAILED"]
-        raise HTTPException(
-            status_code=503 if code == "KIMI_UNAVAILABLE" else 400,
-            detail=detail,
-        )
+        raise HTTPException(status_code=400, detail=detail)
 
     new_profile = result["profile"]
 
