@@ -30,5 +30,10 @@ release-manifest.json
 graphify-out/
 .playwright-mcp/
 inspection-dashboard.png
+# QA / browser-automation artifacts (never committed to the release tree)
+manual_tests/
+index.html
+portfolio/
+qa-hero-desktop.png
 test*.txt
 test_ps1.ps1

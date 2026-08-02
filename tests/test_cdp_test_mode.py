@@ -228,7 +228,17 @@ class CdpTestModeGuardTests(unittest.IsolatedAsyncioTestCase):
         from backend.browser_manager import _cdp_test_mode_enabled
 
         os.environ.pop("GHOSTBROWSER_PROD", None)
+        os.environ["GHOSTBROWSER_TEST_ENV"] = "1"
         self.assertTrue(_cdp_test_mode_enabled())
+
+    async def test_cdp_disabled_without_test_env(self):
+        # A deployed instance that only has the flag (no explicit test/dev
+        # context, no prod flag) is still closed: fail-closed by default.
+        from backend.browser_manager import _cdp_test_mode_enabled
+
+        os.environ.pop("GHOSTBROWSER_PROD", None)
+        os.environ.pop("GHOSTBROWSER_TEST_ENV", None)
+        self.assertFalse(_cdp_test_mode_enabled())
 
     async def test_allow_origins_defaults_to_loopback_only(self):
         from backend.browser_manager import _cdp_allow_origins

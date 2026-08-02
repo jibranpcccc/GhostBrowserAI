@@ -481,6 +481,32 @@ def _get_zen_api_keys() -> list[str]:
     return [k.strip() for k in keys if k.strip()]
 
 
+def _safe_int_env(name: str, default: int, minimum: int) -> int:
+    """Parse a positive integer env var, falling back to ``default`` and never
+    returning a value below ``minimum`` (invalid/zero config must not raise:
+    the caller falls through to the next provider)."""
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, value)
+
+
+def _safe_float_env(name: str, default: float, minimum: float) -> float:
+    """Parse a positive float env var with the same fail-safe contract as
+    ``_safe_int_env``. NaN/inf values are treated as invalid (they parse but
+    are not usable timeout/delay values)."""
+    import math
+
+    try:
+        value = float(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    if not math.isfinite(value):
+        return default
+    return max(minimum, value)
+
+
 async def _call_zen_deepseek_api(target_os: str, target_browser: str,
                                  chrome_major_version: int) -> Optional[dict]:
     """Call DeepSeek through OpenCode Zen with all configured keys in parallel.
@@ -494,9 +520,9 @@ async def _call_zen_deepseek_api(target_os: str, target_browser: str,
         return None
 
     model_name = os.environ.get("ZEN_MODEL", ZEN_MODEL)
-    race_size = int(os.environ.get("ZEN_RACE_SIZE", "3"))
-    timeout_seconds = float(os.environ.get("ZEN_REQUEST_TIMEOUT", "60.0"))
-    inter_batch_delay = float(os.environ.get("ZEN_INTER_BATCH_DELAY", "1.0"))
+    race_size = _safe_int_env("ZEN_RACE_SIZE", 3, minimum=1)
+    timeout_seconds = _safe_float_env("ZEN_REQUEST_TIMEOUT", 60.0, minimum=1.0)
+    inter_batch_delay = _safe_float_env("ZEN_INTER_BATCH_DELAY", 1.0, minimum=0.0)
 
     user_prompt = (
         f"Generate a complete realistic fingerprint for a {target_os} machine "

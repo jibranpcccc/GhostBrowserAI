@@ -725,19 +725,32 @@ async def _proxy_health_loop(profile_id: str, proxy: dict):
 
 
 def _cdp_test_mode_enabled() -> bool:
-    """CDP test mode is opt-in via GHOSTBROWSER_CDP_TEST and must NEVER run in
-    production: when GHOSTBROWSER_PROD=1 the flag is ignored (A07)."""
+    """CDP introspection is closed by default and must NEVER run in production:
+    - GHOSTBROWSER_PROD=1 always denies (the test flag is ignored) (A07).
+    - The endpoint requires BOTH an explicit GHOSTBROWSER_CDP_TEST=1 flag AND a
+      test/dev context (GHOSTBROWSER_TEST_ENV=1). A deployed instance that merely
+      has CDP_TEST set is still closed."""
     if os.getenv("GHOSTBROWSER_PROD") == "1":
         return False
     enabled = os.getenv("GHOSTBROWSER_CDP_TEST") in ("1", "true")
-    if enabled:
+    if not enabled:
+        return False
+    in_test_env = os.getenv("GHOSTBROWSER_TEST_ENV", "").strip().lower() in ("1", "true")
+    if not in_test_env:
         from backend.logging_config import logger
 
         logger.warning(
-            "CDP test mode enabled without GHOSTBROWSER_PROD=1: the loopback CDP "
-            "endpoint is only safe for local development. Set GHOSTBROWSER_PROD=1 "
-            "in production to disable it."
+            "GHOSTBROWSER_CDP_TEST is set without a test/dev context "
+            "(GHOSTBROWSER_TEST_ENV). Refusing to expose the CDP introspection "
+            "endpoint."
         )
+        return False
+    from backend.logging_config import logger
+
+    logger.warning(
+        "CDP introspection endpoint is enabled (GHOSTBROWSER_CDP_TEST + "
+        "GHOSTBROWSER_TEST_ENV). Never use this on a live user profile."
+    )
     return enabled
 
 

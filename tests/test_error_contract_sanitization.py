@@ -201,7 +201,13 @@ class TestLaunchFailClosedSanitized(unittest.IsolatedAsyncioTestCase):
                 "fingerprint": {"os": "Windows"},
             }
 
-            async def fake_scan(profile):
+            # Production calls scan_profile_before_launch synchronously; keep
+            # the mock sync so the scan step is really exercised (an async mock
+            # would trigger an unintended TypeError/unawaited-coroutine path).
+            scan_calls = []
+
+            def fake_scan(profile):
+                scan_calls.append(profile)
                 return {"status": "clean"}
 
             def boom(profile, force_headless=False, forced_proxy=None):
@@ -218,6 +224,7 @@ class TestLaunchFailClosedSanitized(unittest.IsolatedAsyncioTestCase):
                  patch.object(bm, "build_browser_launch_config", boom):
                 result = await bm.launch_profile("lp1")
 
+        self.assertEqual(scan_calls, [profile], "the sync pre-launch scan must be reached")
         self.assertEqual(result["status"], "error")
         self.assertEqual(result["message"], "Launch failed")
         self.assertNotIn("secret internal launch detail 555", str(result))

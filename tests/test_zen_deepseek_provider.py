@@ -86,6 +86,60 @@ class ZenCallTests(unittest.IsolatedAsyncioTestCase):
             if key.startswith("ZEN_"):
                 os.environ.pop(key, None)
 
+    async def test_malformed_numeric_config_falls_back_to_defaults(self):
+        # Regression: invalid/zero numeric settings must not raise — the caller
+        # falls through to the next provider instead of failing the whole chain.
+        os.environ["ZEN_API_KEY"] = "zen-test-key"
+        os.environ["ZEN_RACE_SIZE"] = "bogus"
+        os.environ["ZEN_REQUEST_TIMEOUT"] = ""
+        os.environ["ZEN_INTER_BATCH_DELAY"] = "NaN"
+
+        self.assertEqual(ai_generator._safe_int_env("ZEN_RACE_SIZE", 3, minimum=1), 3)
+        self.assertEqual(
+            ai_generator._safe_float_env("ZEN_REQUEST_TIMEOUT", 60.0, minimum=1.0), 60.0
+        )
+        self.assertEqual(
+            ai_generator._safe_float_env("ZEN_INTER_BATCH_DELAY", 1.0, minimum=0.0), 1.0
+        )
+
+        # And the real call path still works (uses defaults).
+        response_body = {
+            "choices": [{"message": {"content": __import__("json").dumps(_valid_ai_response())}}]
+        }
+        fake_response = Mock()
+        fake_response.status_code = 200
+        fake_response.json.return_value = response_body
+        post = AsyncMock(return_value=fake_response)
+        with patch.object(ai_generator, "_shared_client") as client:
+            client.post = post
+            result = await ai_generator._call_zen_deepseek_api("Windows", "Chrome", 139)
+        self.assertIsNotNone(result)
+        self.assertEqual(post.await_args.kwargs["timeout"], 60.0)
+
+    async def test_zero_and_negative_values_are_clamped(self):
+        self.assertEqual(ai_generator._safe_int_env("ZEN_RACE_SIZE", 3, minimum=1), 3)
+        os.environ["ZEN_RACE_SIZE"] = "0"
+        self.assertEqual(ai_generator._safe_int_env("ZEN_RACE_SIZE", 3, minimum=1), 1)
+        os.environ["ZEN_RACE_SIZE"] = "-5"
+        self.assertEqual(ai_generator._safe_int_env("ZEN_RACE_SIZE", 3, minimum=1), 1)
+
+        os.environ["ZEN_REQUEST_TIMEOUT"] = "0.0"
+        self.assertEqual(
+            ai_generator._safe_float_env("ZEN_REQUEST_TIMEOUT", 60.0, minimum=1.0), 1.0
+        )
+        os.environ["ZEN_INTER_BATCH_DELAY"] = "-3.0"
+        self.assertEqual(
+            ai_generator._safe_float_env("ZEN_INTER_BATCH_DELAY", 1.0, minimum=0.0), 0.0
+        )
+
+    async def test_valid_values_are_used(self):
+        os.environ["ZEN_RACE_SIZE"] = "7"
+        os.environ["ZEN_REQUEST_TIMEOUT"] = "12.5"
+        self.assertEqual(ai_generator._safe_int_env("ZEN_RACE_SIZE", 3, minimum=1), 7)
+        self.assertEqual(
+            ai_generator._safe_float_env("ZEN_REQUEST_TIMEOUT", 60.0, minimum=1.0), 12.5
+        )
+
     async def test_no_keys_returns_none_without_network(self):
         result = await ai_generator._call_zen_deepseek_api("Windows", "Chrome", 139)
         self.assertIsNone(result)
