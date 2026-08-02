@@ -7,6 +7,7 @@ ordering without making live network calls.
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 import unittest
@@ -140,6 +141,35 @@ class ZenCallTests(unittest.IsolatedAsyncioTestCase):
             ai_generator._safe_float_env("ZEN_REQUEST_TIMEOUT", 60.0, minimum=1.0), 12.5
         )
 
+    async def test_oversized_race_size_is_capped(self):
+        # Prevents accidental unbounded concurrent outbound requests.
+        os.environ["ZEN_RACE_SIZE"] = "999999"
+        self.assertEqual(
+            ai_generator._safe_int_env("ZEN_RACE_SIZE", 3, minimum=1, maximum=32), 32
+        )
+        os.environ["ZEN_RACE_SIZE"] = "33"
+        self.assertEqual(
+            ai_generator._safe_int_env("ZEN_RACE_SIZE", 3, minimum=1, maximum=32), 32
+        )
+
+    async def test_whitespace_padded_and_edge_values(self):
+        os.environ["ZEN_RACE_SIZE"] = "  5  "
+        self.assertEqual(
+            ai_generator._safe_int_env("ZEN_RACE_SIZE", 3, minimum=1, maximum=32), 5
+        )
+        os.environ["ZEN_RACE_SIZE"] = "-7"
+        self.assertEqual(
+            ai_generator._safe_int_env("ZEN_RACE_SIZE", 3, minimum=1, maximum=32), 1
+        )
+        os.environ["ZEN_REQUEST_TIMEOUT"] = "inf"
+        self.assertEqual(
+            ai_generator._safe_float_env("ZEN_REQUEST_TIMEOUT", 60.0, minimum=1.0), 60.0
+        )
+        os.environ["ZEN_REQUEST_TIMEOUT"] = "-inf"
+        self.assertEqual(
+            ai_generator._safe_float_env("ZEN_REQUEST_TIMEOUT", 60.0, minimum=1.0), 60.0
+        )
+
     async def test_no_keys_returns_none_without_network(self):
         result = await ai_generator._call_zen_deepseek_api("Windows", "Chrome", 139)
         self.assertIsNone(result)
@@ -211,6 +241,44 @@ class ZenCallTests(unittest.IsolatedAsyncioTestCase):
             result = await ai_generator._call_zen_deepseek_api("Windows", "Chrome", 139)
 
         self.assertIsNone(result)
+
+    async def test_winner_cancels_pending_tasks(self):
+        # Regression: once one key wins, the remaining in-flight requests in the
+        # batch must be cancelled — no pending task may survive the winner.
+        os.environ["ZEN_API_KEY"] = "k1"
+        os.environ["ZEN_API_KEY_1"] = "k2"
+
+        cancelled = asyncio.Event()
+        started = asyncio.Event()
+
+        async def hanging_post(url, **kwargs):
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+
+        success = Mock()
+        success.status_code = 200
+        success.json.return_value = {
+            "choices": [{"message": {"content": __import__("json").dumps(_valid_ai_response())}}]
+        }
+
+        async def fast_post(url, **kwargs):
+            return success
+
+        def fake_post(url, **kwargs):
+            if kwargs["headers"]["Authorization"] == "Bearer k1":
+                return fast_post(url, **kwargs)
+            return hanging_post(url, **kwargs)
+
+        with patch.object(ai_generator, "_shared_client") as client:
+            client.post = fake_post
+            result = await ai_generator._call_zen_deepseek_api("Windows", "Chrome", 139)
+
+        self.assertIsNotNone(result)
+        self.assertTrue(cancelled.is_set(), "the losing in-flight request must be cancelled")
 
 
 class ZenCascadeOrderTests(unittest.IsolatedAsyncioTestCase):

@@ -724,6 +724,15 @@ async def _proxy_health_loop(profile_id: str, proxy: dict):
         pass
 
 
+def _env_flag(name: str) -> bool:
+    """Normalized truthy parse for a toggle env var.
+
+    Contract: only ``1``, ``true``, ``yes`` (case-insensitive, whitespace
+    trimmed) enable a flag; anything else — including empty — is false.
+    """
+    return os.getenv(name, "").strip().lower() in ("1", "true", "yes")
+
+
 def _cdp_test_mode_enabled() -> bool:
     """CDP introspection is closed by default and must NEVER run in production:
     - GHOSTBROWSER_PROD=1 always denies (the test flag is ignored) (A07).
@@ -732,10 +741,10 @@ def _cdp_test_mode_enabled() -> bool:
       has CDP_TEST set is still closed."""
     if os.getenv("GHOSTBROWSER_PROD") == "1":
         return False
-    enabled = os.getenv("GHOSTBROWSER_CDP_TEST") in ("1", "true")
+    enabled = _env_flag("GHOSTBROWSER_CDP_TEST")
     if not enabled:
         return False
-    in_test_env = os.getenv("GHOSTBROWSER_TEST_ENV", "").strip().lower() in ("1", "true")
+    in_test_env = _env_flag("GHOSTBROWSER_TEST_ENV")
     if not in_test_env:
         from backend.logging_config import logger
 

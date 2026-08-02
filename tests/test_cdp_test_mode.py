@@ -199,6 +199,7 @@ class CdpTestModeGuardTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.orig_prod = os.environ.get("GHOSTBROWSER_PROD")
         self.orig_cdp = os.environ.get("GHOSTBROWSER_CDP_TEST")
+        self.orig_test_env = os.environ.get("GHOSTBROWSER_TEST_ENV")
         self.orig_origins = os.environ.get("GHOSTBROWSER_CDP_ALLOW_ORIGINS")
         os.environ["GHOSTBROWSER_CDP_TEST"] = "1"
 
@@ -206,12 +207,23 @@ class CdpTestModeGuardTests(unittest.IsolatedAsyncioTestCase):
         for name, orig in (
             ("GHOSTBROWSER_PROD", self.orig_prod),
             ("GHOSTBROWSER_CDP_TEST", self.orig_cdp),
+            ("GHOSTBROWSER_TEST_ENV", self.orig_test_env),
             ("GHOSTBROWSER_CDP_ALLOW_ORIGINS", self.orig_origins),
         ):
             if orig is None:
                 os.environ.pop(name, None)
             else:
                 os.environ[name] = orig
+
+    def test_test_env_is_snapshotted_and_restored(self):
+        # Regression: test_cdp_enabled_in_test_env sets TEST_ENV=1; it must be
+        # restored/removed by tearDown so it cannot leak into later tests.
+        # Deterministic (no reliance on execution order): run tearDown directly.
+        os.environ["GHOSTBROWSER_TEST_ENV"] = "1"
+        self.orig_test_env = None
+        self.tearDown()
+        self.assertNotIn("GHOSTBROWSER_TEST_ENV", os.environ)
+        self.setUp()
 
     async def test_cdp_disabled_when_prod(self):
         from backend.browser_manager import _cdp_test_mode_enabled, build_browser_launch_config
@@ -223,6 +235,30 @@ class CdpTestModeGuardTests(unittest.IsolatedAsyncioTestCase):
             {"id": "abcd1234", "path": ".", "advanced": {}}, force_headless=True
         )
         self.assertNotIn("--remote-debugging-port=0", config["args"])
+
+    async def test_prod_wins_even_with_both_test_flags(self):
+        # Production always denies, even if CDP_TEST and TEST_ENV are both set:
+        # a deployed instance misconfigured with test flags is still closed.
+        from backend.browser_manager import _cdp_test_mode_enabled
+
+        os.environ["GHOSTBROWSER_PROD"] = "1"
+        os.environ["GHOSTBROWSER_CDP_TEST"] = "1"
+        os.environ["GHOSTBROWSER_TEST_ENV"] = "1"
+        self.assertFalse(_cdp_test_mode_enabled())
+
+    async def test_truthy_values_are_normalized(self):
+        from backend.browser_manager import _cdp_test_mode_enabled, _env_flag
+
+        os.environ.pop("GHOSTBROWSER_PROD", None)
+        os.environ["GHOSTBROWSER_TEST_ENV"] = "1"
+        for truthy in ("1", "TRUE", "Yes", " yes ", "true"):
+            os.environ["GHOSTBROWSER_CDP_TEST"] = truthy
+            self.assertTrue(_env_flag("GHOSTBROWSER_CDP_TEST"), truthy)
+            self.assertTrue(_cdp_test_mode_enabled(), truthy)
+        for falsy in ("", "0", "false", "no", "banana", "2"):
+            os.environ["GHOSTBROWSER_CDP_TEST"] = falsy
+            self.assertFalse(_env_flag("GHOSTBROWSER_CDP_TEST"), falsy)
+            self.assertFalse(_cdp_test_mode_enabled(), falsy)
 
     async def test_cdp_enabled_in_test_env(self):
         from backend.browser_manager import _cdp_test_mode_enabled

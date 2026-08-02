@@ -481,14 +481,16 @@ def _get_zen_api_keys() -> list[str]:
     return [k.strip() for k in keys if k.strip()]
 
 
-def _safe_int_env(name: str, default: int, minimum: int) -> int:
-    """Parse a positive integer env var, falling back to ``default`` and never
-    returning a value below ``minimum`` (invalid/zero config must not raise:
-    the caller falls through to the next provider)."""
+def _safe_int_env(name: str, default: int, minimum: int, maximum: int | None = None) -> int:
+    """Parse an integer env var, falling back to ``default`` and clamping to
+    ``[minimum, maximum]`` (invalid/zero/oversized config must not raise: the
+    caller falls through to the next provider)."""
     try:
         value = int(os.environ.get(name, str(default)))
     except (TypeError, ValueError):
         return default
+    if maximum is not None:
+        value = min(maximum, value)
     return max(minimum, value)
 
 
@@ -520,7 +522,7 @@ async def _call_zen_deepseek_api(target_os: str, target_browser: str,
         return None
 
     model_name = os.environ.get("ZEN_MODEL", ZEN_MODEL)
-    race_size = _safe_int_env("ZEN_RACE_SIZE", 3, minimum=1)
+    race_size = _safe_int_env("ZEN_RACE_SIZE", 3, minimum=1, maximum=32)
     timeout_seconds = _safe_float_env("ZEN_REQUEST_TIMEOUT", 60.0, minimum=1.0)
     inter_batch_delay = _safe_float_env("ZEN_INTER_BATCH_DELAY", 1.0, minimum=0.0)
 
