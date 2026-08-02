@@ -581,3 +581,19 @@ class AdminAuthTests(TestCase):
             self.assertEqual(codes[3:], [429, 429])
         finally:
             RATE_LIMITERS["auth"] = original
+
+    def test_missing_token_is_not_a_guess_and_never_charges_auth_limiter(self):
+        original = RATE_LIMITERS["auth"]
+        RATE_LIMITERS["auth"] = SlidingWindowRateLimiter(window_seconds=60, max_requests=3)
+        try:
+            with self._client() as client:
+                # A dashboard polls protected endpoints without a token before
+                # the operator authenticates; those 401s must not exhaust the
+                # anti-brute-force quota (the default limiter already caps them).
+                codes = [client.get("/api/profiles").status_code for _ in range(8)]
+                self.assertEqual(codes, [401] * 8)
+                # A wrong token is still a guess and is bounded.
+                wrong = [client.get("/api/profiles", headers=self._admin_headers(WRONG_TOKEN)).status_code for _ in range(4)]
+                self.assertEqual(wrong, [403, 403, 403, 429])
+        finally:
+            RATE_LIMITERS["auth"] = original

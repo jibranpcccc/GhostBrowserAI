@@ -83,11 +83,12 @@ def require_admin_token(request: Request) -> None:
     Returns 401 if the request omits the token.
     Returns 403 if the supplied token does not match.
 
-    The ``auth`` limiter only bounds *failed* attempts (missing or wrong
-    token).  Legitimate authenticated traffic is not throttled by it; the
-    global ``default`` limiter already caps total per-IP requests, so a
-    dashboard that polls several protected endpoints every few seconds does
-    not exhaust the anti-brute-force quota of its own operator.
+    The ``auth`` limiter only bounds brute-force *guesses* (a supplied token
+    that does not match).  Missing-token (401) and correct-token (200)
+    requests are not guesses, so they never consume the auth quota; the
+    global ``default`` limiter already caps total per-IP requests.  This keeps
+    a dashboard that polls several protected endpoints every few seconds from
+    exhausting the anti-brute-force quota of its own operator.
     """
     expected = os.environ.get(ADMIN_TOKEN_ENV, "").strip()
     if not expected:
@@ -97,8 +98,6 @@ def require_admin_token(request: Request) -> None:
         )
     token = request.headers.get(ADMIN_TOKEN_HEADER, "").strip()
     if not token:
-        # A missing token is a failed attempt; bound it to deter probing.
-        check_rate_limit(request, "auth")
         raise HTTPException(
             status_code=401,
             detail=f"Admin token required in {ADMIN_TOKEN_HEADER} header",
