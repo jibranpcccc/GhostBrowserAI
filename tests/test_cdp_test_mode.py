@@ -91,8 +91,12 @@ class ProfileCdpEndpointTests(unittest.TestCase):
     def setUp(self):
         self.orig_token = os.environ.get("GHOSTBROWSER_ADMIN_TOKEN")
         self.orig_cdp = os.environ.get("GHOSTBROWSER_CDP_TEST")
+        self.orig_test_env = os.environ.get("GHOSTBROWSER_TEST_ENV")
         os.environ["GHOSTBROWSER_ADMIN_TOKEN"] = ADMIN_TOKEN
         os.environ["GHOSTBROWSER_CDP_TEST"] = "1"
+        # Self-contained: this class runs under unittest discover too, where
+        # conftest.py is not loaded, so TEST_ENV must be set here explicitly.
+        os.environ["GHOSTBROWSER_TEST_ENV"] = "1"
         self._patchers = [
             mock.patch("backend.system_monitor.system_monitor.start", new=mock.AsyncMock()),
             mock.patch("backend.system_monitor.system_monitor.stop", new=mock.Mock()),
@@ -106,14 +110,15 @@ class ProfileCdpEndpointTests(unittest.TestCase):
     def tearDown(self):
         for patcher in reversed(self._patchers):
             patcher.stop()
-        if self.orig_token is None:
-            os.environ.pop("GHOSTBROWSER_ADMIN_TOKEN", None)
-        else:
-            os.environ["GHOSTBROWSER_ADMIN_TOKEN"] = self.orig_token
-        if self.orig_cdp is None:
-            os.environ.pop("GHOSTBROWSER_CDP_TEST", None)
-        else:
-            os.environ["GHOSTBROWSER_CDP_TEST"] = self.orig_cdp
+        for name, orig in (
+            ("GHOSTBROWSER_ADMIN_TOKEN", self.orig_token),
+            ("GHOSTBROWSER_CDP_TEST", self.orig_cdp),
+            ("GHOSTBROWSER_TEST_ENV", self.orig_test_env),
+        ):
+            if orig is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = orig
 
     def _get_cdp(self, client, token=None, profile_id=PROFILE_ID):
         headers = {}
