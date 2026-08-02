@@ -236,9 +236,25 @@ class CdpTestModeGuardTests(unittest.IsolatedAsyncioTestCase):
         os.environ["GHOSTBROWSER_PROD"] = "1"
         self.assertFalse(_cdp_test_mode_enabled())
 
-        config = await build_browser_launch_config(
-            {"id": "abcd1234", "path": ".", "advanced": {}}, force_headless=True
-        )
+        # Deterministic unit test: mock the native metadata probe so this test
+        # only exercises the CDP flag behavior (no real browser/threads/spawns).
+        fake_meta = {
+            "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/139.0.0.0 Safari/537.36",
+            "uadata": {
+                "brands": [{"brand": "Chromium", "version": "139"}, {"brand": "Not A(Brand", "version": "99"}],
+                "platform": "Windows",
+                "platformVersion": "10.0.0",
+                "architecture": "x86",
+                "bitness": "64",
+                "uaFullVersion": "139.0.0.0",
+            },
+        }
+        with mock.patch(
+            "backend.browser_manager.probe_native_metadata", new=mock.AsyncMock(return_value=fake_meta)
+        ):
+            config = await build_browser_launch_config(
+                {"id": "abcd1234", "path": ".", "advanced": {}}, force_headless=True
+            )
         self.assertNotIn("--remote-debugging-port=0", config["args"])
 
     async def test_prod_wins_even_with_both_test_flags(self):

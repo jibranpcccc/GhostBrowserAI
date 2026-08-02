@@ -252,11 +252,17 @@ async def _probe_native_metadata_impl(force_headless: bool = True):
             async def run_and_resolve():
                 try:
                     res = await run_metadata_probe(exe_path, force_headless)
-                    fut.set_result(res)
+                    if not fut.done() and not fut.cancelled():
+                        fut.set_result(res)
                     async with probe_lock:
-                        _probed_metadata_cache[cache_key] = res
+                        if not fut.cancelled():
+                            _probed_metadata_cache[cache_key] = res
+                except asyncio.CancelledError:
+                    if not fut.done() and not fut.cancelled():
+                        fut.cancel()
                 except Exception as ex:
-                    fut.set_exception(ex)
+                    if not fut.done() and not fut.cancelled():
+                        fut.set_exception(ex)
                 finally:
                     async with probe_lock:
                         probe_futures.pop(cache_key, None)

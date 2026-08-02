@@ -79,6 +79,7 @@ echo [5/5] Compiling without account files or production profile data...
   --add-data "backend/extensions;backend/extensions" ^
   --hidden-import "playwright.async_api" ^
   --hidden-import "playwright_stealth" ^
+  --collect-data "playwright_stealth" ^
   --hidden-import "uvicorn" ^
   --hidden-import "fastapi" ^
   --hidden-import "httpx_socks" ^
