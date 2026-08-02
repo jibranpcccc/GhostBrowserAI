@@ -82,9 +82,13 @@ def require_admin_token(request: Request) -> None:
     Returns 503 if the server has no admin token configured.
     Returns 401 if the request omits the token.
     Returns 403 if the supplied token does not match.
+
+    The ``auth`` limiter only bounds *failed* attempts (missing or wrong
+    token).  Legitimate authenticated traffic is not throttled by it; the
+    global ``default`` limiter already caps total per-IP requests, so a
+    dashboard that polls several protected endpoints every few seconds does
+    not exhaust the anti-brute-force quota of its own operator.
     """
-    # Apply this before inspecting the supplied token to bound guessing.
-    check_rate_limit(request, "auth")
     expected = os.environ.get(ADMIN_TOKEN_ENV, "").strip()
     if not expected:
         raise HTTPException(
@@ -93,9 +97,13 @@ def require_admin_token(request: Request) -> None:
         )
     token = request.headers.get(ADMIN_TOKEN_HEADER, "").strip()
     if not token:
+        # A missing token is a failed attempt; bound it to deter probing.
+        check_rate_limit(request, "auth")
         raise HTTPException(
             status_code=401,
             detail=f"Admin token required in {ADMIN_TOKEN_HEADER} header",
         )
     if not hmac.compare_digest(token, expected):
+        # A wrong token is a brute-force guess; bound it tightly.
+        check_rate_limit(request, "auth")
         raise HTTPException(status_code=403, detail="Invalid admin token")

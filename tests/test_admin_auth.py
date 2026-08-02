@@ -19,6 +19,9 @@ from unittest import TestCase, mock
 
 from fastapi.testclient import TestClient
 
+from backend.auth import RATE_LIMITERS
+from backend.rate_limiter import SlidingWindowRateLimiter
+
 ADMIN_TOKEN = "test-admin-token-12345"
 WRONG_TOKEN = "wrong-token"
 TEST_PROFILE_ID = "test-profile-1"
@@ -551,3 +554,30 @@ class AdminAuthTests(TestCase):
                 )
                 self.assertEqual(wrong.status_code, 403)
                 mock_acquire.assert_not_called()
+
+    # ----------------------------------------------------------------------
+    # Auth limiter bounds failed guesses, not successful traffic
+    # ----------------------------------------------------------------------
+    def test_successful_auth_is_not_throttled_by_auth_limiter(self):
+        original = RATE_LIMITERS["auth"]
+        # Simulate the tight production limit (10/min) with a fresh bucket.
+        RATE_LIMITERS["auth"] = SlidingWindowRateLimiter(window_seconds=60, max_requests=10)
+        try:
+            with mock.patch("backend.main.profile_manager.list_profiles", return_value=[]), \
+                 mock.patch("backend.main.is_profile_running", return_value=False):
+                with self._client() as client:
+                    codes = [client.get("/api/profiles", headers=self._admin_headers()).status_code for _ in range(20)]
+            self.assertEqual(codes, [200] * 20)
+        finally:
+            RATE_LIMITERS["auth"] = original
+
+    def test_wrong_token_attempts_still_hit_auth_limiter(self):
+        original = RATE_LIMITERS["auth"]
+        RATE_LIMITERS["auth"] = SlidingWindowRateLimiter(window_seconds=60, max_requests=3)
+        try:
+            with self._client() as client:
+                codes = [client.get("/api/profiles", headers=self._admin_headers(WRONG_TOKEN)).status_code for _ in range(5)]
+            self.assertEqual(codes[:3], [403, 403, 403])
+            self.assertEqual(codes[3:], [429, 429])
+        finally:
+            RATE_LIMITERS["auth"] = original
