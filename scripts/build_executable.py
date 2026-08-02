@@ -153,6 +153,10 @@ def build(args: argparse.Namespace) -> int:
         "backend.__main__",
         "--collect-all",
         "backend",
+        # playwright_stealth reads .js data files from its package at runtime;
+        # without this the packaged app crashes on import with FileNotFoundError.
+        "--collect-data",
+        "playwright_stealth",
         *add_data_args,
         str(entrypoint),
     ]

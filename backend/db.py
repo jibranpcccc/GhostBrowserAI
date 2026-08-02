@@ -61,6 +61,9 @@ def _decrypt_proxy_credentials(value: str) -> Dict[str, str]:
         return {"username": "", "password": ""}
 
 def init_db():
+    # The data dir may not exist yet in a frozen (PyInstaller) deployment;
+    # get_data_dir() skips mkdir for file paths, so create the parent first.
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
