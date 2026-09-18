@@ -65,8 +65,10 @@ def host_display_metrics() -> dict | None:
 
 
 async def capture_native_baseline(output_path: str | Path) -> dict:
+    from backend.engine_resolver import get_chromium_executable_path_async
+    executable_path = await get_chromium_executable_path_async()
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=True)
+        browser = await playwright.chromium.launch(headless=True, executable_path=executable_path)
         try:
             page = await browser.new_page()
             await page.goto("data:text/html,<title>GhostBrowser baseline</title>")

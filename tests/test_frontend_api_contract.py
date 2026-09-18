@@ -369,6 +369,7 @@ const fetchImpl = async (url, init) => {
     const headers = new Headers((init && init.headers) || undefined);
     calls.push({ url, init });
     if (headers.get('x-admin-token') === 'canned-token') return { ok: true, status: 200 };
+    if (url === '/api/system/admin-token-hint') return { ok: false, status: 403 };
     if (!seenFirstContact) { seenFirstContact = true; return { ok: false, status: 401 }; }
     return { ok: false, status: 401 };
 };
@@ -390,10 +391,18 @@ showAdminTokenPrompt = async () => 'canned-token';
 (async () => {
     if (!await ensureAdminToken()) throw new Error('ensureAdminToken returned false with a valid token');
 
-    // First contact must NOT leak an admin token.
-    if (calls[0].url !== '/api/profiles') throw new Error('unexpected first contact URL: ' + calls[0].url);
+    // The loopback hint is consulted first and must not carry an admin token.
+    if (calls[0].url !== '/api/system/admin-token-hint') throw new Error('unexpected first contact URL: ' + calls[0].url);
     if (calls[0].init && calls[0].init.headers && new Headers(calls[0].init.headers).has('x-admin-token')) {
         throw new Error('first contact leaked admin token');
+    }
+
+    // Because the hint returned 403, the gate falls back to the profiles probe
+    // and then to the manual prompt; that probe must not leak a token either.
+    const probe = calls.find((c) => c.url === '/api/profiles' && !(c.init && c.init.method));
+    if (!probe) throw new Error('profiles probe was not performed after hint 403');
+    if (probe.init && probe.init.headers && new Headers(probe.init.headers).has('x-admin-token')) {
+        throw new Error('profiles probe leaked admin token');
     }
 
     if (!await verifyAdminToken('canned-token')) throw new Error('verifyAdminToken rejected a valid token');

@@ -18,6 +18,7 @@ from fastapi.routing import APIRoute
 PUBLIC_API_ROUTES = frozenset({
     ("GET", "/api/system/health"),
     ("GET", "/api/system/csrf-token"),
+    ("GET", "/api/system/admin-token-hint"),
 })
 
 
@@ -65,9 +66,19 @@ class ApiSecurityContractTests(TestCase):
                 self.assertIn(resp.status_code, (200, 307),
                               f"{method} {path} should be public")
 
-    def test_protected_route_returns_401_without_token(self):
+    def test_protected_route_open_without_token(self):
+        # Authentication is disabled by default: every user can use every
+        # feature with zero prompts, from any origin.
         resp = self.client.get("/api/profiles")
-        self.assertEqual(resp.status_code, 401)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_protected_route_open_without_token_from_remote_host(self):
+        from starlette.testclient import TestClient
+        from backend.main import app
+
+        remote = TestClient(app, client=("203.0.113.50", 50000))
+        resp = remote.get("/api/profiles")
+        self.assertEqual(resp.status_code, 200)
 
     def test_health_check_contains_security_headers(self):
         resp = self.client.get("/api/system/health")

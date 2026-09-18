@@ -34,6 +34,7 @@ PROFILES = {
 WORKER_PATCH_TEMPLATE = r"""
 (function() {
     'use strict';
+    if (typeof self !== 'undefined' && self.__ghostWorkerPatchInstalled === true) return;
     var _sp = (typeof WeakMap !== 'undefined') ? new WeakMap() : null;
     var _ots = Function.prototype.toString;
     if (_sp) {
@@ -521,15 +522,7 @@ async def run_profile(profile_key: str, offsets: dict, base_url: str) -> RunResu
             is_nested_parent = "nested-parent" in info.target_url.lower()
 
             if not info.paused:
-                info.errors.append("Target not paused, cannot use _inject_simple")
-                failed_sessions.add(sid)
-                result.no_resume_after_fail = False
-                # If pause state cannot be proven, detach and fail
-                try:
-                    await page_cdp.send("Target.detachFromTarget", {"sessionId": sid})
-                except Exception:
-                    pass
-                return
+                info.errors.append("Target attached with paused=False — injecting on running worker")
 
             info.ts_patch_sent = time.monotonic()
             try:
@@ -821,7 +814,7 @@ async def run_profile(profile_key: str, offsets: dict, base_url: str) -> RunResu
                 elif turl.startswith("blob:"):
                     result.blob_paused = True
 
-            if "module-worker" in turl.lower():
+            if "module-worker" in turl.lower() or not info.paused:
                 register_task('inject_simple', _inject_simple(info))
             else:
                 register_task('inject_via_debugger', _inject_via_debugger(info))

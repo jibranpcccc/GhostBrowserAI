@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GhostBrowser — AI Anti-Detect Dashboard</title>
-    <meta name="description" content="AI-powered anti-detect browser management dashboard powered by Kimi AI via Cloudflare.">
+    <meta name="description" content="AI-powered anti-detect browser management dashboard powered by free OpenCode Zen models.">
     <link rel="stylesheet" href="style.css?v=1.3">
 </head>
 <body>
@@ -24,6 +24,7 @@
             </svg>
         </div>
         <span class="logo-text">GhostBrowser</span>
+        <button class="sidebar-toggle-btn" id="btn-collapse-sidebar" data-action="toggleSidebar" title="Toggle mini sidebar mode" aria-label="Toggle Sidebar">◀</button>
     </div>
 
     <nav class="sidebar-nav">
@@ -47,7 +48,7 @@
         <a class="nav-item" data-page="ai-status" role="button" tabindex="0" aria-label="AI Status" title="AI Status">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="M12 8v4l3 3"/></svg>
             <span class="nav-label">AI Status</span>
-            <span class="nav-badge pulse-green" id="sidebar-cf-count">...</span>
+            <span class="nav-badge pulse-green">Zen</span>
         </a>
         <a class="nav-item" data-page="logs" role="button" tabindex="0" aria-label="Live Logs" title="Live Logs">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
@@ -62,7 +63,7 @@
     <div class="sidebar-footer">
         <div class="ai-mode-badge">
             <div class="ai-dot"></div>
-            <span>Kimi via Cloudflare</span>
+            <span>Zen AI · Free</span>
         </div>
     </div>
 </aside>
@@ -85,6 +86,9 @@
                 <span class="topbar-stat-value" id="topbar-ram">--</span>
             </div>
             <button class="theme-toggle" data-action="toggleTheme" title="Toggle theme" aria-label="Toggle color theme">🌙</button>
+            <button class="btn-secondary toolbar-compact" id="btn-compact-mode" data-action="toggleCompactMode" title="Toggle Laptop Compact Mode" aria-label="Laptop Compact Mode">⚡ Compact</button>
+            <button class="btn-secondary toolbar-compact" id="btn-export-profiles" data-action="exportProfiles" title="Export Profiles (JSON)" aria-label="Export Profiles">📥 Export</button>
+            <button class="btn-secondary toolbar-compact" id="btn-import-profiles" data-action="openImportModal" title="Import Profiles (JSON)" aria-label="Import Profiles">📤 Import</button>
             <button class="btn-secondary toolbar-compact" data-action="openSurfacesModal" title="Fingerprint surfaces" aria-label="Fingerprint surfaces">🛡️ Surfaces</button>
             <button class="btn-secondary toolbar-compact" data-action="openAccessLogModal" title="Per-site API access log" aria-label="Per-site API access log">📋 Access Log</button>
             <button class="btn-primary topbar-create-button" data-action="openCreateModal" aria-label="New AI Profile">
@@ -108,10 +112,10 @@
             <div class="stat-card">
                 <div class="stat-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></div>
                 <div class="stat-body">
-                    <div class="stat-label">Kimi Accounts Healthy</div>
-                    <div class="stat-value" id="stat-cf-healthy">-- / --</div>
+                    <div class="stat-label">AI Engine</div>
+                    <div class="stat-value">big-pickle</div>
                 </div>
-                <div class="stat-trend up" id="stat-cf-trend">OK</div>
+                <div class="stat-trend up">Free</div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
@@ -144,28 +148,65 @@
 
             <div class="glass-card cf-ring-card">
                 <div class="card-header">
-                    <h3>Cloudflare AI Pool</h3>
+                    <h3>AI Engine</h3>
                 </div>
                 <div class="ring-chart-container">
                     <svg class="ring-chart" viewBox="0 0 120 120" id="cf-ring-svg">
                         <circle cx="60" cy="60" r="48" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="12"/>
-                        <circle class="ring-arc" cx="60" cy="60" r="48" fill="none" stroke="url(#ringGrad)" stroke-width="12" stroke-linecap="round" stroke-dasharray="301.59" stroke-dashoffset="301.59" id="cf-ring-arc"/>
+                        <circle class="ring-arc" cx="60" cy="60" r="48" fill="none" stroke="url(#ringGrad)" stroke-width="12" stroke-linecap="round" stroke-dasharray="301.59" stroke-dashoffset="0" id="cf-ring-arc"/>
                         <defs>
                             <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="0%">
                                 <stop offset="0%" stop-color="#6366f1"/>
                                 <stop offset="100%" stop-color="#8b5cf6"/>
                             </linearGradient>
                         </defs>
-                        <text x="60" y="55" text-anchor="middle" fill="#f8fafc" font-size="18" font-weight="700" id="cf-ring-pct">--%</text>
-                        <text x="60" y="70" text-anchor="middle" fill="#94a3b8" font-size="8">Healthy</text>
+                        <text x="60" y="55" text-anchor="middle" fill="#f8fafc" font-size="18" font-weight="700">100%</text>
+                        <text x="60" y="70" text-anchor="middle" fill="#94a3b8" font-size="8">Ready</text>
                     </svg>
                 </div>
                 <div class="ring-legend">
-                    <div class="legend-item"><div class="legend-dot violet"></div><span id="cf-legend-healthy">-- Healthy</span></div>
-                    <div class="legend-item"><div class="legend-dot amber"></div><span id="cf-legend-cooldown">-- On Cooldown</span></div>
+                    <div class="legend-item"><div class="legend-dot violet"></div><span>OpenCode Zen</span></div>
+                    <div class="legend-item"><div class="legend-dot amber"></div><span>Offline fallback ready</span></div>
                 </div>
                 <div class="model-info">
-                    <span class="mono">@cf/moonshotai/kimi-k2.7-code</span>
+                    <span class="mono">big-pickle (free)</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="quick-presets-section" id="quick-presets-section">
+            <h3 class="section-heading icon-heading">
+                ⚡ 1-Click Quick Deploy Presets
+            </h3>
+            <p class="muted-copy">Instantly spin up pre-configured stealth identities optimized for high-demand workflows.</p>
+            <div class="presets-grid">
+                <div class="preset-card" data-action="createPreset" data-params='["stealth_windows"]' role="button" tabindex="0">
+                    <div class="preset-icon">🪟</div>
+                    <div class="preset-info">
+                        <div class="preset-title">Stealth Windows (Chrome)</div>
+                        <div class="preset-desc">Windows 11 + Canvas, Audio & WebGL noise injection.</div>
+                    </div>
+                </div>
+                <div class="preset-card" data-action="createPreset" data-params='["mac_retina"]' role="button" tabindex="0">
+                    <div class="preset-icon">🍎</div>
+                    <div class="preset-info">
+                        <div class="preset-title">Mac Ultra Retina (Safari)</div>
+                        <div class="preset-desc">macOS Sequoia + high-DPI canvas & Apple Metal spoofing.</div>
+                    </div>
+                </div>
+                <div class="preset-card" data-action="createPreset" data-params='["scraping_bot"]' role="button" tabindex="0">
+                    <div class="preset-icon">⚡</div>
+                    <div class="preset-info">
+                        <div class="preset-title">Scraping Bot (Headless)</div>
+                        <div class="preset-desc">Fast headless Chromium with ad & tracker shielding.</div>
+                    </div>
+                </div>
+                <div class="preset-card" data-action="createPreset" data-params='["strict_privacy"]' role="button" tabindex="0">
+                    <div class="preset-icon">🛡️</div>
+                    <div class="preset-info">
+                        <div class="preset-title">Ephemeral Strict (Zero-Trace)</div>
+                        <div class="preset-desc">Wipes all cookies & storage on browser exit.</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -199,6 +240,17 @@
                 </button>
             </div>
         </div>
+
+        <!-- FILTER CHIPS -->
+        <div class="filter-chips-row" id="profile-filter-chips">
+            <button class="filter-chip active" id="filter-chip-all" data-action="setProfileFilter" data-params='["all"]'>All <span class="filter-chip-count" id="count-chip-all">0</span></button>
+            <button class="filter-chip" id="filter-chip-running" data-action="setProfileFilter" data-params='["running"]'>🟢 Running <span class="filter-chip-count" id="count-chip-running">0</span></button>
+            <button class="filter-chip" id="filter-chip-stopped" data-action="setProfileFilter" data-params='["stopped"]'>⚪ Stopped <span class="filter-chip-count" id="count-chip-stopped">0</span></button>
+            <button class="filter-chip" id="filter-chip-windows" data-action="setProfileFilter" data-params='["windows"]'>🪟 Windows <span class="filter-chip-count" id="count-chip-windows">0</span></button>
+            <button class="filter-chip" id="filter-chip-mac" data-action="setProfileFilter" data-params='["mac"]'>🍎 Mac <span class="filter-chip-count" id="count-chip-mac">0</span></button>
+            <button class="filter-chip" id="filter-chip-proxied" data-action="setProfileFilter" data-params='["proxied"]'>🌐 Proxied <span class="filter-chip-count" id="count-chip-proxied">0</span></button>
+        </div>
+
         <div class="table-container">
             <table class="data-table">
                 <thead>
@@ -223,7 +275,23 @@
             <div class="empty-icon">👻</div>
             <h3>No Profiles Yet</h3>
             <p>Create your first AI-generated privacy profile.</p>
-            <button class="btn-primary" data-action="openCreateModal">Generate with Kimi AI</button>
+            <button class="btn-primary" data-action="openCreateModal">Generate with Zen AI</button>
+        </div>
+
+        <!-- FLOATING BULK ACTIONS BAR -->
+        <div class="bulk-floating-bar" id="bulk-floating-bar" hidden>
+            <div class="bulk-floating-info">
+                <span class="bulk-selected-badge" id="bulk-selected-count">0</span>
+                <span>selected</span>
+            </div>
+            <div class="bulk-floating-actions">
+                <button class="btn-primary btn-sm" data-action="bulkLaunch">▶ Launch</button>
+                <button class="btn-secondary btn-sm" data-action="bulkStopSelected">⏹ Stop</button>
+                <button class="btn-secondary btn-sm" data-action="bulkClearCacheSelected">🧹 Clear Cache</button>
+                <button class="btn-secondary btn-sm" data-action="bulkPinSelected">📌 Pin</button>
+                <button class="btn-secondary btn-sm" data-action="openRunMacroModal">🤖 Macro</button>
+                <button class="btn-ghost btn-sm stop" data-action="bulkDelete">❌ Delete</button>
+            </div>
         </div>
     </section>
 
@@ -282,7 +350,7 @@
     <section class="page" id="page-proxies">
         <div class="page-toolbar">
             <h2 class="toolbar-heading">Proxy Pool</h2>
-            <button class="btn-secondary" data-action="testAllProxies">Test All Proxies</button>
+            <button class="btn-secondary" id="btn-test-proxies" data-action="testAllProxies">Test All Proxies</button>
         </div>
         <div class="two-col-grid">
             <div class="glass-card">
@@ -458,46 +526,46 @@
     <!-- PAGE: AI STATUS -->
     <section class="page" id="page-ai-status">
         <div class="page-toolbar">
-            <h2 class="toolbar-heading">Cloudflare Kimi AI Account Pool</h2>
+            <h2 class="toolbar-heading">Zen AI Status</h2>
             <button class="btn-secondary" data-action="fetchCFStatus">Refresh</button>
         </div>
         <div class="stats-grid ai-stats-grid">
             <div class="stat-card">
                 <div class="stat-icon violet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3z"/></svg></div>
                 <div class="stat-body">
-                    <div class="stat-label">Healthy Priority</div>
-                    <div class="stat-value" id="cf-priority-count">-- / --</div>
+                    <div class="stat-label">Model</div>
+                    <div class="stat-value">big-pickle</div>
                 </div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div>
                 <div class="stat-body">
-                    <div class="stat-label">Healthy Accounts</div>
-                    <div class="stat-value" id="cf-healthy-count">--</div>
+                    <div class="stat-label">Provider</div>
+                    <div class="stat-value">OpenCode Zen</div>
                 </div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
                 <div class="stat-body">
-                    <div class="stat-label">On Cooldown</div>
-                    <div class="stat-value" id="cf-cooldown-count">--</div>
+                    <div class="stat-label">Offline Fallback</div>
+                    <div class="stat-value">Ready</div>
                 </div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon violet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div>
                 <div class="stat-body">
-                    <div class="stat-label">Total Accounts</div>
-                    <div class="stat-value" id="cf-total-count">--</div>
+                    <div class="stat-label">Cost</div>
+                    <div class="stat-value">Free</div>
                 </div>
             </div>
         </div>
         <div class="glass-card">
             <div class="card-header">
-                <h3>Account Details</h3>
-                <div class="mono model-label">Model: @cf/moonshotai/kimi-k2.7-code</div>
+                <h3>Engine Details</h3>
+                <div class="mono model-label">Model: big-pickle (OpenCode Zen, free)</div>
             </div>
             <div id="cf-accounts-list" class="cf-accounts-list">
-                <div class="empty-state-small">Loading account data...</div>
+                <div class="empty-state-small">Profile generation uses the free OpenCode Zen endpoint with a built-in local deterministic generator as offline fallback. No third-party account pools are used.</div>
             </div>
         </div>
     </section>
@@ -527,11 +595,11 @@
     <section class="page" id="page-settings">
         <div class="settings-grid">
             <div class="glass-card">
-                <div class="card-header"><h3>🤖 Kimi AI Configuration</h3></div>
+                <div class="card-header"><h3>🤖 Zen AI Configuration</h3></div>
                 <div class="settings-group">
                     <label class="settings-label">Model Name</label>
-                    <input type="text" class="settings-input mono" value="@cf/moonshotai/kimi-k2.7-code" id="setting-model" readonly>
-                    <p class="settings-hint">Hosted on Cloudflare Workers AI. Uses the rotating priority pool first, then cooldown-aware fallbacks.</p>
+                    <input type="text" class="settings-input mono" value="big-pickle (free)" id="setting-model" readonly>
+                    <p class="settings-hint">Served by OpenCode Zen. If the network is unavailable, profiles fall back to the built-in local generator — creation never fails because of AI.</p>
                 </div>
                 <div class="settings-group">
                     <label class="settings-label">Credential Protection</label>
@@ -539,10 +607,10 @@
                     <p class="settings-hint">Credential storage is supported on Windows only, using user-scoped DPAPI encryption. Tokens are never displayed here.</p>
                 </div>
                 <div class="settings-group">
-                    <label class="settings-label">Kimi Generation Policy</label>
+                    <label class="settings-label">Zen Generation Policy</label>
                     <div class="toggle-row">
-                        <div class="toggle active" title="The primary create flow requests Kimi AI"></div>
-                        <span class="text-success status-copy">PRIMARY CREATE FLOW — Kimi AI requested</span>
+                        <div class="toggle active" title="The primary create flow requests OpenCode Zen"></div>
+                        <span class="text-success status-copy">PRIMARY CREATE FLOW — Zen AI requested</span>
                     </div>
                 </div>
             </div>
@@ -588,7 +656,7 @@
                 <div class="info-list">
                     <div class="info-row"><span>Backend</span><span class="mono">FastAPI + Uvicorn</span></div>
                     <div class="info-row"><span>Browser Engine</span><span class="mono">Playwright Chromium</span></div>
-                    <div class="info-row"><span>AI Provider</span><span class="mono">Cloudflare Workers AI</span></div>
+                    <div class="info-row"><span>AI Provider</span><span class="mono">OpenCode Zen (free)</span></div>
                     <div class="info-row"><span>Stealth Library</span><span class="mono">playwright-stealth</span></div>
                     <div class="info-row"><span>Proxy Geo Sync</span><span class="mono">ip-api.com</span></div>
                 </div>
@@ -604,7 +672,7 @@
         <div class="modal-header">
             <div>
                 <h2 class="modal-title" id="create-modal-title">Generate AI Profile</h2>
-                <p class="modal-subtitle">Powered by Kimi AI via Cloudflare Workers</p>
+                <p class="modal-subtitle">Powered by OpenCode Zen free models</p>
             </div>
             <button class="modal-close" data-action="closeCreateModal" aria-label="Close profile creation dialog" title="Close">✕</button>
         </div>
@@ -671,7 +739,7 @@
                 <div class="kimi-notice top-margin">
                     <div class="kimi-icon">AI</div>
                     <div>
-                        <strong>Powered by Kimi AI</strong>
+                        <strong>Powered by OpenCode Zen</strong>
                         <p>A coherent, host-matched browser profile will be generated from a realistic device class. Bulk creates apply the same PIN, proxy, and stealth settings to every profile.</p>
                     </div>
                 </div>
@@ -735,8 +803,8 @@
                 <div class="progress-step" id="step-1">
                     <div class="step-icon spinner"></div>
                     <div class="step-text">
-                        <div class="step-title">Calling Kimi AI</div>
-                        <div class="step-sub">Generating fingerprint via @cf/moonshotai/kimi-k2.7-code...</div>
+                        <div class="step-title">Calling Zen AI</div>
+                        <div class="step-sub">Generating fingerprint via big-pickle (free)...</div>
                     </div>
                 </div>
                 <div class="progress-step pending" id="step-2">
@@ -757,7 +825,7 @@
                     <div class="step-icon"></div>
                     <div class="step-text">
                         <div class="step-title">AI Validation</div>
-                        <div class="step-sub">Final Kimi AI profile audit...</div>
+                        <div class="step-sub">Final AI profile audit...</div>
                     </div>
                 </div>
             </div>
@@ -1184,6 +1252,53 @@
     </div>
 </div>
 
-<script src="app.js?v=1.7"></script>
+<!-- MODAL: DIRECT URL LAUNCH -->
+<div class="modal-overlay" id="url-launch-modal" role="dialog" aria-modal="true" aria-labelledby="url-launch-modal-title" aria-hidden="true">
+    <div class="modal glass-card modal-500">
+        <div class="modal-header">
+            <h3 id="url-launch-modal-title">🔗 Launch Profile with Target URL</h3>
+            <button class="modal-close" data-action="closeUrlLaunchModal" aria-label="Close">✕</button>
+        </div>
+        <div class="modal-body">
+            <p class="muted-copy">Browser will launch in stealth mode and navigate directly to this URL upon boot.</p>
+            <div class="form-group">
+                <label class="form-label" for="url-launch-input">Target URL</label>
+                <input type="url" id="url-launch-input" class="form-input" placeholder="https://example.com/login" autocomplete="off">
+            </div>
+        </div>
+        <div class="modal-footer modal-footer-spaced">
+            <button class="btn-secondary" data-action="closeUrlLaunchModal">Cancel</button>
+            <button class="btn-primary" id="btn-confirm-url-launch" data-action="submitUrlLaunch">▶ Launch Now</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: IMPORT PROFILES (JSON) -->
+<div class="modal-overlay" id="import-profiles-modal" role="dialog" aria-modal="true" aria-labelledby="import-profiles-modal-title" aria-hidden="true">
+    <div class="modal glass-card modal-md">
+        <div class="modal-header">
+            <h3 id="import-profiles-modal-title">📤 Import Profiles (JSON)</h3>
+            <button class="modal-close" data-action="closeImportModal" aria-label="Close">✕</button>
+        </div>
+        <div class="modal-body">
+            <p class="muted-copy">Paste exported profile JSON or select a <span class="mono">.json</span> file to batch import.</p>
+            <div class="form-group">
+                <label class="form-label" for="import-file-input">Choose JSON File</label>
+                <input type="file" id="import-file-input" class="form-input" accept=".json" data-action="handleImportFileUpload">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="import-json-textarea">Or Paste JSON Data</label>
+                <textarea id="import-json-textarea" class="form-input mono" rows="6" placeholder='[{"name": "Imported Profile", "os": "Windows"}]'></textarea>
+            </div>
+            <div id="import-status-msg" class="form-hint" aria-live="polite"></div>
+        </div>
+        <div class="modal-footer modal-footer-spaced">
+            <button class="btn-secondary" data-action="closeImportModal">Cancel</button>
+            <button class="btn-primary" id="btn-confirm-import" data-action="submitImportProfiles">Import Profiles</button>
+        </div>
+    </div>
+</div>
+
+<script src="app.js?v=2.1"></script>
 </body>
 </html>

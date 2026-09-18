@@ -1,9 +1,10 @@
-"""OpenCode Zen (DeepSeek) fingerprint-provider tests.
+"""OpenCode Zen fingerprint-provider tests.
 
 The zen provider is the PRIMARY attempt in the fingerprint cascade and uses
-the free DeepSeek model by default (deepseek-v4-flash-free). These tests pin
-the key discovery, the request shape, provenance tagging, and the cascade
-ordering without making live network calls.
+the fastest live-tested free model by default (laguna-s-2.1-free) with a
+fallback chain of other proven free models. These tests pin the key
+discovery, the request shape, provenance tagging, and the cascade ordering
+without making live network calls.
 """
 from __future__ import annotations
 
@@ -16,6 +17,7 @@ from unittest.mock import AsyncMock, Mock, patch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from backend import ai_generator
+from backend import browser_manager
 
 
 def _valid_ai_response(extra: dict | None = None) -> dict:
@@ -192,16 +194,16 @@ class ZenCallTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(result)
         request_json = post.await_args.kwargs["json"]
         self.assertEqual(request_json["model"], ai_generator.ZEN_MODEL)
-        self.assertEqual(request_json["model"], "deepseek-v4-flash-free")
+        self.assertEqual(request_json["model"], "big-pickle")
         headers = post.await_args.kwargs["headers"]
         self.assertEqual(headers["Authorization"], "Bearer zen-test-key")
         self.assertEqual(post.await_args.args[0], ai_generator.ZEN_API_URL)
         self.assertEqual(result["_provenance"]["source"], "zen_deepseek")
-        self.assertEqual(result["_provenance"]["requested_model"], "deepseek-v4-flash-free")
+        self.assertEqual(result["_provenance"]["requested_model"], "big-pickle")
 
-    async def test_zend_model_env_override_wins(self):
+    async def test_fallback_models_env_override_wins(self):
         os.environ["ZEN_API_KEY"] = "zen-test-key"
-        os.environ["ZEN_MODEL"] = "deepseek-v4-pro"
+        os.environ["ZEN_FALLBACK_MODELS"] = "deepseek-v4-pro, nemotron-3-ultra-free"
         response_body = {
             "choices": [{"message": {"content": __import__("json").dumps(_valid_ai_response())}}]
         }
@@ -241,6 +243,47 @@ class ZenCallTests(unittest.IsolatedAsyncioTestCase):
             result = await ai_generator._call_zen_deepseek_api("Windows", "Chrome", 139)
 
         self.assertIsNone(result)
+
+    async def test_rate_limited_model_falls_through_to_next_model(self):
+        # laguna is rate-limited (429) — the chain must try the next model.
+        os.environ["ZEN_API_KEY"] = "zen-test-key"
+        os.environ["ZEN_FALLBACK_MODELS"] = "laguna-s-2.1-free, nemotron-3-ultra-free"
+
+        rate_limited = Mock()
+        rate_limited.status_code = 429
+
+        success = Mock()
+        success.status_code = 200
+        success.json.return_value = {
+            "choices": [{"message": {"content": __import__("json").dumps(_valid_ai_response())}}]
+        }
+
+        post = AsyncMock(side_effect=[rate_limited, success])
+
+        with patch.object(ai_generator, "_shared_client") as client:
+            client.post = post
+            result = await ai_generator._call_zen_deepseek_api("Windows", "Chrome", 139)
+
+        self.assertIsNotNone(result)
+        calls = [c.kwargs["json"]["model"] for c in post.await_args_list]
+        self.assertEqual(calls, ["laguna-s-2.1-free", "nemotron-3-ultra-free"])
+        self.assertEqual(result["_provenance"]["requested_model"], "nemotron-3-ultra-free")
+
+    async def test_all_models_rate_limited_returns_none(self):
+        os.environ["ZEN_API_KEY"] = "zen-test-key"
+        os.environ["ZEN_FALLBACK_MODELS"] = "laguna-s-2.1-free, nemotron-3-ultra-free"
+
+        rate_limited = Mock()
+        rate_limited.status_code = 429
+
+        post = AsyncMock(return_value=rate_limited)
+
+        with patch.object(ai_generator, "_shared_client") as client:
+            client.post = post
+            result = await ai_generator._call_zen_deepseek_api("Windows", "Chrome", 139)
+
+        self.assertIsNone(result)
+        self.assertEqual(len(post.await_args_list), 2)
 
     async def test_winner_cancels_pending_tasks(self):
         # Regression: once one key wins, the remaining in-flight requests in the
@@ -303,26 +346,68 @@ class ZenCascadeOrderTests(unittest.IsolatedAsyncioTestCase):
         direct.assert_not_awaited()
         racing.assert_not_awaited()
 
-    async def test_zen_failure_falls_through_to_mistral(self):
-        mistral_result = {"source": "mistral_api"}
+    async def test_zen_failure_falls_through_to_local_generator(self):
         with patch.object(
             ai_generator, "_call_zen_deepseek_api", new=AsyncMock(return_value=None)
         ) as zen, patch.object(
-            ai_generator, "_call_mistral_api", new=AsyncMock(return_value=mistral_result)
+            ai_generator, "_call_mistral_api", new=AsyncMock()
         ) as mistral, patch.object(
             ai_generator, "_call_direct_cloudflare", new=AsyncMock()
         ) as direct, patch.object(
             ai_generator, "_call_via_racing_proxy", new=AsyncMock()
         ) as racing, patch.object(
+            ai_generator, "generate_fingerprint_fallback",
+            return_value={"os": "Windows", "_is_fallback": True},
+        ), patch.object(
             ai_generator, "sanitize_native_surface_fields", side_effect=lambda value: value
         ):
             result = await ai_generator.generate_fingerprint_ai("Windows", "Chrome", 139)
 
-        self.assertEqual(result, mistral_result)
         zen.assert_awaited_once()
-        mistral.assert_awaited_once()
+        self.assertEqual(result["_provenance"]["source"], "local_fallback")
+        self.assertTrue(result["_provenance"]["verified"])
+        # Legacy Kimi/Cloudflare/Mistral providers must never be contacted.
+        mistral.assert_not_awaited()
         direct.assert_not_awaited()
         racing.assert_not_awaited()
+
+
+class ZenProvenanceLaunchTests(unittest.TestCase):
+    def _profile(self, source="zen_deepseek", model="laguna-s-2.1-free", verified=True, fingerprint=None):
+        return {
+            "fingerprint": fingerprint if fingerprint is not None else _valid_ai_response(),
+            "ai_provenance": {
+                "source": source,
+                "requested_model": model,
+                "verified": verified,
+            },
+            "verification_status": "verified",
+        }
+
+    @patch.object(browser_manager, "_is_explicit_test_environment", return_value=False)
+    def test_zen_laguna_model_is_approved(self, _env):
+        self.assertTrue(browser_manager._profile_has_verified_provenance(self._profile()))
+
+    @patch.object(browser_manager, "_is_explicit_test_environment", return_value=False)
+    def test_zen_nemotron_and_muse_models_are_approved(self, _env):
+        for model in ("nemotron-3-ultra-free", "muse-spark-1.2"):
+            self.assertTrue(browser_manager._profile_has_verified_provenance(self._profile(model=model)))
+
+    @patch.object(browser_manager, "_is_explicit_test_environment", return_value=False)
+    def test_zen_unknown_model_is_rejected(self, _env):
+        self.assertFalse(browser_manager._profile_has_verified_provenance(self._profile(model="gpt-4o")))
+
+    @patch.object(browser_manager, "_is_explicit_test_environment", return_value=False)
+    def test_unverified_zen_provenance_is_rejected(self, _env):
+        self.assertFalse(browser_manager._profile_has_verified_provenance(self._profile(verified=False)))
+
+    @patch.object(browser_manager, "_is_explicit_test_environment", return_value=False)
+    def test_non_zen_source_is_rejected(self, _env):
+        self.assertFalse(browser_manager._profile_has_verified_provenance(self._profile(source="unknown_source")))
+
+    @patch.object(browser_manager, "_is_explicit_test_environment", return_value=True)
+    def test_test_environment_always_allows(self, _env):
+        self.assertTrue(browser_manager._profile_has_verified_provenance(self._profile(source="unknown_source")))
 
 
 if __name__ == "__main__":

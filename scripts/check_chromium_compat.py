@@ -26,6 +26,33 @@ def version_tuple(value: str) -> tuple[int, ...]:
 def main() -> int:
     manifest_path = Path(__file__).resolve().parents[1] / "backend" / "chromium_compat.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    # The gate approves the Chromium SHIPPED with the app. A user-configured
+    # real-Chrome engine (GHOSTBROWSER_CHROMIUM_BINARY) must not influence it.
+    # Resolve the shipped browser explicitly: dist bundle > repo bundle >
+    # highest-revision Playwright cache entry.
+    import os
+    os.environ.pop("GHOSTBROWSER_CHROMIUM_BINARY", None)
+    repo_root = Path(__file__).resolve().parents[1]
+    shipped_candidates = [
+        repo_root / "dist" / "GhostBrowser" / "playwright-browsers" / "chrome-win64" / "chrome.exe",
+        repo_root / "playwright-browsers" / "chrome-win64" / "chrome.exe",
+    ]
+    cache_root = Path(os.environ.get("LOCALAPPDATA", "")) / "ms-playwright"
+    if cache_root.is_dir():
+        revisions = sorted(
+            (p for p in cache_root.iterdir() if p.name.startswith("chromium-")),
+            key=lambda p: int(p.name.rsplit("-", 1)[-1]) if p.name.rsplit("-", 1)[-1].isdigit() else 0,
+            reverse=True,
+        )
+        for rev in revisions:
+            for sub in ("chrome-win64", "chrome-win"):
+                shipped_candidates.append(rev / sub / "chrome.exe")
+    shipped = next((p for p in shipped_candidates if p.is_file()), None)
+    if shipped:
+        os.environ["GHOSTBROWSER_CHROMIUM_BINARY"] = str(shipped)
+    from backend import config as _config
+    _config._cached_chromium_version = None
+    _config._cached_chromium_path = None
     chromium_version = get_installed_chromium_version()
     chromium_major = get_installed_chromium_major_version()
     playwright_version = version("playwright")

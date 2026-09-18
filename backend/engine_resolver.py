@@ -10,8 +10,29 @@ from __future__ import annotations
 
 import os
 import platform
+import sys
 from pathlib import Path
 from typing import Optional
+
+
+def _frozen_bundled_candidate() -> Optional[Path]:
+    """Chromium shipped next to the executable in frozen (PyInstaller) builds."""
+    if not getattr(sys, "frozen", False):
+        return None
+    base = Path(sys.executable).parent / "playwright-browsers"
+    if platform.system() == "Windows":
+        candidates = [base / "chrome-win64" / "chrome.exe", base / "chrome-win" / "chrome.exe"]
+    elif platform.system() == "Darwin":
+        candidates = [
+            base / "chrome-mac" / "Chromium.app" / "Contents" / "MacOS" / "Chromium",
+            base / "chrome-mac-arm64" / "Chromium.app" / "Contents" / "MacOS" / "Chromium",
+        ]
+    else:
+        candidates = [base / "chrome-linux64" / "chrome", base / "chrome-linux" / "chrome"]
+    for candidate in candidates:
+        if _is_executable(candidate):
+            return candidate
+    return None
 
 
 def _is_executable(path: Path) -> bool:
@@ -57,6 +78,10 @@ def get_chromium_executable_path() -> str:
     if env_candidate:
         return str(env_candidate)
 
+    bundled = _frozen_bundled_candidate()
+    if bundled:
+        return str(bundled)
+
     try:
         from playwright.sync_api import sync_playwright  # type: ignore
     except Exception as exc:  # pragma: no cover - import failure path
@@ -84,6 +109,10 @@ async def get_chromium_executable_path_async() -> str:
     env_candidate = _resolve_from_env()
     if env_candidate:
         return str(env_candidate)
+
+    bundled = _frozen_bundled_candidate()
+    if bundled:
+        return str(bundled)
 
     try:
         from playwright.async_api import async_playwright  # type: ignore

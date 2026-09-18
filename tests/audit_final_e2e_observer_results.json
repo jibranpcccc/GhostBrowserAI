@@ -1,0 +1,1197 @@
+{
+  "ts": "2026-08-23T09:28:44.646390+00:00",
+  "verdict": "READY",
+  "pass": 97,
+  "fail": 0,
+  "failed_checks": [],
+  "tables": {
+    "fingerprint": {
+      "obs-ny": {
+        "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+        "platform": "Windows",
+        "hardwareConcurrency": 8,
+        "deviceMemory": 16,
+        "language": "en-US",
+        "languages": [
+          "en-US",
+          "en"
+        ],
+        "tz": "America/New_York",
+        "tzOffset": 240,
+        "screen_wh": "1920x1080",
+        "dpr": 1,
+        "webgl_vendor": "Google Inc. (NVIDIA)",
+        "webgl_renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11)",
+        "audioHash": 3636290221,
+        "canvas_hash": "48d33acfc06c5243",
+        "plugins_len": 5,
+        "maxTouchPoints": 1,
+        "webdriver": false,
+        "vendor": "Google Inc.",
+        "product": "Gecko",
+        "perf_heap_limit": 17179869184,
+        "uaData_platform": "Windows",
+        "uaHigh_arch": "x86",
+        "uaHigh_bitness": "64",
+        "uaHigh_fullVer": "149.0.7827.55",
+        "connection": {
+          "effectiveType": "4g",
+          "downlink": 68.6,
+          "rtt": 35,
+          "saveData": false,
+          "type": "wifi"
+        },
+        "mm_pointer": true,
+        "mm_hover": true,
+        "chrome_present": true,
+        "fontCheck": "function",
+        "speech": {
+          "present": true,
+          "voiceCount": 4,
+          "sample": [
+            "Microsoft David Desktop",
+            "Microsoft Zira Desktop",
+            "Microsoft Hazel Desktop"
+          ]
+        },
+        "battery": {
+          "level": 0.71,
+          "charging": true,
+          "chargingTime": 1005,
+          "dischargingTime": Infinity
+        },
+        "mediaDevs": [
+          {
+            "kind": "audioinput",
+            "label": "",
+            "deviceId": "fake-38a\u2026"
+          },
+          {
+            "kind": "audiooutput",
+            "label": "",
+            "deviceId": "fake-344\u2026"
+          },
+          {
+            "kind": "videoinput",
+            "label": "",
+            "deviceId": "fake-1a1\u2026"
+          }
+        ],
+        "permissions": {
+          "notifications": "prompt",
+          "geolocation": "prompt",
+          "camera": "prompt"
+        },
+        "worker": {
+          "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+          "platform": "Windows",
+          "hardwareConcurrency": 8,
+          "language": "en-US",
+          "languages": [
+            "en-US",
+            "en"
+          ],
+          "webdriver": null,
+          "vendor": null,
+          "product": "Gecko",
+          "deviceMemory": 16,
+          "userAgentData": null
+        },
+        "popup": {
+          "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+          "platform": "Windows",
+          "hardwareConcurrency": 8,
+          "language": "en-US",
+          "languages": [
+            "en-US",
+            "en"
+          ],
+          "webdriver": false,
+          "vendor": "Google Inc.",
+          "deviceMemory": 16,
+          "dpr": 1,
+          "screen": [
+            1920,
+            1080
+          ],
+          "chrome": "object"
+        },
+        "vendorSub": "",
+        "oscpu": "__undefined__",
+        "productSub": "20030107",
+        "orientation": {
+          "type": "landscape-primary",
+          "angle": 0
+        },
+        "canvasStable": true,
+        "mimeTypes": 5,
+        "plugins": {
+          "length": 5,
+          "items": [
+            {
+              "name": "Widevine Content Decryption Module",
+              "filename": "widevinecdmadapter.dll",
+              "description": "Widevine Content Decryption Module"
+            },
+            {
+              "name": "Google Update",
+              "filename": "npGoogleUpdate3.dll",
+              "description": "Google Update"
+            },
+            {
+              "name": "Microsoft Office Live Plug-in",
+              "filename": "npOLW.dll",
+              "description": "Microsoft Office Live Plug-in"
+            },
+            {
+              "name": "Chrome PDF Plugin",
+              "filename": "internal-pdf-viewer.dll",
+              "description": "Portable Document Format plugin"
+            },
+            {
+              "name": "Native Client module",
+              "filename": "ppGoogleNaClPluginChrome.dll",
+              "description": "Native Client module"
+            }
+          ]
+        },
+        "brandsHeader": "\"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sendBeaconNative": true,
+        "navEntries": [
+          {
+            "type": "navigate",
+            "transferSize": 0,
+            "encodedBodySize": 0,
+            "nextHopProtocol": ""
+          }
+        ]
+      },
+      "obs-berlin": {
+        "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+        "platform": "Windows",
+        "hardwareConcurrency": 12,
+        "deviceMemory": 32,
+        "language": "de-DE",
+        "languages": [
+          "de-DE",
+          "de",
+          "en"
+        ],
+        "tz": "Europe/Berlin",
+        "tzOffset": -120,
+        "screen_wh": "2560x1440",
+        "dpr": 1,
+        "webgl_vendor": "Google Inc. (NVIDIA)",
+        "webgl_renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Direct3D11)",
+        "audioHash": 3130808846,
+        "canvas_hash": "10dbc3805ad21206",
+        "plugins_len": 5,
+        "maxTouchPoints": 0,
+        "webdriver": false,
+        "vendor": "Google Inc.",
+        "product": "Gecko",
+        "perf_heap_limit": 34359738368,
+        "uaData_platform": "Windows",
+        "uaHigh_arch": "x86",
+        "uaHigh_bitness": "64",
+        "uaHigh_fullVer": "149.0.7827.55",
+        "connection": {
+          "effectiveType": "4g",
+          "downlink": 49.7,
+          "rtt": 24,
+          "saveData": false,
+          "type": "wifi"
+        },
+        "mm_pointer": true,
+        "mm_hover": true,
+        "chrome_present": true,
+        "fontCheck": "function",
+        "speech": {
+          "present": true,
+          "voiceCount": 4,
+          "sample": [
+            "Microsoft David Desktop",
+            "Microsoft Zira Desktop",
+            "Microsoft Hazel Desktop"
+          ]
+        },
+        "battery": {
+          "level": 0.88,
+          "charging": false,
+          "chargingTime": 0,
+          "dischargingTime": 9780
+        },
+        "mediaDevs": [
+          {
+            "kind": "audioinput",
+            "label": "",
+            "deviceId": "fake-5a5\u2026"
+          },
+          {
+            "kind": "audiooutput",
+            "label": "",
+            "deviceId": "fake-4d4\u2026"
+          },
+          {
+            "kind": "videoinput",
+            "label": "",
+            "deviceId": "fake-331\u2026"
+          }
+        ],
+        "permissions": {
+          "notifications": "prompt",
+          "geolocation": "prompt",
+          "camera": "prompt"
+        },
+        "worker": {
+          "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+          "platform": "Windows",
+          "hardwareConcurrency": 12,
+          "language": "de-DE",
+          "languages": [
+            "de-DE",
+            "de",
+            "en"
+          ],
+          "webdriver": null,
+          "vendor": null,
+          "product": "Gecko",
+          "deviceMemory": 32,
+          "userAgentData": null
+        },
+        "popup": {
+          "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+          "platform": "Windows",
+          "hardwareConcurrency": 12,
+          "language": "de-DE",
+          "languages": [
+            "de-DE",
+            "de",
+            "en"
+          ],
+          "webdriver": false,
+          "vendor": "Google Inc.",
+          "deviceMemory": 32,
+          "dpr": 1,
+          "screen": [
+            2560,
+            1440
+          ],
+          "chrome": "object"
+        },
+        "vendorSub": "",
+        "oscpu": "__undefined__",
+        "productSub": "20030107",
+        "orientation": {
+          "type": "landscape-primary",
+          "angle": 0
+        },
+        "canvasStable": true,
+        "mimeTypes": 5,
+        "plugins": {
+          "length": 5,
+          "items": [
+            {
+              "name": "Google Update",
+              "filename": "npGoogleUpdate3.dll",
+              "description": "Google Update"
+            },
+            {
+              "name": "Microsoft Office Live Plug-in",
+              "filename": "npOLW.dll",
+              "description": "Microsoft Office Live Plug-in"
+            },
+            {
+              "name": "Chrome PDF Plugin",
+              "filename": "internal-pdf-viewer.dll",
+              "description": "Portable Document Format plugin"
+            },
+            {
+              "name": "Native Client module",
+              "filename": "ppGoogleNaClPluginChrome.dll",
+              "description": "Native Client module"
+            },
+            {
+              "name": "Widevine Content Decryption Module",
+              "filename": "widevinecdmadapter.dll",
+              "description": "Widevine Content Decryption Module"
+            }
+          ]
+        },
+        "brandsHeader": "\"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sendBeaconNative": true,
+        "navEntries": [
+          {
+            "type": "navigate",
+            "transferSize": 0,
+            "encodedBodySize": 0,
+            "nextHopProtocol": ""
+          }
+        ]
+      },
+      "obs-tokyo": {
+        "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+        "platform": "Windows",
+        "hardwareConcurrency": 16,
+        "deviceMemory": 64,
+        "language": "ja-JP",
+        "languages": [
+          "ja-JP",
+          "ja",
+          "en"
+        ],
+        "tz": "Asia/Tokyo",
+        "tzOffset": -540,
+        "screen_wh": "3440x1440",
+        "dpr": 1,
+        "webgl_vendor": "Google Inc. (NVIDIA)",
+        "webgl_renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 Direct3D11)",
+        "audioHash": 3233448398,
+        "canvas_hash": "c753e8deb8b6490b",
+        "plugins_len": 5,
+        "maxTouchPoints": 0,
+        "webdriver": false,
+        "vendor": "Google Inc.",
+        "product": "Gecko",
+        "perf_heap_limit": 68719476736,
+        "uaData_platform": "Windows",
+        "uaHigh_arch": "x86",
+        "uaHigh_bitness": "64",
+        "uaHigh_fullVer": "149.0.7827.55",
+        "connection": {
+          "effectiveType": "4g",
+          "downlink": 80.9,
+          "rtt": 40,
+          "saveData": false,
+          "type": "wifi"
+        },
+        "mm_pointer": true,
+        "mm_hover": true,
+        "chrome_present": true,
+        "fontCheck": "function",
+        "speech": {
+          "present": true,
+          "voiceCount": 4,
+          "sample": [
+            "Microsoft David Desktop",
+            "Microsoft Zira Desktop",
+            "Microsoft Hazel Desktop"
+          ]
+        },
+        "battery": {
+          "level": 0.66,
+          "charging": false,
+          "chargingTime": 0,
+          "dischargingTime": 8029
+        },
+        "mediaDevs": [
+          {
+            "kind": "audioinput",
+            "label": "",
+            "deviceId": "fake-828\u2026"
+          },
+          {
+            "kind": "audiooutput",
+            "label": "",
+            "deviceId": "fake-757\u2026"
+          },
+          {
+            "kind": "videoinput",
+            "label": "",
+            "deviceId": "fake-156\u2026"
+          }
+        ],
+        "permissions": {
+          "notifications": "prompt",
+          "geolocation": "prompt",
+          "camera": "prompt"
+        },
+        "worker": {
+          "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+          "platform": "Windows",
+          "hardwareConcurrency": 16,
+          "language": "ja-JP",
+          "languages": [
+            "ja-JP",
+            "ja",
+            "en"
+          ],
+          "webdriver": null,
+          "vendor": null,
+          "product": "Gecko",
+          "deviceMemory": 64,
+          "userAgentData": null
+        },
+        "popup": {
+          "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+          "platform": "Windows",
+          "hardwareConcurrency": 16,
+          "language": "ja-JP",
+          "languages": [
+            "ja-JP",
+            "ja",
+            "en"
+          ],
+          "webdriver": false,
+          "vendor": "Google Inc.",
+          "deviceMemory": 64,
+          "dpr": 1,
+          "screen": [
+            3440,
+            1440
+          ],
+          "chrome": "object"
+        },
+        "vendorSub": "",
+        "oscpu": "__undefined__",
+        "productSub": "20030107",
+        "orientation": {
+          "type": "landscape-primary",
+          "angle": 0
+        },
+        "canvasStable": true,
+        "mimeTypes": 5,
+        "plugins": {
+          "length": 5,
+          "items": [
+            {
+              "name": "Widevine Content Decryption Module",
+              "filename": "widevinecdmadapter.dll",
+              "description": "Widevine Content Decryption Module"
+            },
+            {
+              "name": "Google Update",
+              "filename": "npGoogleUpdate3.dll",
+              "description": "Google Update"
+            },
+            {
+              "name": "Microsoft Office Live Plug-in",
+              "filename": "npOLW.dll",
+              "description": "Microsoft Office Live Plug-in"
+            },
+            {
+              "name": "Chrome PDF Plugin",
+              "filename": "internal-pdf-viewer.dll",
+              "description": "Portable Document Format plugin"
+            },
+            {
+              "name": "Native Client module",
+              "filename": "ppGoogleNaClPluginChrome.dll",
+              "description": "Native Client module"
+            }
+          ]
+        },
+        "brandsHeader": "\"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sendBeaconNative": true,
+        "navEntries": [
+          {
+            "type": "navigate",
+            "transferSize": 0,
+            "encodedBodySize": 0,
+            "nextHopProtocol": ""
+          }
+        ]
+      }
+    },
+    "pairwise": {
+      "obs-ny vs obs-berlin": {
+        "differ": [
+          "hardwareConcurrency",
+          "deviceMemory",
+          "language",
+          "tz",
+          "tzOffset",
+          "screen_wh",
+          "canvas_hash",
+          "audioHash",
+          "webgl_renderer",
+          "perf_heap_limit"
+        ],
+        "same": []
+      },
+      "obs-ny vs obs-tokyo": {
+        "differ": [
+          "hardwareConcurrency",
+          "deviceMemory",
+          "language",
+          "tz",
+          "tzOffset",
+          "screen_wh",
+          "canvas_hash",
+          "audioHash",
+          "webgl_renderer",
+          "perf_heap_limit"
+        ],
+        "same": []
+      },
+      "obs-berlin vs obs-tokyo": {
+        "differ": [
+          "hardwareConcurrency",
+          "deviceMemory",
+          "language",
+          "tz",
+          "tzOffset",
+          "screen_wh",
+          "canvas_hash",
+          "audioHash",
+          "webgl_renderer",
+          "perf_heap_limit"
+        ],
+        "same": []
+      }
+    },
+    "switch": {
+      "A_first": {
+        "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+        "platform": "Windows",
+        "hardwareConcurrency": 8,
+        "deviceMemory": 16,
+        "language": "en-US",
+        "languages": [
+          "en-US",
+          "en"
+        ],
+        "tz": "America/New_York",
+        "tzOffset": 240,
+        "screen_wh": "1920x1080",
+        "dpr": 1,
+        "webgl_renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11)",
+        "audioHash": 3636290221,
+        "canvas_hash": "48d33acfc06c5243",
+        "plugins_len": 5,
+        "maxTouchPoints": 1
+      },
+      "B": {
+        "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+        "platform": "Windows",
+        "hardwareConcurrency": 12,
+        "deviceMemory": 32,
+        "language": "de-DE",
+        "languages": [
+          "de-DE",
+          "de",
+          "en"
+        ],
+        "tz": "Europe/Berlin",
+        "tzOffset": -120,
+        "screen_wh": "2560x1440",
+        "dpr": 1,
+        "webgl_renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Direct3D11)",
+        "audioHash": 3130808846,
+        "canvas_hash": "10dbc3805ad21206",
+        "plugins_len": 5,
+        "maxTouchPoints": 0
+      },
+      "A_relaunch": {
+        "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+        "platform": "Windows",
+        "hardwareConcurrency": 8,
+        "deviceMemory": 16,
+        "language": "en-US",
+        "languages": [
+          "en-US",
+          "en"
+        ],
+        "tz": "America/New_York",
+        "tzOffset": 240,
+        "screen_wh": "1920x1080",
+        "dpr": 1,
+        "webgl_renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11)",
+        "audioHash": 3263056900,
+        "canvas_hash": "48d33acfc06c5243",
+        "plugins_len": 5,
+        "maxTouchPoints": 1
+      },
+      "A_baseline": {
+        "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+        "platform": "Windows",
+        "hardwareConcurrency": 8,
+        "deviceMemory": 16,
+        "language": "en-US",
+        "languages": [
+          "en-US",
+          "en"
+        ],
+        "tz": "America/New_York",
+        "tzOffset": 240,
+        "screen_wh": "1920x1080",
+        "dpr": 1,
+        "webgl_renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11)",
+        "audioHash": 3636290221,
+        "canvas_hash": "48d33acfc06c5243",
+        "plugins_len": 5,
+        "maxTouchPoints": 1
+      }
+    },
+    "leak_probe_summary": {
+      "main": {
+        "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+        "platform": "Windows",
+        "hw": 16,
+        "lang": "ja-JP",
+        "webdriver": false,
+        "mem": 64,
+        "vendorSub": "",
+        "oscpu": "__undefined__",
+        "productSub": "20030107",
+        "connection": {
+          "effectiveType": "4g",
+          "downlink": 80.9,
+          "rtt": 40,
+          "saveData": false,
+          "type": "wifi"
+        },
+        "permissions": {
+          "notifications": "prompt",
+          "geolocation": "prompt",
+          "camera": "prompt"
+        },
+        "orientation": {
+          "type": "landscape-primary",
+          "angle": 0
+        }
+      },
+      "worker": {
+        "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+        "platform": "Windows",
+        "hardwareConcurrency": 16,
+        "language": "ja-JP",
+        "languages": [
+          "ja-JP",
+          "ja",
+          "en"
+        ],
+        "webdriver": null,
+        "vendor": null,
+        "product": "Gecko",
+        "deviceMemory": 64,
+        "userAgentData": null
+      },
+      "popup": {
+        "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+        "platform": "Windows",
+        "hardwareConcurrency": 16,
+        "language": "ja-JP",
+        "languages": [
+          "ja-JP",
+          "ja",
+          "en"
+        ],
+        "webdriver": false,
+        "vendor": "Google Inc.",
+        "deviceMemory": 64,
+        "dpr": 1,
+        "screen": [
+          3440,
+          1440
+        ],
+        "chrome": "object"
+      }
+    }
+  },
+  "leaks": [],
+  "risks": [
+    {
+      "level": "SHOULD-FIX",
+      "title": "No proxy in this audit path",
+      "detail": "GHOSTBROWSER_REQUIRE_PROXY=0; production IP/geo/WebRTC path not fully exercised with real proxy."
+    },
+    {
+      "level": "SHOULD-FIX",
+      "title": "Headless-only audit",
+      "detail": "force_headless=True; headed UI chrome/window chrome differences not fully covered."
+    },
+    {
+      "level": "NICE-TO-HAVE",
+      "title": "TLS/JA3 and HTTP/2 fingerprint not probed here",
+      "detail": "Client-hints header wire format and TLS stack need external scanner (e.g. creepjs/browserleaks)."
+    }
+  ],
+  "checks": [
+    {
+      "name": "obs-ny: webdriver falsy",
+      "ok": true,
+      "detail": "False"
+    },
+    {
+      "name": "obs-ny: vendor Google Inc.",
+      "ok": true,
+      "detail": "'Google Inc.'"
+    },
+    {
+      "name": "obs-ny: product Gecko",
+      "ok": true,
+      "detail": "'Gecko'"
+    },
+    {
+      "name": "obs-ny: hardwareConcurrency=8",
+      "ok": true,
+      "detail": "got=8"
+    },
+    {
+      "name": "obs-ny: deviceMemory=16",
+      "ok": true,
+      "detail": "got=16"
+    },
+    {
+      "name": "obs-ny: timezone=America/New_York",
+      "ok": true,
+      "detail": "got=America/New_York"
+    },
+    {
+      "name": "obs-ny: tzOffset matches IANA",
+      "ok": true,
+      "detail": "got=-240.0 exp=-240.0"
+    },
+    {
+      "name": "obs-ny: language=en-US",
+      "ok": true,
+      "detail": "got=en-US langs=['en-US', 'en']"
+    },
+    {
+      "name": "obs-ny: languages[0]==language",
+      "ok": true,
+      "detail": "lang=en-US langs=['en-US', 'en']"
+    },
+    {
+      "name": "obs-ny: screen=1920x1080",
+      "ok": true,
+      "detail": "got=1920x1080"
+    },
+    {
+      "name": "obs-ny: canvas stable (same probe)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "obs-ny: canvas stable across re-probe",
+      "ok": true,
+      "detail": "h1=48d33acfc06c5243 h2=48d33acfc06c5243"
+    },
+    {
+      "name": "obs-ny: plugins length==5",
+      "ok": true,
+      "detail": "5"
+    },
+    {
+      "name": "obs-ny: window.chrome present",
+      "ok": true,
+      "detail": "{'present': True, 'typeofChrome': 'object', 'keys': ['app', 'csi', 'loadTimes'], 'hasRuntime': False, 'hasCsi': True, 'hasLoadTimes': True, 'hasApp': True, 'webstore': None}"
+    },
+    {
+      "name": "obs-ny: FontFaceSet.check present",
+      "ok": true,
+      "detail": "'function'"
+    },
+    {
+      "name": "obs-ny: matchMedia pointer/hover desktop",
+      "ok": true,
+      "detail": "{'pointerFine': True, 'hoverHover': True, 'anyPointerCoarse': False, 'resolutionDpr': True, 'prefersColorSchemeDark': False}"
+    },
+    {
+      "name": "obs-ny: perf.memory jsHeapSizeLimit matches RAM",
+      "ok": true,
+      "detail": "got=17179869184 exp=17179869184"
+    },
+    {
+      "name": "obs-ny: getHighEntropyValues architecture/bitness",
+      "ok": true,
+      "detail": "{'brands': [{'brand': 'Chromium', 'version': '149'}, {'brand': 'Not)A;Brand', 'version': '24'}], 'mobile': False, 'platform': 'Windows', 'architecture': 'x86', 'bitness': '64', 'model': '', 'platformVersion': '19.0.0', 'uaFullVersion': '149.0.7827.55', 'fullVersionList': [{'brand': 'Chromium', 'version': '149.0.7827.55'}, {'brand': 'Not)A;Brand', 'version': '24.0.0.0'}], 'wow64': False}"
+    },
+    {
+      "name": "obs-ny: Chrome major in UA",
+      "ok": true,
+      "detail": "'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36'"
+    },
+    {
+      "name": "obs-ny: WebGL vendor/renderer present",
+      "ok": true,
+      "detail": "{'vendor': 'Google Inc. (NVIDIA)', 'renderer': 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11)', 'version': 'WebGL 1.0 (OpenGL ES 2.0 Chromium)', 'shadingLang': 'WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)', 'extensions': 11, 'getParameterNative': True}"
+    },
+    {
+      "name": "obs-ny: navigator.connection present",
+      "ok": true,
+      "detail": "{'effectiveType': '4g', 'downlink': 68.6, 'rtt': 35, 'saveData': False, 'type': 'wifi'}"
+    },
+    {
+      "name": "obs-berlin: webdriver falsy",
+      "ok": true,
+      "detail": "False"
+    },
+    {
+      "name": "obs-berlin: vendor Google Inc.",
+      "ok": true,
+      "detail": "'Google Inc.'"
+    },
+    {
+      "name": "obs-berlin: product Gecko",
+      "ok": true,
+      "detail": "'Gecko'"
+    },
+    {
+      "name": "obs-berlin: hardwareConcurrency=12",
+      "ok": true,
+      "detail": "got=12"
+    },
+    {
+      "name": "obs-berlin: deviceMemory=32",
+      "ok": true,
+      "detail": "got=32"
+    },
+    {
+      "name": "obs-berlin: timezone=Europe/Berlin",
+      "ok": true,
+      "detail": "got=Europe/Berlin"
+    },
+    {
+      "name": "obs-berlin: tzOffset matches IANA",
+      "ok": true,
+      "detail": "got=120.0 exp=120.0"
+    },
+    {
+      "name": "obs-berlin: language=de-DE",
+      "ok": true,
+      "detail": "got=de-DE langs=['de-DE', 'de', 'en']"
+    },
+    {
+      "name": "obs-berlin: languages[0]==language",
+      "ok": true,
+      "detail": "lang=de-DE langs=['de-DE', 'de', 'en']"
+    },
+    {
+      "name": "obs-berlin: screen=2560x1440",
+      "ok": true,
+      "detail": "got=2560x1440"
+    },
+    {
+      "name": "obs-berlin: canvas stable (same probe)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "obs-berlin: canvas stable across re-probe",
+      "ok": true,
+      "detail": "h1=10dbc3805ad21206 h2=10dbc3805ad21206"
+    },
+    {
+      "name": "obs-berlin: plugins length==5",
+      "ok": true,
+      "detail": "5"
+    },
+    {
+      "name": "obs-berlin: window.chrome present",
+      "ok": true,
+      "detail": "{'present': True, 'typeofChrome': 'object', 'keys': ['app', 'csi', 'loadTimes'], 'hasRuntime': False, 'hasCsi': True, 'hasLoadTimes': True, 'hasApp': True, 'webstore': None}"
+    },
+    {
+      "name": "obs-berlin: FontFaceSet.check present",
+      "ok": true,
+      "detail": "'function'"
+    },
+    {
+      "name": "obs-berlin: matchMedia pointer/hover desktop",
+      "ok": true,
+      "detail": "{'pointerFine': True, 'hoverHover': True, 'anyPointerCoarse': False, 'resolutionDpr': True, 'prefersColorSchemeDark': False}"
+    },
+    {
+      "name": "obs-berlin: perf.memory jsHeapSizeLimit matches RAM",
+      "ok": true,
+      "detail": "got=34359738368 exp=34359738368"
+    },
+    {
+      "name": "obs-berlin: getHighEntropyValues architecture/bitness",
+      "ok": true,
+      "detail": "{'brands': [{'brand': 'Chromium', 'version': '149'}, {'brand': 'Not)A;Brand', 'version': '24'}], 'mobile': False, 'platform': 'Windows', 'architecture': 'x86', 'bitness': '64', 'model': '', 'platformVersion': '19.0.0', 'uaFullVersion': '149.0.7827.55', 'fullVersionList': [{'brand': 'Chromium', 'version': '149.0.7827.55'}, {'brand': 'Not)A;Brand', 'version': '24.0.0.0'}], 'wow64': False}"
+    },
+    {
+      "name": "obs-berlin: Chrome major in UA",
+      "ok": true,
+      "detail": "'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36'"
+    },
+    {
+      "name": "obs-berlin: WebGL vendor/renderer present",
+      "ok": true,
+      "detail": "{'vendor': 'Google Inc. (NVIDIA)', 'renderer': 'ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Direct3D11)', 'version': 'WebGL 1.0 (OpenGL ES 2.0 Chromium)', 'shadingLang': 'WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)', 'extensions': 11, 'getParameterNative': True}"
+    },
+    {
+      "name": "obs-berlin: navigator.connection present",
+      "ok": true,
+      "detail": "{'effectiveType': '4g', 'downlink': 49.7, 'rtt': 24, 'saveData': False, 'type': 'wifi'}"
+    },
+    {
+      "name": "obs-tokyo: webdriver falsy",
+      "ok": true,
+      "detail": "False"
+    },
+    {
+      "name": "obs-tokyo: vendor Google Inc.",
+      "ok": true,
+      "detail": "'Google Inc.'"
+    },
+    {
+      "name": "obs-tokyo: product Gecko",
+      "ok": true,
+      "detail": "'Gecko'"
+    },
+    {
+      "name": "obs-tokyo: hardwareConcurrency=16",
+      "ok": true,
+      "detail": "got=16"
+    },
+    {
+      "name": "obs-tokyo: deviceMemory=64",
+      "ok": true,
+      "detail": "got=64"
+    },
+    {
+      "name": "obs-tokyo: timezone=Asia/Tokyo",
+      "ok": true,
+      "detail": "got=Asia/Tokyo"
+    },
+    {
+      "name": "obs-tokyo: tzOffset matches IANA",
+      "ok": true,
+      "detail": "got=540.0 exp=540.0"
+    },
+    {
+      "name": "obs-tokyo: language=ja-JP",
+      "ok": true,
+      "detail": "got=ja-JP langs=['ja-JP', 'ja', 'en']"
+    },
+    {
+      "name": "obs-tokyo: languages[0]==language",
+      "ok": true,
+      "detail": "lang=ja-JP langs=['ja-JP', 'ja', 'en']"
+    },
+    {
+      "name": "obs-tokyo: screen=3440x1440",
+      "ok": true,
+      "detail": "got=3440x1440"
+    },
+    {
+      "name": "obs-tokyo: canvas stable (same probe)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "obs-tokyo: canvas stable across re-probe",
+      "ok": true,
+      "detail": "h1=c753e8deb8b6490b h2=c753e8deb8b6490b"
+    },
+    {
+      "name": "obs-tokyo: plugins length==5",
+      "ok": true,
+      "detail": "5"
+    },
+    {
+      "name": "obs-tokyo: window.chrome present",
+      "ok": true,
+      "detail": "{'present': True, 'typeofChrome': 'object', 'keys': ['app', 'csi', 'loadTimes'], 'hasRuntime': False, 'hasCsi': True, 'hasLoadTimes': True, 'hasApp': True, 'webstore': None}"
+    },
+    {
+      "name": "obs-tokyo: FontFaceSet.check present",
+      "ok": true,
+      "detail": "'function'"
+    },
+    {
+      "name": "obs-tokyo: matchMedia pointer/hover desktop",
+      "ok": true,
+      "detail": "{'pointerFine': True, 'hoverHover': True, 'anyPointerCoarse': False, 'resolutionDpr': True, 'prefersColorSchemeDark': False}"
+    },
+    {
+      "name": "obs-tokyo: perf.memory jsHeapSizeLimit matches RAM",
+      "ok": true,
+      "detail": "got=68719476736 exp=68719476736"
+    },
+    {
+      "name": "obs-tokyo: getHighEntropyValues architecture/bitness",
+      "ok": true,
+      "detail": "{'brands': [{'brand': 'Chromium', 'version': '149'}, {'brand': 'Not)A;Brand', 'version': '24'}], 'mobile': False, 'platform': 'Windows', 'architecture': 'x86', 'bitness': '64', 'model': '', 'platformVersion': '19.0.0', 'uaFullVersion': '149.0.7827.55', 'fullVersionList': [{'brand': 'Chromium', 'version': '149.0.7827.55'}, {'brand': 'Not)A;Brand', 'version': '24.0.0.0'}], 'wow64': False}"
+    },
+    {
+      "name": "obs-tokyo: Chrome major in UA",
+      "ok": true,
+      "detail": "'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36'"
+    },
+    {
+      "name": "obs-tokyo: WebGL vendor/renderer present",
+      "ok": true,
+      "detail": "{'vendor': 'Google Inc. (NVIDIA)', 'renderer': 'ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 Direct3D11)', 'version': 'WebGL 1.0 (OpenGL ES 2.0 Chromium)', 'shadingLang': 'WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)', 'extensions': 11, 'getParameterNative': True}"
+    },
+    {
+      "name": "obs-tokyo: navigator.connection present",
+      "ok": true,
+      "detail": "{'effectiveType': '4g', 'downlink': 80.9, 'rtt': 40, 'saveData': False, 'type': 'wifi'}"
+    },
+    {
+      "name": "pairwise obs-ny vs obs-berlin: core identity differs",
+      "ok": true,
+      "detail": "missing diffs=set() same=[] differ=['hardwareConcurrency', 'deviceMemory', 'language', 'tz', 'tzOffset', 'screen_wh', 'canvas_hash', 'audioHash', 'webgl_renderer', 'perf_heap_limit']"
+    },
+    {
+      "name": "pairwise obs-ny vs obs-berlin: audio differs",
+      "ok": true,
+      "detail": "3636290221 vs 3130808846"
+    },
+    {
+      "name": "pairwise obs-ny vs obs-tokyo: core identity differs",
+      "ok": true,
+      "detail": "missing diffs=set() same=[] differ=['hardwareConcurrency', 'deviceMemory', 'language', 'tz', 'tzOffset', 'screen_wh', 'canvas_hash', 'audioHash', 'webgl_renderer', 'perf_heap_limit']"
+    },
+    {
+      "name": "pairwise obs-ny vs obs-tokyo: audio differs",
+      "ok": true,
+      "detail": "3636290221 vs 3233448398"
+    },
+    {
+      "name": "pairwise obs-berlin vs obs-tokyo: core identity differs",
+      "ok": true,
+      "detail": "missing diffs=set() same=[] differ=['hardwareConcurrency', 'deviceMemory', 'language', 'tz', 'tzOffset', 'screen_wh', 'canvas_hash', 'audioHash', 'webgl_renderer', 'perf_heap_limit']"
+    },
+    {
+      "name": "pairwise obs-berlin vs obs-tokyo: audio differs",
+      "ok": true,
+      "detail": "3130808846 vs 3233448398"
+    },
+    {
+      "name": "switch: launch A",
+      "ok": true,
+      "detail": "{'status': 'success', 'message': 'Browser launched successfully'}"
+    },
+    {
+      "name": "switch: launch B",
+      "ok": true,
+      "detail": "{'status': 'success', 'message': 'Browser launched successfully'}"
+    },
+    {
+      "name": "switch: B distinct from A (hw/tz/screen)",
+      "ok": true,
+      "detail": "A=America/New_York/8/1920x1080 B=Europe/Berlin/12/2560x1440"
+    },
+    {
+      "name": "switch: B matches baseline B identity",
+      "ok": true,
+      "detail": "got tz=Europe/Berlin canvas=10dbc3805ad21206 exp canvas=10dbc3805ad21206"
+    },
+    {
+      "name": "switch: relaunch A",
+      "ok": true,
+      "detail": "{'status': 'success', 'message': 'Browser launched successfully'}"
+    },
+    {
+      "name": "switch: relaunch A restores OWN fingerprint (no bleed)",
+      "ok": true,
+      "detail": "got={America/New_York,8,1920x1080,48d33acfc06c5243} exp={America/New_York,8,1920x1080,48d33acfc06c5243}"
+    },
+    {
+      "name": "leak-hunt: launch C",
+      "ok": true,
+      "detail": "{'status': 'success', 'message': 'Browser launched successfully'}"
+    },
+    {
+      "name": "leak: webdriver falsy on main",
+      "ok": true,
+      "detail": "False"
+    },
+    {
+      "name": "leak: oscpu absent",
+      "ok": true,
+      "detail": "'__undefined__'"
+    },
+    {
+      "name": "leak: vendorSub empty/absent",
+      "ok": true,
+      "detail": "''"
+    },
+    {
+      "name": "leak: language == languages[0]",
+      "ok": true,
+      "detail": "language=ja-JP languages=['ja-JP', 'ja', 'en']"
+    },
+    {
+      "name": "leak: ScreenOrientation present",
+      "ok": true,
+      "detail": "{'type': 'landscape-primary', 'angle': 0}"
+    },
+    {
+      "name": "leak: DPR matchMedia coherent",
+      "ok": true,
+      "detail": "dpr=1 mm={'pointerFine': True, 'hoverHover': True, 'anyPointerCoarse': False, 'resolutionDpr': True, 'prefersColorSchemeDark': False}"
+    },
+    {
+      "name": "leak: mediaDevices no real labels",
+      "ok": true,
+      "detail": "count=3"
+    },
+    {
+      "name": "leak: permissions.query works",
+      "ok": true,
+      "detail": "{'notifications': 'prompt', 'geolocation': 'prompt', 'camera': 'prompt'}"
+    },
+    {
+      "name": "leak: sendBeacon present+native-looking",
+      "ok": true,
+      "detail": "type=function native=True"
+    },
+    {
+      "name": "leak: connection.downlink in sane range",
+      "ok": true,
+      "detail": "{'effectiveType': '4g', 'downlink': 80.9, 'rtt': 40, 'saveData': False, 'type': 'wifi'}"
+    },
+    {
+      "name": "leak: connection.rtt sane",
+      "ok": true,
+      "detail": "{'effectiveType': '4g', 'downlink': 80.9, 'rtt': 40, 'saveData': False, 'type': 'wifi'}"
+    },
+    {
+      "name": "leak: connection.effectiveType sane",
+      "ok": true,
+      "detail": "{'effectiveType': '4g', 'downlink': 80.9, 'rtt': 40, 'saveData': False, 'type': 'wifi'}"
+    },
+    {
+      "name": "leak: performance navigation entries accessible",
+      "ok": true,
+      "detail": "[{'type': 'navigate', 'transferSize': 0, 'encodedBodySize': 0, 'nextHopProtocol': ''}]"
+    },
+    {
+      "name": "leak: Worker context readable",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "leak: Worker matches main spoof (ua/platform/hw/lang/webdriver)",
+      "ok": true,
+      "detail": "worker_ua=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\u2026 hw=16"
+    },
+    {
+      "name": "leak: Worker webdriver falsy",
+      "ok": true,
+      "detail": "None"
+    },
+    {
+      "name": "leak: Popup context readable",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "leak: Popup matches main spoof",
+      "ok": true,
+      "detail": "popup_hw=16 wd=False"
+    },
+    {
+      "name": "leak: Popup webdriver falsy",
+      "ok": true,
+      "detail": "False"
+    },
+    {
+      "name": "leak: Popup chrome present",
+      "ok": true,
+      "detail": "'object'"
+    },
+    {
+      "name": "leak: sec-ch-ua brands include Chromium major from UA",
+      "ok": true,
+      "detail": "ua_maj=149 brands=\"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\""
+    }
+  ]
+}

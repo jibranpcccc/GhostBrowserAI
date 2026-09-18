@@ -173,7 +173,8 @@ async def main():
         return _build_coherent_fingerprint(i)
 
     try:
-        with patch('backend.ai_generator._call_direct_cloudflare', side_effect=mock_cloudflare_call), \
+        with patch('backend.ai_generator._call_mistral_api', side_effect=mock_cloudflare_call), \
+             patch('backend.ai_generator._call_direct_cloudflare', side_effect=mock_cloudflare_call), \
              patch('backend.ai_generator._call_via_racing_proxy', side_effect=assert_no_network), \
              patch('backend.ai_generator._shared_client.post', side_effect=assert_no_network), \
              patch('httpx.AsyncClient.post', side_effect=assert_no_network):

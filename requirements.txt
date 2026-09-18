@@ -10,6 +10,8 @@ croniter==6.2.4
 pydantic==2.13.4
 email-validator==2.2.0
 cryptography==49.0.0
+python-dotenv==1.1.1
+tzdata==2026.3
 
 # Dev/build extras
 pyinstaller==6.16.0

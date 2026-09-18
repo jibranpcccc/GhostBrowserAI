@@ -82,45 +82,31 @@ class CloudflarePriorityGeneratorTests(unittest.IsolatedAsyncioTestCase):
             ai_generator._extract_json_objects([{"type": "text", "text": reasoned}]),
         )
 
-    async def test_generation_order_is_priority_then_hermes_then_standard(self):
-        priority_result = {"source": "priority"}
+    async def test_generation_order_is_zen_then_local_fallback(self):
         with patch.object(
             ai_generator, "_call_zen_deepseek_api", new=AsyncMock(return_value=None)
         ) as zen, patch.object(
-            ai_generator, "_call_mistral_api", new=AsyncMock(return_value=None)
+            ai_generator, "_call_mistral_api", new=AsyncMock()
         ) as mistral, patch.object(
-            ai_generator, "_call_direct_cloudflare", new=AsyncMock(return_value=priority_result)
+            ai_generator, "_call_direct_cloudflare", new=AsyncMock()
         ) as direct, patch.object(
             ai_generator, "_call_via_racing_proxy", new=AsyncMock()
         ) as racing, patch.object(
+            ai_generator, "generate_fingerprint_fallback",
+            return_value={"os": "Windows", "_is_fallback": True},
+        ) as local_gen, patch.object(
             ai_generator, "sanitize_native_surface_fields", side_effect=lambda value: value
         ):
             result = await ai_generator.generate_fingerprint_ai("Windows", "Chrome", 139)
 
-        self.assertEqual(result, priority_result)
         zen.assert_awaited_once()
-        mistral.assert_awaited_once()
-        self.assertEqual(direct.await_count, 1)
-        self.assertTrue(direct.await_args.kwargs["priority"])
+        local_gen.assert_called_once_with("Windows")
+        self.assertEqual(result["_provenance"]["source"], "local_fallback")
+        self.assertTrue(result["_provenance"]["verified"])
+        # Legacy Kimi/Cloudflare/Mistral providers must never be contacted.
+        mistral.assert_not_awaited()
+        direct.assert_not_awaited()
         racing.assert_not_awaited()
-
-        with patch.object(
-            ai_generator, "_call_zen_deepseek_api", new=AsyncMock(return_value=None)
-        ), patch.object(
-            ai_generator, "_call_mistral_api", new=AsyncMock(return_value=None)
-        ), patch.object(
-            ai_generator, "_call_direct_cloudflare", new=AsyncMock(side_effect=[None, {"source": "standard"}])
-        ) as direct, patch.object(
-            ai_generator, "_call_via_racing_proxy", new=AsyncMock(return_value=None)
-        ) as racing, patch.object(
-            ai_generator, "sanitize_native_surface_fields", side_effect=lambda value: value
-        ):
-            result = await ai_generator.generate_fingerprint_ai("Windows", "Chrome", 139)
-
-        self.assertEqual(result, {"source": "standard"})
-        priorities = [call.kwargs["priority"] for call in direct.await_args_list]
-        self.assertEqual(priorities, [True, False])
-        racing.assert_awaited_once()
 
     async def test_direct_priority_wave_is_bounded_and_rotating(self):
         requested_tiers = []

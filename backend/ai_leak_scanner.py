@@ -91,11 +91,17 @@ class AILeakScanner:
 
         context = None
         try:
+            # Frozen builds ship Chromium next to the EXE; Playwright's own
+            # registry cache does not exist on fresh machines, so the
+            # executable must always be resolved explicitly.
+            from backend.engine_resolver import get_chromium_executable_path_async
+            scanner_executable = await get_chromium_executable_path_async()
             async with async_playwright() as p:
                 try:
                     context = await p.chromium.launch_persistent_context(
                         user_data_dir=temp_dir,  # TEMP dir — discarded after scan
                         headless=config["headless"],
+                        executable_path=scanner_executable,
                         args=config["args"],
                         user_agent=config["user_agent"],
                         proxy=config["proxy"],

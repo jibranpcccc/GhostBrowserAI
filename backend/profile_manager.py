@@ -616,13 +616,35 @@ class ProfileManager:
             return False
         return _verify_pin_hash(pin, pin_hash)
 
-    def clear_profile_pin(self, profile_id: str) -> bool:
-        """Remove the PIN lock from a profile."""
+    def clear_profile_storage(self, profile_id: str) -> bool:
+        """Clear browsing data (cookies, cache, storage) while preserving profile identity and fingerprint."""
         if profile_id not in self.profiles:
             return False
-        self.profiles[profile_id].pop("pin_hash", None)
-        self._save_metadata()
+        profile = self.profiles[profile_id]
+        path = profile.get("path") or os.path.join(self.PROFILES_DIR, profile_id)
+        if not os.path.exists(path):
+            return True
+
+        from backend.browser_manager import is_profile_running
+        if is_profile_running(profile_id):
+            raise RuntimeError("Cannot clear storage while browser profile is running.")
+
+        storage_targets = [
+            "Default/Cache", "Default/Code Cache", "Default/Cookies", "Default/Cookies-journal",
+            "Default/IndexedDB", "Default/Local Storage", "Default/Session Storage",
+            "Default/Network", "Default/Service Worker", "Default/Storage", "Default/GPUCache"
+        ]
+        for sub in storage_targets:
+            target = os.path.join(path, sub.replace("/", os.sep))
+            if os.path.isdir(target):
+                shutil.rmtree(target, ignore_errors=True)
+            elif os.path.isfile(target):
+                try:
+                    os.remove(target)
+                except OSError:
+                    pass
         return True
 
 # Global instance
 profile_manager = ProfileManager()
+

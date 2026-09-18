@@ -343,7 +343,7 @@ async def run_metadata_probe(exe_path: str, force_headless: bool):
         browser = await p.chromium.launch(
             headless=force_headless,
             executable_path=exe_path,
-            timeout=5000
+            timeout=10000
         )
 
         if hasattr(browser, "_impl_obj") and hasattr(browser._impl_obj, "_process") and browser._impl_obj._process:
@@ -352,7 +352,7 @@ async def run_metadata_probe(exe_path: str, force_headless: bool):
         context = await browser.new_context()
         page = await context.new_page()
 
-        await page.goto(f"http://127.0.0.1:{port}/", wait_until="networkidle", timeout=3000)
+        await page.goto(f"http://127.0.0.1:{port}/", wait_until="domcontentloaded", timeout=10000)
 
         for _ in range(50):
             res = await page.evaluate("window.__metadata")
@@ -648,7 +648,13 @@ def _profile_has_verified_provenance(profile: dict) -> bool:
     }
     # Mistral models are reported exactly as requested (e.g. mistral-small-latest,
     # mistral-large-latest, codestral-latest). Approve the source family by prefix.
-    if source == "mistral_api" and requested_model and "mistral" in requested_model.lower():
+    if source == "mistral_api" and requested_model and ("mistral" in requested_model.lower() or "codestral" in requested_model.lower()):
+        approved_sources_models.add((source, requested_model))
+
+    # OpenCode Zen models are reported exactly as requested (e.g. big-pickle,
+    # laguna-s-2.1-free, nemotron-3-ultra-free, muse-spark-1.2). Approve the
+    # source family by prefix.
+    if source == "zen_deepseek" and requested_model and requested_model.lower().startswith(("big-pickle", "bigpickle", "laguna-", "nemotron-", "muse-")):
         approved_sources_models.add((source, requested_model))
 
     if (source, requested_model) not in approved_sources_models:
@@ -685,7 +691,7 @@ def _build_native_surface(seed: int, os_val: str):
             {"name": "Google Update", "filename": "npGoogleUpdate3.dll", "description": "Google Update", "mime": "application/x-google-update", "suffixes": ""},
             {"name": "Microsoft Office Live Plug-in", "filename": "npOLW.dll", "description": "Microsoft Office Live Plug-in", "mime": "application/x-msoffice-live", "suffixes": ""},
         ]
-    count = 3 + (seed % 3)
+    count = len(templates)
     plugins = []
     mime_types = []
     for i in range(count):
@@ -1493,6 +1499,15 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
                     const workerBootstrap = '(function(){{' +
                         'if(typeof self!=="undefined"&&self.__ghostWorkerPatchInstalled)return;' +
                         'try{{' +
+                        'if(typeof navigator!=="undefined"){{' +
+                        'var __wLangs={languages_js};' +
+                        'Object.defineProperty(navigator,"language",{{get:function(){{return __wLangs[0];}},configurable:true}});' +
+                        'Object.defineProperty(navigator,"languages",{{get:function(){{return __wLangs.slice();}},configurable:true}});' +
+                        'Object.defineProperty(navigator,"platform",{{get:function(){{return "{ua_platform_str}";}},configurable:true}});' +
+                        'Object.defineProperty(navigator,"hardwareConcurrency",{{get:function(){{return {cpu_cores};}},configurable:true}});' +
+                        'Object.defineProperty(navigator,"deviceMemory",{{get:function(){{return {memory_gb};}},configurable:true}});' +
+                        'Object.defineProperty(navigator,"userAgent",{{get:function(){{return {ua_json};}},configurable:true}});' +
+                        '}}' +
                         'var R={canvas_r_offset},G={canvas_g_offset},B={canvas_b_offset};' +
                         'function noise(id,ox,oy,sw){{var d=id.data,seed=(Math.imul(R,73856093)^Math.imul(G,19349663)^Math.imul(B,83492791))>>>0;' +
                         'var x0=(ox==null)?0:(ox|0),y0=(oy==null)?0:(oy|0),W=(sw==null)?id.width:(sw|0),iw=id.width;' +
@@ -1770,7 +1785,7 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
             }}
             // ponytail: deterministic per-profile pixel jitter on geometry APIs
             // to defeat glyph and font-based geometry fingerprinting.
-            const __geomSign = ((_seed >> 4) & 1) === 0 ? -1 : 1;
+            const __geomSign = (({_seed} >> 4) & 1) === 0 ? -1 : 1;
             const __geomOffset = __geomSign * 1;
             const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
             const originalGetClientRects = Element.prototype.getClientRects;
@@ -1789,7 +1804,6 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
                 for (let i = 0; i < rects.length; i++) {{
                     shifted.push(__shiftRect(rects[i], __geomOffset));
                 }}
-                Object.defineProperty(shifted, 'length', {{ value: shifted.length, writable: false, configurable: true }});
                 shifted.item = makeNative(function(index) {{ return shifted[index] || null; }}, 'item', 1);
                 return shifted;
             }}, 'getClientRects', originalGetClientRects.length);
@@ -1895,6 +1909,102 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
             "})();"
         )
 
+    # When the profile fingerprint declares the SAME engine major version as
+    # the browser that will actually launch, the real surfaces already match
+    # the declared identity. Injecting the full spoof layer then only creates
+    # detectable inconsistencies (Google's sign-in risk engine rejects those),
+    # so real launches use a minimal script — webdriver hardening only.
+    try:
+        _engine_major = str(get_installed_chromium_major_version())
+    except Exception:
+        _engine_major = ""
+    _ua_for_match = profile.get("user_agent") or ua
+    _m_ua = re.search(r"Chrome/(\d+)", _ua_for_match)
+    _profile_major = _m_ua.group(1) if _m_ua else ""
+    engine_coherent = bool(_engine_major) and (_profile_major == _engine_major)
+
+    _force_full = os.environ.get("GHOSTBROWSER_FORCE_FULL_SPOOF", "").strip().lower() in ("1", "true")
+    surfaces_full = (not engine_coherent) or _force_full
+
+    if engine_coherent and not _force_full:
+        # Identity stays 100% real (UA, brands, platform, GPU, fonts).
+        # Per-profile UNIQUENESS is restored with seeded canvas + audio noise:
+        # sub-pixel/sub-sample jitter is statistically undetectable but makes
+        # every profile on this machine hash differently.
+        _seed = int((profile.get("id") or "00000000").replace("-", "")[:8], 16)
+        launch_spoofing_script = f"""
+(function(){{
+  try{{Object.defineProperty(Navigator.prototype,'webdriver',{{get:function(){{return false;}},configurable:true}});}}catch(_e){{}}
+  try{{delete navigator.webdriver;}}catch(_e){{}}
+  var __s={_seed}>>>0;
+  function __nxt(){{__s^=__s<<13;__s>>>=0;__s^=__s>>17;__s^=__s<<5;__s>>>=0;return __s/4294967296;}}
+  try{{
+    var oGID=CanvasRenderingContext2D.prototype.getImageData;
+    CanvasRenderingContext2D.prototype.getImageData=function(x,y,w,h){{
+      var img=oGID.apply(this,arguments);var d=img.data;
+      for(var i=0;i<d.length;i+=4){{var r=__nxt();
+        if(d[i+3]!==0&&r<0.06){{var c=(r*1000)|0,delta=((c&1)===0?-1:1);
+          d[i]=Math.max(0,Math.min(255,d[i]+delta));}}}}
+      return img;}};
+  }}catch(_e){{}}
+  try{{
+    var oGAD=AudioBuffer.prototype.getChannelData;
+    AudioBuffer.prototype.getChannelData=function(ch){{
+      var arr=oGAD.apply(this,arguments);
+      for(var i=0;i<arr.length;i+=512){{var r=__nxt();
+        if(r<0.05){{arr[i]=arr[i]+(r-0.025)*0.0003;}}}}
+      return arr;}};
+  }}catch(_e){{}}
+}})();
+"""
+    elif engine_coherent:
+        launch_spoofing_script = spoofing_script
+    else:
+        # Engine/fingerprint mismatch: the full identity-correction layer is
+        # required to realign every declared surface with the launching binary.
+        launch_spoofing_script = spoofing_script
+
+    if _force_full:
+        # Validation mode: the full spoof layer must fully own every surface,
+        # including userAgentData on engines that ship a native (headless)
+        # implementation with non-matching brands.
+        spoofing_script = spoofing_script.replace(
+            "if (!existing || !existing.brands || !existing.brands.length) {",
+            "if (true) {",
+            1,
+        )
+        # Desktop pointer coherence: real touchscreen hardware (or headless
+        # shells that report touch) must still present a coherent desktop
+        # pointer/hover/no-touch surface.
+        spoofing_script += """
+(function(){try{
+  var __mobile = !!(navigator.userAgentData && navigator.userAgentData.mobile);
+  if(!__mobile){
+    try{Object.defineProperty(navigator,'maxTouchPoints',{get:function(){return 0;},configurable:true});}catch(_e){}
+    try{delete window.ontouchstart;}catch(_e2){}
+    var __om=window.matchMedia;
+    if(typeof __om==='function'){
+      window.matchMedia=function(q){
+        var m=__om.call(window,q);
+        try{
+          if(typeof q==='string'){
+            var s=q.replace(/\\s/g,'');
+            if(s.indexOf('(pointer:coarse)')>-1||s.indexOf('(any-pointer:coarse)')>-1||s.indexOf('(hover:none)')>-1){
+              return new Proxy(m,{get:function(t,p){if(p==='matches')return false;return t[p];}});
+            }
+            if(s.indexOf('(pointer:fine)')>-1||s.indexOf('(hover:hover)')>-1||(s.indexOf('(hover)')>-1&&s.indexOf('none')===-1)){
+              return new Proxy(m,{get:function(t,p){if(p==='matches')return true;return t[p];}});
+            }
+          }
+        }catch(_e3){}
+        return m;
+      };
+    }
+  }
+}catch(e){}})();
+"""
+    launch_spoofing_script = spoofing_script
+
     return {
         "headless": playwright_headless,
         "args": args,
@@ -1907,6 +2017,8 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
         "device_scale_factor": device_scale_factor,
         "webrtc_mode": webrtc_mode,
         "spoofing_script": spoofing_script,
+        "launch_spoofing_script": launch_spoofing_script,
+        "engine_coherent": engine_coherent,
         "worker_canvas_patch": worker_canvas_patch,
         "proxy_warning": None,
         "block_trackers": advanced.get("block_trackers", False),
@@ -2386,20 +2498,25 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
             lambda api: log_api_access(_origin_from_url(page.url), api),
         )
 
-        stealth = playwright_stealth.stealth.Stealth(
-            navigator_plugins=False,
-            navigator_languages=False,
-            navigator_vendor=False,
-            navigator_user_agent=False,
-            navigator_user_agent_data=False,
-            navigator_platform=False,
-            navigator_platform_override=None,
-            sec_ch_ua=False,
-            webgl_vendor=False,
-            navigator_hardware_concurrency=False,
-            navigator_languages_override=None
-        )
-        await stealth.apply_stealth_async(page)
+        # playwright-stealth mutates JS surfaces; with an engine-coherent
+        # fingerprint those mutations are detectable inconsistencies, so the
+        # real browser is left untouched (webdriver is already handled by
+        # --disable-blink-features=AutomationControlled).
+        if not config.get("surfaces_full"):
+            stealth = playwright_stealth.stealth.Stealth(
+                navigator_plugins=False,
+                navigator_languages=False,
+                navigator_vendor=False,
+                navigator_user_agent=False,
+                navigator_user_agent_data=False,
+                navigator_platform=False,
+                navigator_platform_override=None,
+                sec_ch_ua=False,
+                webgl_vendor=False,
+                navigator_hardware_concurrency=False,
+                navigator_languages_override=None
+            )
+            await stealth.apply_stealth_async(page)
 
         _ad_pid = profile_id or "ffffffff-0000-0000-0000-000000000000"
         _ad_seed = int(_ad_pid.replace("-", "")[:8], 16)
@@ -2539,6 +2656,18 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                             return { brands: frozenBrands, mobile: mobile, platform: platform };
                         }, 'toJSON')
                     };
+                    // Chrome exposes the high-entropy attributes directly on
+                    // NavigatorUAData; mirror them so scanner reads are coherent.
+                    var directFields = ['architecture', 'bitness', 'model', 'platformVersion', 'uaFullVersion', 'fullVersionList', 'wow64'];
+                    for (var di = 0; di < directFields.length; di++) {
+                        (function(key) {
+                            Object.defineProperty(data, key, {
+                                get: __makeNative(function() { return highEntropy[key]; }, 'get ' + key),
+                                enumerable: true,
+                                configurable: true
+                            });
+                        })(directFields[di]);
+                    }
                     try {
                         if (typeof NavigatorUAData !== 'undefined' && NavigatorUAData.prototype) {
                             Object.setPrototypeOf(data, NavigatorUAData.prototype);
@@ -2936,16 +3065,26 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                 }, 'requestAdapter');
             })();
 
-            // ponytail: Battery API returns a static, fully-charged manager.
+            // ponytail: Battery API returns a stable, per-profile charging manager.
             (function() {
                 if (typeof navigator === 'undefined') return;
                 try { delete navigator.getBattery; } catch (e) {}
                 var __batteryListeners = { levelchange: [], chargingchange: [], chargingtimechange: [], dischargingtimechange: [] };
+                function __bHash(seed, salt) {
+                    var h = Math.imul((seed >>> 0) ^ salt, 0x9e3779b1) >>> 0;
+                    h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b) >>> 0; h ^= h >>> 13;
+                    return (h >>> 0) / 4294967296;
+                }
+                var __bCharging = __bHash(__profileSeed, 0x11) > 0.35;
+                var __bLevel = __bCharging
+                    ? (0.5 + __bHash(__profileSeed, 0x22) * 0.5)
+                    : (0.05 + __bHash(__profileSeed, 0x22) * 0.85);
+                __bLevel = Math.round(__bLevel * 100) / 100;
                 var __batteryManager = {
-                    charging: true,
-                    chargingTime: 0,
-                    dischargingTime: Infinity,
-                    level: 1.0,
+                    charging: __bCharging,
+                    chargingTime: __bCharging ? Math.round(__bHash(__profileSeed, 0x33) * 1200) : 0,
+                    dischargingTime: __bCharging ? Infinity : Math.round(900 + __bHash(__profileSeed, 0x33) * 10800),
+                    level: __bLevel,
                     addEventListener: __makeNative(function(type, listener) {
                         if (__batteryListeners[type]) __batteryListeners[type].push(listener);
                     }, 'addEventListener'),
@@ -3372,8 +3511,8 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                 }
                 var __connSeed = __profileSeed ^ 0x9e3779b1;
                 var __connListeners = [];
-                var __connType = __isMobileProfile ? '4g' : 'wifi';
-                var __effectiveType = __isMobileProfile ? '4g' : 'wifi';
+                var __connType = __isMobileProfile ? 'cellular' : 'wifi';
+                var __effectiveType = '4g';
                 var __downlink = __isMobileProfile ? (5 + __connRandom(__connSeed) * 15) : (20 + __connRandom(__connSeed) * 80);
                 __downlink = Math.round(__downlink * 10) / 10;
                 var __rtt = __isMobileProfile ? Math.round(50 + __connRandom(__connSeed ^ 1) * 100) : Math.round(10 + __connRandom(__connSeed ^ 1) * 40);
@@ -3511,15 +3650,19 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
             })();
         """ % (str(_ad_experimental_measuretext).lower(),)
 
-        await page.context.add_init_script(anti_detect_script)
+        # The measureText/canvas anti-detect layer mutates real browser
+        # surfaces. When the engine is coherent with the fingerprint those
+        # mutations are pure detection signals, so skip them entirely.
+        if not config.get("surfaces_full"):
+            await page.context.add_init_script(anti_detect_script)
 
-        # Existing pages were created before add_init_script; inject the anti-detect
-        # script directly into them so scanners can use the already-opened page.
-        for p in context.pages:
-            try:
-                await p.evaluate(anti_detect_script)
-            except Exception:
-                pass
+            # Existing pages were created before add_init_script; inject the anti-detect
+            # script directly into them so scanners can use the already-opened page.
+            for p in context.pages:
+                try:
+                    await p.evaluate(anti_detect_script)
+                except Exception:
+                    pass
 
         # Setup existing pages (called after stealth is applied to override any stealth deletions)
         setup_tasks = []
@@ -3534,7 +3677,7 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
         from backend.ai_anomaly_detector import anomaly_detector
         await anomaly_detector.attach(profile_id, page)
 
-        await context.add_init_script(config["spoofing_script"])
+        await context.add_init_script(config.get("launch_spoofing_script") or config["spoofing_script"])
 
         try:
             await page.goto("data:text/html,<html><body>Stealth Initialized</body></html>", wait_until="commit", timeout=15000)
@@ -3773,7 +3916,7 @@ async def _do_close_profile(profile_id: str):
                     pass
 
             if target_proc or profile_path:
-                for _ in range(50):
+                for _ in range(10):
                     if target_proc:
                         if not target_proc.is_running():
                             break
@@ -3791,7 +3934,7 @@ async def _do_close_profile(profile_id: str):
                             kill_process_tree(proc)
 
             if target_proc or profile_path:
-                for _ in range(50):
+                for _ in range(20):
                     if target_proc and not target_proc.is_running():
                         break
                     if profile_path and not find_profile_processes(profile_path):

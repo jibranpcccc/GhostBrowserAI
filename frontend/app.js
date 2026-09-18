@@ -111,6 +111,16 @@ async function verifyAdminToken(token) {
 
 async function ensureAdminToken() {
     if (_adminToken) return true;
+    try {
+        const hintRes = await _originalFetch(`${API}/api/system/admin-token-hint`);
+        if (hintRes.ok) {
+            const hintData = await hintRes.json();
+            if (hintData && hintData.token) {
+                _adminToken = hintData.token;
+                return true;
+            }
+        }
+    } catch (_) { }
 
     // First contact: 401 means token required; 503 means token not configured.
     let needsAuth;
@@ -323,50 +333,8 @@ async function fetchMetrics() {
 }
 
 async function fetchCFStatus() {
-    try {
-        const res = await fetch(`${API}/api/cloudflare/status`);
-        if (!res.ok) return;
-        const data = await res.json();
-
-        // Sidebar badge
-        document.getElementById('sidebar-cf-count').textContent = data.healthy_count;
-
-        // Dashboard ring
-        const pct = data.total_accounts > 0 ? (data.healthy_count / data.total_accounts) : 0;
-        const circumference = 301.59;
-        const offset = circumference * (1 - pct);
-        const arc = document.getElementById('cf-ring-arc');
-        if (arc) {
-            arc.setAttribute('stroke-dashoffset', offset);
-        }
-        const pctEl = document.getElementById('cf-ring-pct');
-        if (pctEl) pctEl.textContent = `${Math.round(pct * 100)}%`;
-
-        const legendH = document.getElementById('cf-legend-healthy');
-        const legendC = document.getElementById('cf-legend-cooldown');
-        if (legendH) legendH.textContent = `${data.healthy_count} Healthy`;
-        if (legendC) legendC.textContent = `${data.cooldown_count} On Cooldown`;
-
-        // Stat cards
-        const h = document.getElementById('stat-cf-healthy');
-        if (h) h.textContent = `${data.healthy_count} / ${data.total_accounts}`;
-        const trend = document.getElementById('stat-cf-trend');
-        if (trend) trend.textContent = pct > 0.5 ? 'OK' : 'LOW';
-
-        // AI Status page
-        const hCount = document.getElementById('cf-healthy-count');
-        if (hCount) hCount.textContent = data.healthy_count;
-        const cCount = document.getElementById('cf-cooldown-count');
-        if (cCount) cCount.textContent = data.cooldown_count;
-        const tCount = document.getElementById('cf-total-count');
-        if (tCount) tCount.textContent = data.total_accounts;
-        const pCount = document.getElementById('cf-priority-count');
-        if (pCount) pCount.textContent = `${data.healthy_priority_count} / ${data.priority_count}`;
-
-        // Account list on AI Status page
-        renderCFAccounts(data);
-
-    } catch (e) { /* backend not running */ }
+    // Cloudflare pool UI was removed and superseded by OpenCode Zen & Mistral AI.
+    return;
 }
 
 function renderCFAccounts(data) {
@@ -420,6 +388,46 @@ function safeProfileColor(value) {
     return /^#[0-9A-F]{6}$/.test(color) ? color : '#6366F1';
 }
 
+let currentProfileFilter = 'all';
+
+function setProfileFilter(filterName) {
+    currentProfileFilter = filterName;
+    const chips = document.querySelectorAll('.filter-chip');
+    chips.forEach(chip => {
+        if (chip.id === `filter-chip-${filterName}`) {
+            chip.classList.add('active');
+        } else {
+            chip.classList.remove('active');
+        }
+    });
+    renderProfiles(allProfiles);
+}
+
+function updateFilterCounts(profiles) {
+    const total = profiles.length;
+    const running = profiles.filter(p => p.status === 'Running').length;
+    const stopped = profiles.filter(p => p.status !== 'Running').length;
+    const win = profiles.filter(p => (p.advanced?.os || p.os) === 'Windows').length;
+    const mac = profiles.filter(p => (p.advanced?.os || p.os) === 'Mac').length;
+    const proxied = profiles.filter(p => {
+        const pr = p.proxy;
+        return Boolean(typeof pr === 'string' ? pr : pr?.server);
+    }).length;
+
+    const countAll = document.getElementById('count-chip-all');
+    if (countAll) countAll.textContent = String(total);
+    const countRun = document.getElementById('count-chip-running');
+    if (countRun) countRun.textContent = String(running);
+    const countStop = document.getElementById('count-chip-stopped');
+    if (countStop) countStop.textContent = String(stopped);
+    const countWin = document.getElementById('count-chip-windows');
+    if (countWin) countWin.textContent = String(win);
+    const countMac = document.getElementById('count-chip-mac');
+    if (countMac) countMac.textContent = String(mac);
+    const countProx = document.getElementById('count-chip-proxied');
+    if (countProx) countProx.textContent = String(proxied);
+}
+
 function renderProfiles(profiles) {
     const grid = document.getElementById('profiles-grid');
     if (!grid) return;
@@ -433,6 +441,7 @@ function renderProfiles(profiles) {
         if (tableContainer) tableContainer.hidden = true;
         const emptyState = document.getElementById('profiles-empty');
         if (emptyState) emptyState.hidden = false;
+        updateFilterCounts(profiles);
         return;
     }
 
@@ -440,7 +449,25 @@ function renderProfiles(profiles) {
     const emptyState = document.getElementById('profiles-empty');
     if (emptyState) emptyState.hidden = true;
 
-    const displayedProfiles = [...profiles].sort(
+    updateFilterCounts(profiles);
+
+    let filteredProfiles = profiles;
+    if (currentProfileFilter === 'running') {
+        filteredProfiles = profiles.filter(p => p.status === 'Running');
+    } else if (currentProfileFilter === 'stopped') {
+        filteredProfiles = profiles.filter(p => p.status !== 'Running');
+    } else if (currentProfileFilter === 'windows') {
+        filteredProfiles = profiles.filter(p => (p.advanced?.os || p.os) === 'Windows');
+    } else if (currentProfileFilter === 'mac') {
+        filteredProfiles = profiles.filter(p => (p.advanced?.os || p.os) === 'Mac');
+    } else if (currentProfileFilter === 'proxied') {
+        filteredProfiles = profiles.filter(p => {
+            const pr = p.proxy;
+            return Boolean(typeof pr === 'string' ? pr : pr?.server);
+        });
+    }
+
+    const displayedProfiles = [...filteredProfiles].sort(
         (left, right) => Number(Boolean(right.pinned)) - Number(Boolean(left.pinned))
     );
 
@@ -507,18 +534,26 @@ function renderProfiles(profiles) {
                     <div class="td-os">${osEmoji} ${escHtml(os)}</div>
                 </td>
                 <td class="td-actions">
-                    ${isRunning
-                        ? `<button class="btn-secondary btn-sm" data-action="stop-profile" data-profile-id="${escAttr(id)}">⏹ Stop</button>`
-                        : `<button class="btn-primary btn-sm" data-action="launch-profile" data-profile-id="${escAttr(id)}">▶ Launch</button>`}
-                    <button class="btn-secondary btn-sm compact-action primary-action" data-action="scan-profile" data-profile-id="${escAttr(id)}" title="Scan Fingerprint Risk" aria-label="Scan fingerprint risk">🛡️</button>
-                    <button class="btn-secondary btn-sm compact-action" data-action="open-metadata-modal" data-profile-id="${escAttr(id)}" title="Tags, notes and pinning" aria-label="Edit tags, notes and pinning">🏷️</button>
-                    <button class="btn-secondary btn-sm compact-action" data-action="tag-profile" data-profile-id="${escAttr(id)}" title="Quick tag" aria-label="Quick tag">+ Tag</button>
-                    <button class="btn-secondary btn-sm" data-action="clone-profile" data-profile-id="${escAttr(id)}" title="Clone Profile" aria-label="Clone profile">🧬</button>
-                    <button class="btn-secondary btn-sm" data-action="open-cookie-modal" data-profile-id="${escAttr(id)}" title="Manage Cookies" aria-label="Manage cookies">🍪</button>
-                    <button class="btn-secondary btn-sm" data-action="open-set-pin-modal" data-profile-id="${escAttr(id)}" title="Set PIN" aria-label="Set PIN">🔒</button>
-                    <button class="btn-icon stop" data-action="delete-profile" data-profile-id="${escAttr(id)}" title="Delete Profile" aria-label="Delete profile">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                    </button>
+                    <div class="action-buttons-group">
+                        ${isRunning
+                            ? `<button class="btn-secondary btn-sm" data-action="stop-profile" data-profile-id="${escAttr(id)}">⏹ Stop</button>`
+                            : `<button class="btn-primary btn-sm" data-action="launch-profile" data-profile-id="${escAttr(id)}">▶ Launch</button>`}
+                        <button class="btn-secondary btn-sm" data-action="open-url-launch" data-profile-id="${escAttr(id)}" title="Launch with Target URL" aria-label="Launch with Target URL">🔗</button>
+                        <div class="dropdown-wrapper">
+                            <button class="more-actions-btn" data-action="toggle-action-dropdown" data-profile-id="${escAttr(id)}" title="More Actions" aria-label="More Actions">•••</button>
+                            <div class="action-dropdown-menu" data-dropdown-id="${escAttr(id)}">
+                                <div class="dropdown-item" data-action="clone-profile" data-profile-id="${escAttr(id)}">🧬 Clone Identity</div>
+                                <div class="dropdown-item" data-action="open-cookie-modal" data-profile-id="${escAttr(id)}">🍪 Cookies</div>
+                                <div class="dropdown-item" data-action="clear-profile-cache" data-profile-id="${escAttr(id)}">🧹 Clear Cache</div>
+                                <div class="dropdown-item" data-action="open-metadata-modal" data-profile-id="${escAttr(id)}">🏷️ Tags & Notes</div>
+                                <div class="dropdown-item" data-action="tag-profile" data-profile-id="${escAttr(id)}">🏷️ + Quick Tag</div>
+                                <div class="dropdown-item" data-action="open-set-pin-modal" data-profile-id="${escAttr(id)}">🔒 Set PIN</div>
+                                <div class="dropdown-item" data-action="scan-profile" data-profile-id="${escAttr(id)}">🛡️ Leak Scan</div>
+                                <div class="dropdown-divider"></div>
+                                <div class="dropdown-item text-danger" data-action="delete-profile" data-profile-id="${escAttr(id)}">🗑️ Delete Profile</div>
+                            </div>
+                        </div>
+                    </div>
                 </td>
             </tr>
         `;
@@ -1064,11 +1099,14 @@ function toggleSelectAll() {
 function updateBulkActions() {
     const checked = document.querySelectorAll('.profile-checkbox:checked').length;
     const bulkDiv = document.getElementById('bulk-actions');
-    if (checked > 0) {
-        bulkDiv.hidden = false;
-    } else {
-        bulkDiv.hidden = true;
-        document.getElementById('select-all').checked = false;
+    const floatingBar = document.getElementById('bulk-floating-bar');
+    const countBadge = document.getElementById('bulk-selected-count');
+    if (countBadge) countBadge.textContent = String(checked);
+    if (floatingBar) floatingBar.hidden = (checked === 0);
+    if (bulkDiv) bulkDiv.hidden = (checked === 0);
+    if (checked === 0) {
+        const selectAll = document.getElementById('select-all');
+        if (selectAll) selectAll.checked = false;
     }
     updateAutomationSelectionCounts();
 }
@@ -1078,6 +1116,46 @@ async function bulkLaunch() {
     if (checked.length === 0) return;
     for (const id of checked) {
         launchProfile(id); // Doesn't wait, launches in parallel
+    }
+}
+
+async function bulkStopSelected() {
+    const checked = Array.from(document.querySelectorAll('.profile-checkbox:checked')).map(cb => cb.value);
+    if (checked.length === 0) return;
+    let stopped = 0;
+    for (const id of checked) {
+        try {
+            await requestJson(`${API}/api/profiles/${id}/stop`, { method: 'POST' }, 'Could not stop profile');
+            stopped++;
+        } catch (_) {}
+    }
+    showToast(`Stopped ${stopped} profile${stopped === 1 ? '' : 's'}`, 'info');
+    fetchProfiles();
+}
+
+async function bulkClearCacheSelected() {
+    const checked = Array.from(document.querySelectorAll('.profile-checkbox:checked')).map(cb => cb.value);
+    if (checked.length === 0) return;
+    if (!confirm(`Clear cache and local storage for ${checked.length} profile(s)? Anti-detect fingerprints will remain intact.`)) return;
+    let cleared = 0;
+    for (const id of checked) {
+        try {
+            await requestJson(`${API}/api/profiles/${id}/clear-cache`, { method: 'POST' }, 'Could not clear cache');
+            cleared++;
+        } catch (_) {}
+    }
+    showToast(`Cleared cache for ${cleared} profile${cleared === 1 ? '' : 's'}`, 'success');
+    fetchProfiles();
+}
+
+async function clearProfileCache(id) {
+    if (!confirm('Clear browser cache and local storage for this profile? Fingerprint settings will remain intact.')) return;
+    try {
+        await requestJson(`${API}/api/profiles/${id}/clear-cache`, { method: 'POST' }, 'Could not clear cache');
+        showToast('Storage & cache cleared successfully', 'success');
+        fetchProfiles();
+    } catch (e) {
+        showToast(e.message, 'error');
     }
 }
 
@@ -1483,6 +1561,12 @@ function formatCreateErrorDetail(detail, status) {
 
 async function submitCreateProfile() {
     if (createSubmitInFlight) return;
+    const authed = await ensureAdminToken();
+    if (!authed) {
+        showToast('Admin token is required to create profiles.', 'error');
+        createSubmitInFlight = false;
+        return;
+    }
     const form = validateCreateProfileForm();
     if (!form) return;
 
@@ -1507,7 +1591,7 @@ async function submitCreateProfile() {
     resetProgressSteps();
     addLogLine(`Starting validated profile creation (${count > 1 ? 'Bulk Mode: ' + count + ' profiles' : 'Single Mode'})...`);
     setStepActive(1);
-    addLogLine('Calling Kimi AI via Cloudflare Workers...');
+    addLogLine('Calling OpenCode Zen (big-pickle)...');
 
     let profile;
     const requestController = new AbortController();
@@ -1583,7 +1667,7 @@ async function submitCreateProfile() {
     } catch (e) {
         setStepError(1);
         const detail = e.name === 'AbortError'
-            ? 'Profile generation timed out after 120 seconds. Please retry; exhausted Kimi accounts will be skipped automatically.'
+            ? 'Profile generation timed out after 120 seconds. Please retry — creation automatically falls back to the local generator if Zen is unavailable.'
             : formatCreateErrorDetail(e.detail || e.message, e.status);
         addLogLine(`❌ ${detail}`);
         document.getElementById('modal-error-msg').textContent = detail;
@@ -2548,15 +2632,18 @@ document.addEventListener('DOMContentLoaded', () => {
             'open-edit-modal': () => openEditModal(profileId),
             'stop-profile': () => stopProfile(profileId),
             'launch-profile': () => launchProfile(profileId),
+            'open-url-launch': () => openUrlLaunchModal(profileId),
             'scan-profile': () => scanProfile(profileId),
             'open-metadata-modal': () => openMetadataModal(profileId),
             'tag-profile': () => tagProfilePrompt(profileId),
             'clone-profile': () => cloneProfile(profileId),
             'open-cookie-modal': () => openCookieModal(profileId),
+            'clear-profile-cache': () => clearProfileCache(profileId),
             'open-set-pin-modal': () => openSetPinModal(profileId),
             'delete-profile': () => deleteProfile(profileId),
             'delete-macro': () => deleteMacro(macroId),
             'delete-schedule': () => deleteSchedule(scheduleId),
+            'toggle-action-dropdown': () => toggleActionDropdown(profileId, control),
         };
         if (actions[action]) {
             actions[action]();
@@ -2581,6 +2668,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (control.dataset.action === 'applyProfileTemplate') applyProfileTemplate();
         if (control.dataset.action === 'toggleEditProxyRemoval') toggleEditProxyRemoval();
         if (control.dataset.action === 'updateMacroStepFields') updateMacroStepFields(control);
+        if (control.dataset.action === 'handleImportFileUpload') handleImportFileUpload(event);
     });
     document.addEventListener('input', (event) => {
         const control = event.target.closest('[data-action]');
@@ -2619,7 +2707,7 @@ document.addEventListener('DOMContentLoaded', () => {
     navigate('dashboard');
     startPolling();
     addLogEntry('info', 'GhostBrowser dashboard initialized');
-    addLogEntry('info', 'Primary UI generation is configured for Cloudflare Kimi AI');
+    addLogEntry('info', 'Primary profile generation uses OpenCode Zen (big-pickle, free)');
 
     // Load auto-replenish state
     const autoReplenishToggle = document.getElementById('auto-replenish-toggle');
@@ -2629,6 +2717,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialize virtual keyboard for secure inputs
     initVirtualKeyboard();
+
+    // Initialize compact mode & sidebar state
+    initLaptopMode();
 
     // Close modal on overlay click / Escape
     const createModal = document.getElementById('create-modal');
@@ -2909,4 +3000,250 @@ function renderAccessLog(data, errorMessage) {
 window.addEventListener('click', function(e) {
     const modal = document.getElementById('access-log-modal');
     if (modal && e.target === modal) closeAccessLogModal();
+    const urlModal = document.getElementById('url-launch-modal');
+    if (urlModal && e.target === urlModal) closeUrlLaunchModal();
+    const impModal = document.getElementById('import-profiles-modal');
+    if (impModal && e.target === impModal) closeImportModal();
+    if (!e.target.closest('.dropdown-wrapper')) {
+        document.querySelectorAll('.action-dropdown-menu.show').forEach(m => m.classList.remove('show'));
+    }
 });
+
+// =========================================================
+// LAPTOP COMPACT MODE & SIDEBAR COLLAPSE
+// =========================================================
+function toggleCompactMode() {
+    const isCompact = document.body.classList.toggle('compact-mode');
+    localStorage.setItem('ghostbrowser_compact_mode', isCompact ? '1' : '0');
+    const btn = document.getElementById('btn-compact-mode');
+    if (btn) {
+        btn.textContent = isCompact ? '💻 Normal' : '⚡ Compact';
+    }
+    showToast(isCompact ? 'Compact mode enabled (low-overhead for laptops)' : 'Standard mode restored', 'info');
+}
+
+function toggleSidebar() {
+    const isCollapsed = document.body.classList.toggle('sidebar-collapsed');
+    localStorage.setItem('ghostbrowser_sidebar_collapsed', isCollapsed ? '1' : '0');
+    const btn = document.getElementById('btn-collapse-sidebar');
+    if (btn) {
+        btn.textContent = isCollapsed ? '▶' : '◀';
+    }
+}
+
+function initLaptopMode() {
+    if (localStorage.getItem('ghostbrowser_compact_mode') === '1') {
+        document.body.classList.add('compact-mode');
+        const btn = document.getElementById('btn-compact-mode');
+        if (btn) btn.textContent = '💻 Normal';
+    }
+    if (localStorage.getItem('ghostbrowser_sidebar_collapsed') === '1') {
+        document.body.classList.add('sidebar-collapsed');
+        const btn = document.getElementById('btn-collapse-sidebar');
+        if (btn) btn.textContent = '▶';
+    }
+}
+
+// =========================================================
+// 1-CLICK QUICK DEPLOY PRESETS
+// =========================================================
+async function createPreset(presetType) {
+    showToast('Generating AI profile preset...', 'info');
+    const randSuffix = Math.floor(100 + Math.random() * 900);
+    let payload = {};
+    if (presetType === 'stealth_windows') {
+        payload = {
+            name: `Stealth Win #${randSuffix}`,
+            os: 'Windows',
+            privacy_mode: 'standard',
+            advanced: { os: 'Windows', canvas_noise: true, webgl_noise: true, audio_noise: true, headless: false }
+        };
+    } else if (presetType === 'mac_retina') {
+        payload = {
+            name: `Mac Retina #${randSuffix}`,
+            os: 'Mac',
+            privacy_mode: 'standard',
+            advanced: { os: 'Mac', canvas_noise: true, webgl_noise: true, audio_noise: true, headless: false }
+        };
+    } else if (presetType === 'scraping_bot') {
+        payload = {
+            name: `Scraper Bot #${randSuffix}`,
+            os: 'Windows',
+            privacy_mode: 'standard',
+            advanced: { os: 'Windows', headless: true, canvas_noise: true }
+        };
+    } else if (presetType === 'strict_privacy') {
+        payload = {
+            name: `Ephemeral Strict #${randSuffix}`,
+            os: 'Windows',
+            privacy_mode: 'ephemeral',
+            advanced: { os: 'Windows', canvas_noise: true, webgl_noise: true, audio_noise: true }
+        };
+    } else {
+        payload = { name: `Preset #${randSuffix}`, os: 'Windows' };
+    }
+
+    try {
+        const res = await requestJson(`${API}/api/profiles`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }, 'Could not create preset profile');
+        showToast(`Created preset profile: ${res.name || payload.name}`, 'success');
+        fetchProfiles();
+    } catch (e) {
+        showToast('Failed to create preset: ' + e.message, 'error');
+    }
+}
+
+// =========================================================
+// DIRECT URL LAUNCH
+// =========================================================
+let currentUrlLaunchProfileId = null;
+
+function openUrlLaunchModal(id) {
+    currentUrlLaunchProfileId = id;
+    const modal = document.getElementById('url-launch-modal');
+    if (modal) {
+        modal.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+    }
+    const input = document.getElementById('url-launch-input');
+    if (input) {
+        input.value = '';
+        input.focus();
+    }
+}
+
+function closeUrlLaunchModal() {
+    const modal = document.getElementById('url-launch-modal');
+    if (modal) {
+        modal.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+    currentUrlLaunchProfileId = null;
+}
+
+async function submitUrlLaunch() {
+    if (!currentUrlLaunchProfileId) return;
+    const input = document.getElementById('url-launch-input');
+    const url = input ? input.value.trim() : '';
+    if (!url) {
+        showToast('Please enter a target URL', 'warning');
+        return;
+    }
+    const id = currentUrlLaunchProfileId;
+    closeUrlLaunchModal();
+    showToast(`Launching profile navigating to ${url}...`, 'info');
+    try {
+        await requestJson(`${API}/api/profiles/${id}/launch`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url })
+        }, 'Failed to launch profile');
+        showToast('Profile launched successfully', 'success');
+        fetchProfiles();
+    } catch (e) {
+        showToast(e.message, 'error');
+    }
+}
+
+// =========================================================
+// EXPORT & IMPORT PROFILES (JSON)
+// =========================================================
+async function exportProfiles() {
+    try {
+        const data = await requestJson(`${API}/api/profiles/export/json`, {}, 'Failed to export profiles');
+        const jsonStr = JSON.stringify(data.profiles || [], null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ghostbrowser-profiles-${Date.now()}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        showToast(`Exported ${data.count || 0} profiles`, 'success');
+    } catch (e) {
+        showToast('Export error: ' + e.message, 'error');
+    }
+}
+
+function openImportModal() {
+    const modal = document.getElementById('import-profiles-modal');
+    if (modal) {
+        modal.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+    }
+    const textarea = document.getElementById('import-json-textarea');
+    if (textarea) textarea.value = '';
+    const statusMsg = document.getElementById('import-status-msg');
+    if (statusMsg) statusMsg.textContent = '';
+}
+
+function closeImportModal() {
+    const modal = document.getElementById('import-profiles-modal');
+    if (modal) {
+        modal.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+}
+
+function handleImportFileUpload(event) {
+    const file = event?.target?.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const textarea = document.getElementById('import-json-textarea');
+        if (textarea) textarea.value = e.target.result;
+    };
+    reader.readAsText(file);
+}
+
+async function submitImportProfiles() {
+    const textarea = document.getElementById('import-json-textarea');
+    const statusMsg = document.getElementById('import-status-msg');
+    const raw = textarea ? textarea.value.trim() : '';
+    if (!raw) {
+        if (statusMsg) statusMsg.textContent = 'Please paste JSON or choose a file.';
+        showToast('Please paste JSON data', 'warning');
+        return;
+    }
+    let parsed;
+    try {
+        parsed = JSON.parse(raw);
+    } catch (e) {
+        if (statusMsg) statusMsg.textContent = 'Invalid JSON: ' + e.message;
+        showToast('Invalid JSON syntax', 'error');
+        return;
+    }
+    const profilesList = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.profiles) ? parsed.profiles : [parsed]);
+    try {
+        if (statusMsg) statusMsg.textContent = 'Importing profiles...';
+        const res = await requestJson(`${API}/api/profiles/import/json`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ profiles: profilesList })
+        }, 'Import failed');
+        showToast(`Successfully imported ${res.imported_count || 0} profile(s)`, 'success');
+        closeImportModal();
+        fetchProfiles();
+    } catch (e) {
+        if (statusMsg) statusMsg.textContent = 'Error: ' + e.message;
+        showToast(e.message, 'error');
+    }
+}
+
+// =========================================================
+// ACTION DROPDOWN TOGGLE
+// =========================================================
+function toggleActionDropdown(profileId, triggerElement) {
+    const wrapper = triggerElement ? triggerElement.closest('.dropdown-wrapper') : null;
+    const menu = wrapper ? wrapper.querySelector('.action-dropdown-menu') : null;
+    const isShown = menu ? menu.classList.contains('show') : false;
+    document.querySelectorAll('.action-dropdown-menu.show').forEach(m => m.classList.remove('show'));
+    if (menu && !isShown) {
+        menu.classList.add('show');
+    }
+}

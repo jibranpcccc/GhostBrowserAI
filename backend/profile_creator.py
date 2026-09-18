@@ -231,14 +231,14 @@ async def create_zero_leak_profile(
 
     for attempt in range(max_attempts):
         print(f"[Orchestrator] Attempt {attempt + 1}/{max_attempts}")
-        print("[Orchestrator] Step 1: Generating Fingerprint via Kimi AI...")
+        print("[Orchestrator] Step 1: Generating Fingerprint via AI (Zen first, then fallbacks)...")
 
         try:
             fp = await asyncio.wait_for(generate_fingerprint_ai(), timeout=AI_GENERATION_TIMEOUT)
         except asyncio.TimeoutError:
             return {"status": "error", "code": "KIMI_TIMEOUT", "message": PUBLIC_CODE_MESSAGES["KIMI_TIMEOUT"]}
         except Exception as e:
-            logger.error("Kimi fingerprint generation failed for attempt %s: %s", attempt + 1, type(e).__name__)
+            logger.error("AI fingerprint generation failed for attempt %s: %s", attempt + 1, type(e).__name__)
             return {
                 "status": "error",
                 "code": "KIMI_UNAVAILABLE",
@@ -252,13 +252,7 @@ async def create_zero_leak_profile(
             return {"status": "error", "code": "FINGERPRINT_MISMATCH", "message": PUBLIC_CODE_MESSAGES["FINGERPRINT_MISMATCH"]}
 
         if fp.get("_is_fallback"):
-            print("[Orchestrator] STRICT MODE: Kimi AI unavailable. All Cloudflare accounts exhausted.")
-            print("[Orchestrator] Profile creation REFUSED. No profile is ever made without Kimi AI.")
-            return {
-                "status": "error",
-                "message": PUBLIC_CODE_MESSAGES["KIMI_UNAVAILABLE"],
-                "code": "KIMI_UNAVAILABLE",
-            }
+            print("[Orchestrator] Zen unavailable — using locally generated coherent fingerprint.")
 
         advanced = {
             "os": fp.get("os"),
@@ -366,6 +360,7 @@ async def create_zero_leak_profile(
                     pass
             return {"status": "error", "code": "CREATE_FAILED", "message": PUBLIC_CODE_MESSAGES["CREATE_FAILED"]}
 
+        mode = advanced.get("privacy_mode", "standard")
         if validation_result["decision"] != "ACCEPT":
             issues = validation_result.get("issues", [])
             only_ai_fallback = all("AI analysis failed" in i or "Fallback" in i for i in issues) if issues else False
@@ -388,7 +383,6 @@ async def create_zero_leak_profile(
                     profile_manager.delete_profile(final_profile["id"])
                     continue
 
-            mode = advanced.get("privacy_mode", "standard")
         _test_env = os.environ.get("GHOSTBROWSER_TEST_ENV", "").strip().lower() in ("1", "true")
         if not skip_warming and not _test_env and mode not in ("strict", "ephemeral"):
             print("[Orchestrator] Step 5: AI Headless Cookie Warmer...")

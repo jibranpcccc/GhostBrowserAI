@@ -38,17 +38,19 @@ class ErrorContractTests(TestCase):
         from backend.main import app
         return TestClient(app)
 
-    def test_auth_misconfiguration_returns_503_not_500(self):
+    def test_auth_is_disabled_by_default_never_blocks_or_500(self):
         os.environ.pop("GHOSTBROWSER_ADMIN_TOKEN", None)
         with self._client() as client:
-            resp = client.post("/api/profiles", json={"name": "x"}, headers=_with_csrf(client))
-            self.assertEqual(resp.status_code, 503)
+            resp = client.get("/api/profiles")
+            self.assertNotEqual(resp.status_code, 401)
+            self.assertNotEqual(resp.status_code, 403)
+            self.assertNotEqual(resp.status_code, 503)
             self.assertNotEqual(resp.status_code, 500)
 
-    def test_missing_auth_header_returns_401_not_500(self):
+    def test_missing_auth_header_never_returns_401_or_500(self):
         with self._client() as client:
-            resp = client.post("/api/profiles", json={"name": "x"}, headers=_with_csrf(client))
-            self.assertEqual(resp.status_code, 401)
+            resp = client.get("/api/profiles")
+            self.assertNotEqual(resp.status_code, 401)
             self.assertNotEqual(resp.status_code, 500)
 
     def test_500_response_contains_no_stack_trace(self):

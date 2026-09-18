@@ -63,7 +63,10 @@ async def lifespan(app: FastAPI):
     scheduler_manager.stop()
     # Close shared httpx client to prevent resource leak (CRIT-07)
     from backend.ai_generator import _shared_client
-    await _shared_client.aclose()
+    try:
+        await _shared_client.aclose()
+    except Exception:
+        pass
 
 # Rate limiter for profile creation: single create and bulk create share one
 # global semaphore (A06) so combined concurrency never exceeds the limit.
@@ -404,6 +407,59 @@ async def delete_profile(profile_id: str, _auth: None = Depends(require_admin_to
         raise HTTPException(status_code=404, detail="Profile not found")
     return {"status": "success"}
 
+@app.post("/api/profiles/{profile_id}/clear-cache")
+async def clear_profile_cache(profile_id: str, _auth: None = Depends(require_admin_token)):
+    """Clear cookies and local storage without deleting profile fingerprint."""
+    try:
+        success = profile_manager.clear_profile_storage(profile_id)
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    if not success:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return {"status": "success", "message": "Profile cache and cookies cleared"}
+
+@app.get("/api/profiles/export/json")
+async def export_profiles_json(_auth: None = Depends(require_admin_token)):
+    """Export all profiles as clean, portable JSON."""
+    profiles = profile_manager.list_profiles()
+    export_data = []
+    for p in profiles:
+        clean_p = dict(p)
+        clean_p.pop("path", None)
+        clean_p.pop("pin_hash", None)
+        export_data.append(clean_p)
+    return {"status": "success", "profiles": _redact_sensitive_api_data(export_data)}
+
+class ImportProfilesRequest(BaseModel):
+    profiles: List[Dict[str, Any]]
+
+@app.post("/api/profiles/import/json")
+async def import_profiles_json(req: ImportProfilesRequest, _auth: None = Depends(require_admin_token)):
+    """Batch import profiles from JSON."""
+    imported = 0
+    errors = []
+    for p in req.profiles:
+        name = p.get("name")
+        if not name:
+            continue
+        try:
+            res = await profile_creator.create_zero_leak_profile(
+                name=name,
+                proxy=p.get("proxy"),
+                advanced_ui=p.get("advanced")
+            )
+            if res.get("status") == "success":
+                new_id = res["profile"]["id"]
+                if p.get("tags") or p.get("notes"):
+                    profile_manager.update_profile(new_id, {"tags": p.get("tags", []), "notes": p.get("notes", "")})
+                imported += 1
+            else:
+                errors.append(f"{name}: {res.get('message')}")
+        except Exception as e:
+            errors.append(f"{name}: {str(e)}")
+    return {"status": "success", "imported": imported, "errors": errors}
+
+
 class RenameRequest(BaseModel):
     name: str
 
@@ -735,12 +791,20 @@ async def run_bulk_macro(req: BulkMacroRunRequest, _auth: None = Depends(require
 
 class LaunchProfileRequest(BaseModel):
     pin: Optional[str] = None
+    url: Optional[str] = None
 
 
 @app.post("/api/profiles/{profile_id}/launch")
 async def launch_profile_api(profile_id: str, req: LaunchProfileRequest = None, _auth: None = Depends(require_admin_token)):
     try:
         res = await launch_profile(profile_id, pin=req.pin) if req and req.pin else await launch_profile(profile_id)
+        if req and req.url and res.get("status") == "success":
+            from backend.browser_manager import active_browsers
+            if profile_id in active_browsers and active_browsers[profile_id].get("page"):
+                try:
+                    await active_browsers[profile_id]["page"].goto(req.url, timeout=15000)
+                except Exception:
+                    pass
     except HTTPException:
         raise
     except Exception as exc:
@@ -1028,6 +1092,26 @@ async def test_all_proxies(_auth: None = Depends(require_admin_token)):
 @app.get("/api/system/health")
 def get_system_health():
     return system_monitor.get_health()
+
+
+@app.get("/api/system/admin-token-hint")
+def get_admin_token_hint(request: Request):
+    """Return the configured admin token for loopback clients only.
+
+    The management UI is served by this same local process, so it cannot know
+    the admin token by itself.  This convenience endpoint hands the token to
+    the dashboard over loopback (127.0.0.1 / ::1) so team members never have
+    to paste it manually.  Remote clients always receive 403.
+    """
+    host = getattr(request.client, "host", "") or ""
+    # testclient host is only used by TestClient in the test suite; the peer
+    # host of a real request is always the TCP origin, so it cannot spoof this.
+    if host not in {"127.0.0.1", "::1", "localhost", "testclient"}:
+        raise HTTPException(status_code=403, detail="Admin token hint is loopback-only")
+    token = os.environ.get("GHOSTBROWSER_ADMIN_TOKEN", "").strip()
+    if not token:
+        raise HTTPException(status_code=503, detail="Admin token is not configured")
+    return {"token": token}
 
 
 @app.get("/api/sites/access-log")

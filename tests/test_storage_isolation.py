@@ -100,7 +100,7 @@ def main():
                 pass
 
         def _start_http_server():
-            global http_server
+            nonlocal http_server
             http_server = HTTPServer(("127.0.0.1", 0), _TestHTTPHandler)
             t = threading.Thread(target=http_server.serve_forever, daemon=True)
             t.start()
@@ -236,7 +236,7 @@ def main():
             return context, page
 
         async def run_test():
-            global playwright_instance, browser_instance, http_server
+            nonlocal playwright_instance, browser_instance, http_server
             all_passed = True
 
             from playwright.async_api import async_playwright

@@ -19,6 +19,16 @@ from pathlib import Path
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
+
+# Frozen/redirected Windows consoles default to a legacy cp1252 codec; any
+# log line containing emoji or other non-Latin text would raise
+# UnicodeEncodeError and crash the running flow. Force UTF-8 with replacement.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 HOST_DEFAULT = "127.0.0.1"
 PORT_DEFAULT = 8000
 ALREADY_RUNNING_EXIT = 10
@@ -45,10 +55,18 @@ def _configure_process() -> None:
         sys.path.insert(0, project)
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-    # Load .env from the project root (silent if absent)
+    # Load .env from the project root (silent if absent).
+    # Frozen builds keep the .env next to the EXE (PROJECT_DIR then points
+    # into _internal/), so resolve both locations.
     try:
         from dotenv import load_dotenv
-        load_dotenv(project / ".env", override=True)
+        env_candidates = [PROJECT_DIR / ".env"]
+        if getattr(sys, "frozen", False):
+            env_candidates.insert(0, Path(sys.executable).resolve().parent / ".env")
+        for env_path in env_candidates:
+            if env_path.is_file():
+                load_dotenv(env_path, override=False)
+                break
     except Exception:
         pass
 

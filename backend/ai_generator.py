@@ -203,10 +203,15 @@ def _finalize_ai_result(parsed: dict, response_data: dict, source: str, chrome_m
 
     reported_model = response_data.get("model") if isinstance(response_data, dict) else None
     if reported_model is not None:
-        # Accept the response if it reports the exact model we requested.
-        # Some providers (e.g. Cloudflare) may report the upstream model,
-        # while Mistral reports the model family such as "mistral-small-latest".
-        if not isinstance(reported_model, str) or reported_model != requested_model:
+        # Accept the response if it reports the exact model we requested or matches family prefix
+        is_model_match = (
+            reported_model == requested_model
+            or (isinstance(reported_model, str) and isinstance(requested_model, str) and (
+                reported_model.startswith(requested_model.replace("-latest", ""))
+                or requested_model.startswith(reported_model.replace("-latest", ""))
+            ))
+        )
+        if not isinstance(reported_model, str) or not is_model_match:
             print(f"[AI Generator] Rejected response: reported model '{reported_model}' did not match requested '{requested_model}'.")
             return None
 
@@ -344,11 +349,12 @@ async def _call_via_racing_proxy(target_os: str, target_browser: str, chrome_maj
 
 
 def _get_mistral_api_keys() -> list[str]:
-    """Return all configured Mistral API keys from environment variables.
+    """Return all configured Mistral API keys from environment variables or ~/.hermes/.env.
 
     Supports:
       - plain MISTRAL_API_KEY
       - numbered MISTRAL_API_KEY_1 ... MISTRAL_API_KEY_N
+      - automatic fallback to ~/.hermes/.env
     """
     keys: list[str] = []
     plain = os.environ.get("MISTRAL_API_KEY")
@@ -360,6 +366,20 @@ def _get_mistral_api_keys() -> list[str]:
             continue
         if key not in keys:
             keys.append(key)
+
+    if not keys:
+        hermes_env = os.path.expanduser("~/.hermes/.env")
+        if os.path.exists(hermes_env):
+            try:
+                with open(hermes_env, "r", encoding="utf-8", errors="ignore") as f:
+                    for line in f:
+                        if "MISTRAL_API_KEY" in line and "=" in line:
+                            val = line.split("=", 1)[1].strip()
+                            if val and val not in keys:
+                                keys.append(val)
+            except Exception:
+                pass
+
     return [k.strip() for k in keys if k.strip()]
 
 
@@ -375,7 +395,7 @@ async def _call_mistral_api(target_os: str, target_browser: str,
     if not api_keys:
         return None
 
-    model_name = os.environ.get("MISTRAL_MODEL", "mistral-small-latest")
+    model_name = os.environ.get("MISTRAL_MODEL", "codestral-latest")
     race_size = int(os.environ.get("MISTRAL_RACE_SIZE", "3"))
     timeout_seconds = float(os.environ.get("MISTRAL_REQUEST_TIMEOUT", "45.0"))
     inter_batch_delay = float(os.environ.get("MISTRAL_INTER_BATCH_DELAY", "1.0"))
@@ -771,13 +791,13 @@ async def generate_fingerprint_ai(target_os: str = "Windows", target_browser: st
     if chrome_major_version is None:
         chrome_major_version = get_installed_chromium_major_version()
 
-    # --- ATTEMPT 1: OpenCode Zen DeepSeek (fast, OpenAI-compatible, free model) ---
-    result = await _call_zen_deepseek_api(target_os, target_browser, chrome_major_version)
+    # --- ATTEMPT 1: Mistral API (fast, OpenAI-compatible, JSON mode, codestral-latest) ---
+    result = await _call_mistral_api(target_os, target_browser, chrome_major_version)
     if result:
         return sanitize_native_surface_fields(result)
 
-    # --- ATTEMPT 2: Mistral API (fast, OpenAI-compatible, JSON mode) ---
-    result = await _call_mistral_api(target_os, target_browser, chrome_major_version)
+    # --- ATTEMPT 2: OpenCode Zen DeepSeek (fast, OpenAI-compatible, free model) ---
+    result = await _call_zen_deepseek_api(target_os, target_browser, chrome_major_version)
     if result:
         return sanitize_native_surface_fields(result)
 

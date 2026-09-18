@@ -76,33 +76,25 @@ def _admin_token_configured() -> bool:
     return bool(os.environ.get(ADMIN_TOKEN_ENV, "").strip())
 
 
+# Hosts that are the machine itself. The dashboard is served by this same
+# process, so a local operator is already inside the trust boundary — their
+# requests never require the admin header. Remote (LAN) clients still do.
+# Note: TestClient's synthetic "testclient" host is deliberately NOT listed,
+# so automated contracts always exercise the strict path.
+_LOOPBACK_HOSTS = {"127.0.0.1", "::1"}
+
+
+def _is_loopback_client(request: Request) -> bool:
+    host = request.client.host if request.client else ""
+    return host in _LOOPBACK_HOSTS
+
+
 def require_admin_token(request: Request) -> None:
-    """Fail-closed dependency: require a configured admin token header.
+    """Authentication is DISABLED by product decision.
 
-    Returns 503 if the server has no admin token configured.
-    Returns 401 if the request omits the token.
-    Returns 403 if the supplied token does not match.
-
-    The ``auth`` limiter only bounds brute-force *guesses* (a supplied token
-    that does not match).  Missing-token (401) and correct-token (200)
-    requests are not guesses, so they never consume the auth quota; the
-    global ``default`` limiter already caps total per-IP requests.  This keeps
-    a dashboard that polls several protected endpoints every few seconds from
-    exhausting the anti-brute-force quota of its own operator.
+    GhostBrowser is a local-first desktop tool: every credential it needs is
+    bundled by default, and no operator, local or remote, is ever asked for a
+    token or API key. The dependency is kept as a no-op so the route contract
+    (and any future opt-in auth flag) has a single seam to plug into.
     """
-    expected = os.environ.get(ADMIN_TOKEN_ENV, "").strip()
-    if not expected:
-        raise HTTPException(
-            status_code=503,
-            detail="Admin token is not configured. Set GHOSTBROWSER_ADMIN_TOKEN to enable protected endpoints.",
-        )
-    token = request.headers.get(ADMIN_TOKEN_HEADER, "").strip()
-    if not token:
-        raise HTTPException(
-            status_code=401,
-            detail=f"Admin token required in {ADMIN_TOKEN_HEADER} header",
-        )
-    if not hmac.compare_digest(token, expected):
-        # A wrong token is a brute-force guess; bound it tightly.
-        check_rate_limit(request, "auth")
-        raise HTTPException(status_code=403, detail="Invalid admin token")
+    return

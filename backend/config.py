@@ -56,8 +56,6 @@ def _resolve_chromium_info():
     import os
     import threading
     import queue
-    from playwright.sync_api import sync_playwright
-    from backend.engine_resolver import get_chromium_executable_path
 
     exe_path = None
 
@@ -65,6 +63,7 @@ def _resolve_chromium_info():
     # GhostBrowser use a hardened fork while still falling back to the
     # Playwright-managed binary when no custom build is configured.
     try:
+        from backend.engine_resolver import get_chromium_executable_path
         engine_path = get_chromium_executable_path()
         if engine_path and os.path.isfile(engine_path):
             exe_path = engine_path
@@ -86,6 +85,7 @@ def _resolve_chromium_info():
     # Run sync_playwright in a separate thread to ensure event-loop safety
     def _query_playwright():
         try:
+            from playwright.sync_api import sync_playwright
             with sync_playwright() as p:
                 return p.chromium.executable_path
         except Exception:
@@ -127,6 +127,44 @@ def _resolve_chromium_info():
             try:
                 cmd = f'powershell -NoProfile -Command "(Get-Item \'{exe_path}\').VersionInfo.ProductVersion"'
                 version_str = subprocess.check_output(cmd, shell=True, text=True).strip()
+                if version_str:
+                    _cached_chromium_version = version_str
+                    return
+            except Exception:
+                pass
+            # Subprocess-free fallback (works in frozen builds where spawning
+            # PowerShell may be unavailable or blocked by policy).
+            try:
+                import ctypes
+                import ctypes.wintypes
+
+                def _get_file_version_info(path):
+                    size = ctypes.windll.version.GetFileVersionInfoSizeW(path, None)
+                    if not size:
+                        return None
+                    data = ctypes.create_string_buffer(size)
+                    if not ctypes.windll.version.GetFileVersionInfoW(path, 0, size, data):
+                        return None
+                    value = ctypes.c_void_p()
+                    length = ctypes.wintypes.UINT()
+                    if not ctypes.windll.version.VerQueryValueW(
+                        data, "\\", ctypes.byref(value), ctypes.byref(length)
+                    ):
+                        return None
+                    raw = ctypes.cast(value, ctypes.POINTER(ctypes.c_uint32 * 5)).contents
+                    if raw[0] != 0xFEEF04BD:
+                        return None
+                    # VS_FIXEDFILEINFO: signature(4) then two packed DWORDs.
+                    # Buffer order here is LS then MS on this platform, so
+                    # detect orientation by checking which pair yields a
+                    # plausible major (< 1000).
+                    a_maj, a_min = raw[3] >> 16, raw[3] & 0xFFFF
+                    b_maj, b_min = raw[4] >> 16, raw[4] & 0xFFFF
+                    if a_maj < 1000:
+                        return f"{a_maj}.{a_min}.{b_maj}.{b_min}"
+                    return f"{b_maj}.{b_min}.{a_maj}.{a_min}"
+
+                version_str = _get_file_version_info(exe_path)
                 if version_str:
                     _cached_chromium_version = version_str
                     return
