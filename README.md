@@ -13,12 +13,16 @@ GhostBrowser launches isolated Chromium windows through a Playwright backend con
 ## Key features
 
 - **Profile isolation** — separate `profiles_data/<id>` directories for cookies, localStorage, IndexedDB, cache, and service workers.
-- **Fingerprint spoofing** — canvas, WebGL vendor/renderer, audio context, fonts, screen resolution, DPR, `hardwareConcurrency`, `deviceMemory`, touch/pointer, media devices, battery, sensors, WebGPU, speech voices, and network information.
+- **Fingerprint consistency** — canvas, WebGL vendor/renderer, audio context, fonts, screen resolution, DPR, `hardwareConcurrency`, `deviceMemory`, touch/pointer, media devices, battery, sensors, WebGPU, speech voices, and network information.
+- **Native prototype inheritance** — all navigator overrides reside on `Navigator.prototype` and `Screen.prototype` with native accessor getters, leaving zero own-property footprint on instances.
+- **Authoritative browser versioning** — dynamic engine detection via `BrowserVersion` model synchronizing `Sec-CH-UA`, Client Hints, and HTTP headers with zero headless leakage.
+- **Deterministic session noise** — 100% stable seeded session noise across dates without day-dependent hardware jitter.
+- **Network coherence & WebRTC safety** — strict mDNS and STUN reflexive mapping preventing private LAN host IP leaks.
 - **Proxy management** — per-profile HTTP/HTTPS/SOCKS5 proxy binding, health checks, failover pool, geo-based timezone/locale auto-match, and kill-switch.
 - **Privacy modes** — Standard, Strict, and Ephemeral browsing modes with configurable storage persistence.
 - **PIN lock** — optional per-profile launch lock. New and changed PINs must be 4–6 ASCII digits and are stored as PBKDF2 hashes; existing legacy PINs remain usable for unlock until changed.
 - **Virtual keyboard** — on-screen keyboard for `data-secure="true"` inputs with shift, caps, and randomized layouts.
-- **Detection scanners** — offline anti-detect scanner plus live checks against browserleaks, whoer, creepjs, fingerprintjs, pixelscan, iphey, and sannysoft.
+- **Detection scanners & brutal audit** — offline anti-detect scanner, live multi-target checks, and 10-tier automated brutal torture benchmark.
 - **CSRF / CSP / security headers** — FastAPI double-submit cookie CSRF protection, CSP, X-Frame-Options, Referrer-Policy, and Permissions-Policy.
 - **SBOM** — CycloneDX-style software bill of materials served from `/api/sbom`.
 - **Encrypted backup** — AES-256-GCM encrypted local profile export/import and full-profile transfer.
@@ -88,15 +92,44 @@ Administrative API operations are gated by a server-side token.
 
 ---
 
-## Testing
+## Testing & Adversarial Verification
 
-Run the scanner suite:
+GhostBrowser AI includes both offline scanners and an adversarial 10-tier Brutal Anti-Detect Torture Test suite:
+
+### 1. Adversarial Brutal Test Suite (Levels 1–10)
+Evaluates live runtime integrity across CreepJS, BrowserLeaks (Canvas, WebGL, WebGPU, WebRTC), and FingerprintJS with automated screenshot capture, DOM/Worker coherence, deterministic reload stability, network candidate leakage, and cross-profile state crossover:
+
+```bash
+python tests/run_brutal_test_suite.py
+```
+
+Outputs:
+- Machine-readable telemetry: `tests/brutal_test_report.json`
+- Verification screenshots: `artifacts/brutal_test_screenshots/`
+
+### 2. Comprehensive Word Audit Report Generator
+Compiles the empirical telemetry, full-fidelity screenshots, and adversarial severity matrix into an executive Microsoft Word document:
+
+```bash
+python tests/build_word_report.py
+```
+Output: `GhostBrowser_Brutal_AntiDetect_Audit_Report.docx`
+
+### 3. Unit & Integration Regression Suite
+Run full automated test passes:
+
+```bash
+python -m pytest tests/ -v
+```
+
+### 4. Detection Scanners & Per-Profile Checks
+Run the legacy scanner suite:
 
 ```bash
 python scripts/run_scanners.py
 ```
 
-Reports are written to `logs/scanner_reports/`. For per-profile live detection checks:
+For per-profile live detection checks:
 
 ```bash
 python scripts/detection_check.py --live --profile-id <uuid>

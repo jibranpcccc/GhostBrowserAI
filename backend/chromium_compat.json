@@ -1,7 +1,34 @@
 {
-  "schema_version": 1,
-  "approved_chromium_majors": [130, 149, 151],
+  "schema_version": 2,
+  "supported_production_majors": [
+    131,
+    132,
+    133,
+    134,
+    135,
+    148,
+    149,
+    150,
+    151
+  ],
+  "legacy_test_majors": [
+    130
+  ],
+  "approved_chromium_majors": [
+    130,
+    131,
+    132,
+    133,
+    134,
+    135,
+    148,
+    149,
+    150,
+    151
+  ],
   "minimum_playwright_version": "1.48.0",
+  "legacy_override_env": "GHOSTBROWSER_ALLOW_LEGACY_CHROMIUM",
+  "policy_documentation": "docs/chromium_lifecycle.md",
   "required_checks": [
     "qa_test_suite.py",
     "tests/run_tests.py",

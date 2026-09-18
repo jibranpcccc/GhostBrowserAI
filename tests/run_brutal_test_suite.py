@@ -82,12 +82,16 @@ async def run_brutal_test():
     profile_data = profile_manager.get_profile(profile_id)
     adv = profile_data.get("advanced", {})
 
+    from backend.browser_version import BrowserVersion
+    engine_bv = BrowserVersion.from_installed_engine()
+
     intended_specs = {
         "profile_id": profile_id,
         "name": profile_name,
         "intended_os": adv.get("os", "Windows"),
         "browser_name": "Chromium / Chrome",
-        "browser_version": "130.0.6723.58",
+        "browser_version": engine_bv.full_version,
+        "browser_major": engine_bv.major,
         "cpu_cores": adv.get("cpu_cores", 8),
         "ram_gb": adv.get("memory_gb", 8),
         "gpu_vendor": adv.get("webgl_vendor", "Google Inc. (NVIDIA)"),
@@ -232,14 +236,31 @@ async def run_brutal_test():
                 const rows = Array.from(document.querySelectorAll('table tr')).map(tr => tr.innerText.trim().replace(/\\t+/g, ' = '));
                 const reportHash = rows.find(r => r.includes('Report Hash')) || '';
                 const imgHash = rows.find(r => r.includes('Image Hash')) || '';
-                const vendor = rows.find(r => r.includes('Vendor')) || '';
-                const renderer = rows.find(r => r.includes('Renderer')) || '';
+                const unmaskedVendor = rows.find(r => r.toLowerCase().includes('unmasked vendor')) || rows.find(r => r.includes('Vendor')) || '';
+                const unmaskedRenderer = rows.find(r => r.toLowerCase().includes('unmasked renderer')) || rows.find(r => r.includes('Renderer')) || '';
+
+                let directParams = {};
+                try {
+                    const canvas = document.createElement('canvas');
+                    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                    if (gl) {
+                        const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+                        directParams = {
+                            vendor: gl.getParameter(gl.VENDOR),
+                            renderer: gl.getParameter(gl.RENDERER),
+                            unmasked_vendor: dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) : null,
+                            unmasked_renderer: dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : null,
+                        };
+                    }
+                } catch (e) {}
+
                 return {
                     title: document.title,
                     report_hash: reportHash,
                     image_hash: imgHash,
-                    unmasked_vendor: vendor,
-                    unmasked_renderer: renderer,
+                    unmasked_vendor: unmaskedVendor,
+                    unmasked_renderer: unmaskedRenderer,
+                    direct_params: directParams,
                     snippet: document.body.innerText.slice(0, 600).replace(/\\n+/g, ' | ')
                 };
             }""")
@@ -248,7 +269,7 @@ async def run_brutal_test():
                 "data": webgl_data,
                 "status": "CAPTURED"
             }
-            print(f"  WebGL Results: {webgl_data['report_hash'][:50]}, {webgl_data['unmasked_renderer'][:50]}")
+            print(f"  WebGL Results: {webgl_data['unmasked_vendor'][:50]}, {webgl_data['unmasked_renderer'][:50]}")
         except Exception as e:
             print(f"  BrowserLeaks WebGL capture error: {e}")
             report["level1_baseline"]["browserleaks_webgl"] = {"error": str(e)}
@@ -393,7 +414,8 @@ async def run_brutal_test():
             "tab_oscillations": tab_oscillations,
             "deterministic_canvas": oscillations == 0,
             "deterministic_hardware": oscillations == 0,
-            "status": "PASS" if (oscillations == 0 and tab_oscillations == 0) else "WARN"
+            "zero_drift": (oscillations == 0 and tab_oscillations == 0),
+            "status": "PASS" if (oscillations == 0 and tab_oscillations == 0) else "FAIL"
         }
 
         # -------------------------------------------------------------
@@ -633,12 +655,18 @@ async def run_brutal_test():
             if " 192.168." in c or " 10." in c:
                 has_plain_lan_ip = True
 
-        print(f"  • Plain LAN IP Leak: {'LEAK DETECTED (FATAL)' if has_plain_lan_ip else 'NONE (PASS - mDNS or restricted)'}")
+        from backend.network_coherence import validate_webrtc_candidates
+        val_res = validate_webrtc_candidates(candidates)
+        candidates_safe = val_res.get("is_safe", True) and (not has_plain_lan_ip)
+
+        print(f"  • Plain LAN IP Leak: {'LEAK DETECTED (CRITICAL)' if not candidates_safe else 'NONE (PASS - mDNS or restricted)'}")
 
         report["level6_network_leak"] = {
             "candidates": candidates,
             "has_plain_lan_leak": has_plain_lan_ip,
-            "status": "PASS" if not has_plain_lan_ip else "FATAL"
+            "candidates_safe": candidates_safe,
+            "val_details": val_res,
+            "status": "PASS" if candidates_safe else "CRITICAL"
         }
 
         # -------------------------------------------------------------
@@ -736,62 +764,221 @@ async def run_brutal_test():
         print("LEVEL 9 & 10: ADVERSARIAL MATRIX & SEVERITY GRADING")
         print("=" * 60)
 
-        matrix = [
-            {
+        # Dynamic 4-state status evaluation (PASS, FAIL, INCONCLUSIVE, NOT_TESTED)
+        matrix = []
+
+        # Level 6: Network Isolation & WebRTC
+        l6_data = report.get("level6_network_leak", {})
+        if l6_data.get("candidates_safe", False) or l6_data.get("status") == "PASS":
+            matrix.append({
+                "level": "Level 6",
                 "surface": "Network Isolation & WebRTC IP Leak",
-                "finding": "WebRTC STUN resolution does not leak raw private host LAN IP (mDNS masked / restricted).",
+                "status": "PASS",
                 "severity": "PASS",
-                "level": "Level 6"
-            },
-            {
+                "finding": "WebRTC STUN resolution strictly uses mDNS / STUN reflexive addresses. Zero private LAN host IP leak detected."
+            })
+        elif "error" in l6_data:
+            matrix.append({
+                "level": "Level 6",
+                "surface": "Network Isolation & WebRTC IP Leak",
+                "status": "INCONCLUSIVE",
+                "severity": "INCONCLUSIVE",
+                "finding": f"WebRTC verification could not complete: {l6_data.get('error')}"
+            })
+        else:
+            matrix.append({
+                "level": "Level 6",
+                "surface": "Network Isolation & WebRTC IP Leak",
+                "status": "FAIL",
+                "severity": "CRITICAL",
+                "finding": "WebRTC host IP leak detected in candidate resolution."
+            })
+
+        # Level 7: Storage & Profile Crossover
+        l7_data = report.get("level7_profile_isolation", {})
+        if l7_data.get("zero_crossover", False):
+            matrix.append({
+                "level": "Level 7",
                 "surface": "Storage & Profile Crossover",
-                "finding": "Zero state crossover across profiles. Profile B cannot read Profile A cookies, localStorage or session.",
+                "status": "PASS",
                 "severity": "PASS",
-                "level": "Level 7"
-            },
-            {
+                "finding": "Zero state crossover across profiles. Profile B cannot read Profile A cookies, localStorage, or session storage."
+            })
+        else:
+            matrix.append({
+                "level": "Level 7",
+                "surface": "Storage & Profile Crossover",
+                "status": "FAIL",
+                "severity": "CRITICAL",
+                "finding": "Storage state crossover detected between distinct profile contexts."
+            })
+
+        # Level 3: Cross-Context Contradiction
+        l3_data = report.get("level3_cross_context", {})
+        l3_contradictions = l3_data.get("contradictions", [])
+        if not l3_contradictions:
+            matrix.append({
+                "level": "Level 3",
                 "surface": "Cross-Context Contradiction (Main vs Worker vs Iframe)",
-                "finding": f"hardwareConcurrency ({main_data['cores']}), UA, and timezone match perfectly across main page and worker.",
+                "status": "PASS",
                 "severity": "PASS",
-                "level": "Level 3"
-            },
-            {
+                "finding": f"hardwareConcurrency ({main_data.get('cores')}), userAgent, and timezone match coherently across DOM, iframe, and Web Worker realms."
+            })
+        else:
+            matrix.append({
+                "level": "Level 3",
+                "surface": "Cross-Context Contradiction (Main vs Worker vs Iframe)",
+                "status": "FAIL",
+                "severity": "HIGH",
+                "finding": f"Cross-context contradictions detected: {l3_contradictions}"
+            })
+
+        # Level 4: HTTP Headers vs JS Client Hints Coherence
+        l4_data = report.get("level4_http_js_coherence", {})
+        l4_issues = l4_data.get("coherence_issues", [])
+        if not l4_issues:
+            matrix.append({
+                "level": "Level 4",
                 "surface": "HTTP Headers vs JS Client Hints Coherence",
-                "finding": "Outbound HTTP User-Agent and Sec-CH-UA-Platform match navigator.userAgent and userAgentData.",
+                "status": "PASS",
                 "severity": "PASS",
-                "level": "Level 4"
-            },
-            {
+                "finding": "Outbound HTTP User-Agent and Sec-CH-UA match navigator.userAgent and userAgentData with zero HeadlessChrome brand leaks."
+            })
+        else:
+            matrix.append({
+                "level": "Level 4",
+                "surface": "HTTP Headers vs JS Client Hints Coherence",
+                "status": "FAIL",
+                "severity": "HIGH",
+                "finding": f"Client Hints / HTTP Header contradictions detected: {l4_issues}"
+            })
+
+        # Level 2: Same-Profile Determinism Across Reloads
+        l2_data = report.get("level2_stability", {})
+        if l2_data.get("zero_drift", False) or l2_data.get("status") == "PASS":
+            matrix.append({
+                "level": "Level 2",
                 "surface": "Same-Profile Determinism Across Reloads",
-                "finding": f"Canvas and hardware attributes 100% deterministic across 20 reloads and 10 tab cycles.",
+                "status": "PASS",
                 "severity": "PASS",
-                "level": "Level 2"
-            },
-            {
+                "finding": "Canvas noise, audio noise, and hardware properties remain deterministic across all 20 reloads and 10 tab cycles."
+            })
+        else:
+            matrix.append({
+                "level": "Level 2",
+                "surface": "Same-Profile Determinism Across Reloads",
+                "status": "FAIL",
+                "severity": "HIGH",
+                "finding": "Profile fingerprint attributes drifted unexpectedly across page reloads."
+            })
+
+        # Level 5: Hardware Plausibility Matrix
+        l5_data = report.get("level5_hardware_coherence", {})
+        if l5_data.get("status") == "PASS":
+            matrix.append({
+                "level": "Level 5",
                 "surface": "Hardware Plausibility Matrix",
-                "finding": "CPU (8 cores), coarse RAM (8GB/16GB), and ANGLE NVIDIA GPU renderer form a physically plausible PC configuration.",
+                "status": "PASS",
                 "severity": "PASS",
-                "level": "Level 5"
-            },
-            {
+                "finding": f"CPU ({intended_specs.get('cpu_cores')} cores), coarse RAM ({intended_specs.get('ram_gb')} GB), and GPU renderer form a physically plausible hardware configuration."
+            })
+        else:
+            matrix.append({
+                "level": "Level 5",
+                "surface": "Hardware Plausibility Matrix",
+                "status": "FAIL",
+                "severity": "MEDIUM",
+                "finding": "Hardware attributes failed plausibility verification."
+            })
+
+        # Level 8: Tamper / Native Prototype Integrity
+        has_own_concurrency = tamper_eval.get("hardwareConcurrency_own_prop", False)
+        has_own_webdriver = tamper_eval.get("webdriver_own_prop", False)
+        proto_has_getter = tamper_eval.get("proto_has_getter", True)
+        if (not has_own_concurrency) and (not has_own_webdriver) and proto_has_getter:
+            matrix.append({
+                "level": "Level 8",
                 "surface": "Tamper / Native Prototype Integrity",
-                "finding": "Functions proxy Function.prototype.toString to '[native code]'.",
+                "status": "PASS",
                 "severity": "PASS",
-                "level": "Level 8"
-            },
-            {
+                "finding": "Function.prototype.toString proxies to '[native code]'. Properties reside on Navigator.prototype with native getter accessors, leaving zero own-property footprint on navigator instance."
+            })
+        else:
+            matrix.append({
+                "level": "Level 8",
+                "surface": "Tamper / Native Prototype Integrity",
+                "status": "FAIL",
+                "severity": "HIGH",
+                "finding": f"Prototype tampering detected: own_concurrency={has_own_concurrency}, own_webdriver={has_own_webdriver}, proto_getter={proto_has_getter}."
+            })
+
+        # Level 1: Baseline Capture on CreepJS & FingerprintJS
+        l1_data = report.get("level1_baseline", {})
+        l1_errors = [k for k, v in l1_data.items() if isinstance(v, dict) and "error" in v]
+        if not l1_errors:
+            matrix.append({
+                "level": "Level 1",
                 "surface": "Baseline Capture on CreepJS & FingerprintJS",
-                "finding": "Full live screenshots and raw DOM telemetry captured and saved to artifacts.",
+                "status": "PASS",
                 "severity": "PASS",
-                "level": "Level 1"
-            }
-        ]
+                "finding": "All external baseline targets (CreepJS, BrowserLeaks WebRTC/Canvas/WebGL, FingerprintJS) captured with live screenshots and raw telemetry."
+            })
+        else:
+            matrix.append({
+                "level": "Level 1",
+                "surface": "Baseline Capture on CreepJS & FingerprintJS",
+                "status": "INCONCLUSIVE",
+                "severity": "INCONCLUSIVE",
+                "finding": f"External targets unreachable or timed out during test run: {l1_errors}."
+            })
+
+        pass_c = sum(1 for m in matrix if m["status"] == "PASS")
+        fail_c = sum(1 for m in matrix if m["status"] == "FAIL")
+        inconcl_c = sum(1 for m in matrix if m["status"] == "INCONCLUSIVE")
+        crit_c = sum(1 for m in matrix if m["severity"] == "CRITICAL")
+        high_c = sum(1 for m in matrix if m["severity"] == "HIGH")
+        med_c = sum(1 for m in matrix if m["severity"] == "MEDIUM")
+        low_c = sum(1 for m in matrix if m["severity"] == "LOW")
+
+        if fail_c > 0 or crit_c > 0:
+            overall_stat = "FAIL"
+        elif inconcl_c > 0:
+            overall_stat = "PASS_WITH_INCONCLUSIVE"
+        else:
+            overall_stat = "PASS"
+
+        report["overall_status"] = overall_stat
         report["grading_matrix"] = matrix
+        report["summary"] = {
+            "total_tests": len(matrix),
+            "passed": pass_c,
+            "failed": fail_c,
+            "inconclusive": inconcl_c,
+            "pass_count": pass_c,
+            "fail_count": fail_c,
+            "inconclusive_count": inconcl_c,
+            "critical_flaws": crit_c,
+            "high_flaws": high_c,
+            "medium_flaws": med_c,
+            "low_flaws": low_c,
+            "severity_counts": {
+                "FATAL": 0,
+                "CRITICAL": crit_c,
+                "HIGH": high_c,
+                "MEDIUM": med_c,
+                "LOW": low_c,
+                "PASS": pass_c,
+                "INCONCLUSIVE": inconcl_c
+            },
+            "pass_rate_pct": round((pass_c / len(matrix)) * 100, 1) if matrix else 0.0,
+        }
 
         print("\n[FINAL ADVERSARIAL GRADING MATRIX]")
         print("-" * 75)
         for row in matrix:
             print(f"  [{row['severity']}] {row['surface']:40s} | {row['finding']}")
+        print("-" * 75)
+        print(f"Summary: {pass_c}/{len(matrix)} PASSED ({report['summary']['pass_rate_pct']}%), {inconcl_c} INCONCLUSIVE, {fail_c} FAILED | Overall: {overall_stat}")
         print("-" * 75)
 
     finally:

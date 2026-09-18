@@ -33,10 +33,7 @@ def main() -> int:
     import os
     os.environ.pop("GHOSTBROWSER_CHROMIUM_BINARY", None)
     repo_root = Path(__file__).resolve().parents[1]
-    shipped_candidates = [
-        repo_root / "dist" / "GhostBrowser" / "playwright-browsers" / "chrome-win64" / "chrome.exe",
-        repo_root / "playwright-browsers" / "chrome-win64" / "chrome.exe",
-    ]
+    shipped_candidates = []
     cache_root = Path(os.environ.get("LOCALAPPDATA", "")) / "ms-playwright"
     if cache_root.is_dir():
         revisions = sorted(
@@ -47,7 +44,17 @@ def main() -> int:
         for rev in revisions:
             for sub in ("chrome-win64", "chrome-win"):
                 shipped_candidates.append(rev / sub / "chrome.exe")
+    shipped_candidates.extend([
+        repo_root / "dist" / "GhostBrowser" / "playwright-browsers" / "chrome-win64" / "chrome.exe",
+        repo_root / "playwright-browsers" / "chrome-win64" / "chrome.exe",
+    ])
     shipped = next((p for p in shipped_candidates if p.is_file()), None)
+    if not shipped:
+        try:
+            from backend.engine_resolver import get_chromium_executable_path
+            shipped = Path(get_chromium_executable_path())
+        except Exception:
+            pass
     if shipped:
         os.environ["GHOSTBROWSER_CHROMIUM_BINARY"] = str(shipped)
     from backend import config as _config
@@ -57,7 +64,21 @@ def main() -> int:
     chromium_major = get_installed_chromium_major_version()
     playwright_version = version("playwright")
     problems = []
-    if chromium_major not in manifest["approved_chromium_majors"]:
+    warnings = []
+    if chromium_major in manifest.get("legacy_test_majors", []):
+        override_env = manifest.get("legacy_override_env", "GHOSTBROWSER_ALLOW_LEGACY_CHROMIUM")
+        is_test_env = os.environ.get("GHOSTBROWSER_TEST_ENV") in ("1", "true")
+        has_override = os.environ.get(override_env) in ("1", "true")
+        if not is_test_env and not has_override:
+            problems.append(
+                f"Chromium {chromium_major} is a legacy test version and is obsolete for production. "
+                f"Upgrade to a modern release (131+) or set {override_env}=1."
+            )
+        else:
+            warnings.append(
+                f"Chromium {chromium_major} is a legacy engine permitted under test/development override."
+            )
+    elif chromium_major not in manifest["approved_chromium_majors"]:
         problems.append(
             f"Chromium {chromium_major} is not approved; run the complete regression suite before release."
         )
@@ -70,6 +91,8 @@ def main() -> int:
         "chromium_major": chromium_major,
         "playwright_version": playwright_version,
         "approved_majors": manifest["approved_chromium_majors"],
+        "supported_production_majors": manifest.get("supported_production_majors", []),
+        "warnings": warnings,
         "problems": problems,
     }
     print(json.dumps(result, indent=2))

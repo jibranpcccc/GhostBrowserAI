@@ -252,6 +252,27 @@ async def _probe_native_metadata_impl(force_headless: bool = True):
             async def run_and_resolve():
                 try:
                     res = await run_metadata_probe(exe_path, force_headless)
+                    if res and isinstance(res, dict):
+                        if res.get("ua"):
+                            res["ua"] = res["ua"].replace("HeadlessChrome/", "Chrome/")
+                        uadata = res.get("uadata")
+                        if isinstance(uadata, dict):
+                            if "brands" in uadata and isinstance(uadata["brands"], list):
+                                clean_brands = []
+                                for b in uadata["brands"]:
+                                    if b.get("brand") == "HeadlessChrome":
+                                        clean_brands.append({"brand": "Google Chrome", "version": b.get("version", "")})
+                                    else:
+                                        clean_brands.append(b)
+                                uadata["brands"] = clean_brands
+                            if "fullVersionList" in uadata and isinstance(uadata["fullVersionList"], list):
+                                clean_fvl = []
+                                for b in uadata["fullVersionList"]:
+                                    if b.get("brand") == "HeadlessChrome":
+                                        clean_fvl.append({"brand": "Google Chrome", "version": b.get("version", "")})
+                                    else:
+                                        clean_fvl.append(b)
+                                uadata["fullVersionList"] = clean_fvl
                     if not fut.done() and not fut.cancelled():
                         fut.set_result(res)
                     async with probe_lock:
@@ -343,7 +364,7 @@ async def run_metadata_probe(exe_path: str, force_headless: bool):
         browser = await p.chromium.launch(
             headless=force_headless,
             executable_path=exe_path,
-            timeout=10000
+            timeout=25000
         )
 
         if hasattr(browser, "_impl_obj") and hasattr(browser._impl_obj, "_process") and browser._impl_obj._process:
@@ -1050,18 +1071,7 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
 
     device_scale_factor = surface_policy.device_scale_factor
 
-    if os.getenv("GHOSTBROWSER_TEST_ENV") not in ("1", "true"):
-        from datetime import date
-        _jitter = (_seed + date.today().toordinal()) & 0xFF
-        _jitter_sign = 1 if (_jitter & 1) else -1
-        device_scale_factor = max(0.5, min(4.0, round(device_scale_factor + _jitter_sign * 0.05, 2)))
-        cpu_cores = max(2, min(16, cpu_cores + _jitter_sign))
-        memory_gb = max(2, min(16, memory_gb + _jitter_sign))
-        for _hk in ("canvas_noise_hash", "audio_noise_hash"):
-            _hv = advanced.get(_hk)
-            if isinstance(_hv, str) and _hv:
-                advanced[_hk] = f"{_hv}{_jitter:02x}"
-
+    # Phase 11: Hardware values are stable and deterministic per profile, zero daily jitter
     ua_os_val = advanced.get("os", "Windows")
     ua_platform_str  = "macOS" if ua_os_val == "Mac" else ("Linux" if ua_os_val == "Linux" else "Windows")
     current_major = _installed_major
@@ -1086,15 +1096,46 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
     chrome_full_ver = current_chrome_ver if chrome_major_ver == current_major else f"{chrome_major_ver}.0.0.0"
 
     native_meta = await probe_native_metadata(force_headless=is_headless)
-    native_ua = native_meta["ua"]
-    native_uadata = native_meta["uadata"] or {}
+    native_ua = native_meta.get("ua", "")
+    native_uadata = native_meta.get("uadata") or {}
 
-    sec_ch_ua = advanced.get("sec_ch_ua")
-    if not sec_ch_ua and "brands" in native_uadata:
-        sec_ch_ua = ", ".join(f'"{b["brand"]}";v="{b["version"]}"' for b in native_uadata["brands"])
-    if not sec_ch_ua:
-        sec_ch_ua = f'"Not A(Brand";v="99", "Chromium";v="{chrome_major_ver}"'
+    # Phase 6 & 4: Authoritative BrowserVersion and HeadlessChrome decontamination
+    from backend.browser_version import BrowserVersion
+    try:
+        bv = BrowserVersion.from_installed_engine()
+    except Exception:
+        bv = BrowserVersion.parse(current_chrome_ver)
 
+    is_headless_id = bool(profile.get("is_headless_identity", False))
+    fallback_brands = bv.get_brands(is_headless_identity=is_headless_id)
+    fallback_fvl = bv.get_full_version_list(is_headless_identity=is_headless_id)
+
+    brands = []
+    if "brands" in native_uadata and native_uadata["brands"]:
+        for b in native_uadata["brands"]:
+            b_name = b.get("brand", "")
+            if "Headless" in b_name and not is_headless_id:
+                brands.append({"brand": "Google Chrome", "version": b.get("version", str(bv.major))})
+            else:
+                brands.append(b)
+    else:
+        raw_sec = advanced.get("sec_ch_ua") or ""
+        for m in _re.finditer(r'"([^"]+)";v="([^"]+)"', raw_sec):
+            b_name = m.group(1)
+            if "Headless" in b_name and not is_headless_id:
+                brands.append({"brand": "Google Chrome", "version": m.group(2)})
+            else:
+                brands.append({"brand": b_name, "version": m.group(2)})
+    if not brands:
+        brands = fallback_brands
+
+    if not is_headless_id:
+        brands = [
+            ({"brand": "Google Chrome", "version": b.get("version", str(bv.major))} if "Headless" in b.get("brand", "") else b)
+            for b in brands
+        ]
+
+    sec_ch_ua = ", ".join(f'"{b["brand"]}";v="{b["version"]}"' for b in brands)
     sec_ch_ua_platform = advanced.get("sec_ch_ua_platform") or f'"{native_uadata.get("platform", ua_platform_str)}"'
 
     ch_architecture = native_uadata.get("architecture") or client_hints.get("architecture") or "x86"
@@ -1104,24 +1145,14 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
     ch_ua_full_version = native_uadata.get("uaFullVersion") or client_hints.get("uaFullVersion") or chrome_full_ver
 
     import json
-    brands = []
-    if "brands" in native_uadata and native_uadata["brands"]:
-        brands = native_uadata["brands"]
-    else:
-        for m in _re.finditer(r'"([^"]+)";v="([^"]+)"', sec_ch_ua):
-            brands.append({
-                "brand": m.group(1),
-                "version": m.group(2)
-            })
-    if not brands:
-        brands = [
-            {"brand": "Not A(Brand", "version": "99"},
-            {"brand": "Chromium", "version": chrome_major_ver}
-        ]
-
     full_version_list = []
     if "fullVersionList" in native_uadata and native_uadata["fullVersionList"]:
-        full_version_list = native_uadata["fullVersionList"]
+        for b in native_uadata["fullVersionList"]:
+            b_name = b.get("brand", "")
+            if "Headless" in b_name and not is_headless_id:
+                full_version_list.append({"brand": "Google Chrome", "version": b.get("version", bv.full_version)})
+            else:
+                full_version_list.append(b)
     else:
         for b in brands:
             v = "99.0.0.0" if "Not" in b["brand"] else ch_ua_full_version
@@ -1129,6 +1160,13 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
                 "brand": b["brand"],
                 "version": v
             })
+    if not is_headless_id:
+        full_version_list = [
+            ({"brand": "Google Chrome", "version": b.get("version", bv.full_version)} if "Headless" in b.get("brand", "") else b)
+            for b in full_version_list
+        ]
+
+    sec_ch_ua_full_version_list = ", ".join(f'"{b["brand"]}";v="{b["version"]}"' for b in full_version_list)
 
     ua_json = json.dumps(ua)
     if is_mobile_profile:
@@ -1144,7 +1182,12 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
         else:
             max_touch_points = 1 + (_seed % 10)
 
-    extra_http_headers = {}
+    extra_http_headers = {
+        "sec-ch-ua": sec_ch_ua,
+        "sec-ch-ua-mobile": "?1" if is_mobile_profile else "?0",
+        "sec-ch-ua-platform": sec_ch_ua_platform,
+        "sec-ch-ua-full-version-list": sec_ch_ua_full_version_list,
+    }
     spoofing_script = f"""
             const spoofedFunctions = new WeakMap();
             const originalToString = Function.prototype.toString;
@@ -1175,21 +1218,21 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
                 }}
                 return func;
             }};
-            const safeDefineProperty = (obj, prop, getter) => {{
+            const safeDefineProtoProperty = (proto, instance, prop, getter) => {{
                 try {{
-                    const desc = Object.getOwnPropertyDescriptor(obj, prop);
-                    const descriptor = {{ get: makeNative(getter, `get ${{prop}}`, 0) }};
-                    if (desc) {{
-                        descriptor.enumerable = desc.enumerable;
-                        descriptor.configurable = desc.configurable;
-                    }} else {{
-                        descriptor.enumerable = true;
-                        descriptor.configurable = true;
+                    if (instance && Object.prototype.hasOwnProperty.call(instance, prop)) {{
+                        try {{ delete instance[prop]; }} catch (e) {{}}
                     }}
-                    Object.defineProperty(obj, prop, descriptor);
+                    const desc = Object.getOwnPropertyDescriptor(proto, prop);
+                    const descriptor = {{
+                        get: makeNative(getter, `get ${{prop}}`, 0),
+                        enumerable: desc ? desc.enumerable : true,
+                        configurable: desc ? desc.configurable : true
+                    }};
+                    Object.defineProperty(proto, prop, descriptor);
                 }} catch (e) {{
                     try {{
-                        Object.defineProperty(obj, prop, {{
+                        Object.defineProperty(proto, prop, {{
                             get: makeNative(getter, `get ${{prop}}`, 0),
                             enumerable: true,
                             configurable: true
@@ -1197,19 +1240,22 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
                     }} catch (e2) {{}}
                 }}
             }};
-            safeDefineProperty(navigator, 'hardwareConcurrency', () => {cpu_cores});
-            safeDefineProperty(navigator, 'deviceMemory', () => {memory_gb});
-            safeDefineProperty(navigator, 'userAgent', () => {ua_json});
-            safeDefineProperty(navigator, 'languages', () => {languages_js});
-            safeDefineProperty(navigator, 'language', () => {languages_js}[0]);
-            safeDefineProperty(navigator, 'maxTouchPoints', () => {max_touch_points});
+            safeDefineProtoProperty(Navigator.prototype, navigator, 'hardwareConcurrency', () => {cpu_cores});
+            safeDefineProtoProperty(Navigator.prototype, navigator, 'deviceMemory', () => {memory_gb});
+            safeDefineProtoProperty(Navigator.prototype, navigator, 'userAgent', () => {ua_json});
+            safeDefineProtoProperty(Navigator.prototype, navigator, 'platform', () => "{ua_platform_str}");
+            safeDefineProtoProperty(Navigator.prototype, navigator, 'languages', () => {languages_js});
+            safeDefineProtoProperty(Navigator.prototype, navigator, 'language', () => {languages_js}[0]);
+            safeDefineProtoProperty(Navigator.prototype, navigator, 'maxTouchPoints', () => {max_touch_points});
+            safeDefineProtoProperty(Navigator.prototype, navigator, 'webdriver', () => false);
+
             const screenRes = "{advanced.get("screen_resolution", "1920x1080")}".split('x');
             const width = parseInt(screenRes[0]);
             const height = parseInt(screenRes[1]);
-            safeDefineProperty(window.screen, 'width', () => width);
-            safeDefineProperty(window.screen, 'height', () => height);
-            safeDefineProperty(window.screen, 'availWidth', () => width);
-            safeDefineProperty(window.screen, 'availHeight', () => height);
+            safeDefineProtoProperty(Screen.prototype, window.screen, 'width', () => width);
+            safeDefineProtoProperty(Screen.prototype, window.screen, 'height', () => height);
+            safeDefineProtoProperty(Screen.prototype, window.screen, 'availWidth', () => width);
+            safeDefineProtoProperty(Screen.prototype, window.screen, 'availHeight', () => height);
             try {{
                 const originalDateTimeFormat = Intl.DateTimeFormat;
                 Intl.DateTimeFormat = function(locales, options) {{
@@ -1500,13 +1546,20 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
                         'if(typeof self!=="undefined"&&self.__ghostWorkerPatchInstalled)return;' +
                         'try{{' +
                         'if(typeof navigator!=="undefined"){{' +
+                        'var __wProto = (typeof WorkerNavigator!=="undefined"&&WorkerNavigator.prototype)?WorkerNavigator.prototype:navigator;' +
                         'var __wLangs={languages_js};' +
-                        'Object.defineProperty(navigator,"language",{{get:function(){{return __wLangs[0];}},configurable:true}});' +
-                        'Object.defineProperty(navigator,"languages",{{get:function(){{return __wLangs.slice();}},configurable:true}});' +
-                        'Object.defineProperty(navigator,"platform",{{get:function(){{return "{ua_platform_str}";}},configurable:true}});' +
-                        'Object.defineProperty(navigator,"hardwareConcurrency",{{get:function(){{return {cpu_cores};}},configurable:true}});' +
-                        'Object.defineProperty(navigator,"deviceMemory",{{get:function(){{return {memory_gb};}},configurable:true}});' +
-                        'Object.defineProperty(navigator,"userAgent",{{get:function(){{return {ua_json};}},configurable:true}});' +
+                        'try{{delete navigator.language;}}catch(_e){{}}' +
+                        'Object.defineProperty(__wProto,"language",{{get:function(){{return __wLangs[0];}},configurable:true,enumerable:true}});' +
+                        'try{{delete navigator.languages;}}catch(_e){{}}' +
+                        'Object.defineProperty(__wProto,"languages",{{get:function(){{return __wLangs.slice();}},configurable:true,enumerable:true}});' +
+                        'try{{delete navigator.platform;}}catch(_e){{}}' +
+                        'Object.defineProperty(__wProto,"platform",{{get:function(){{return "{ua_platform_str}";}},configurable:true,enumerable:true}});' +
+                        'try{{delete navigator.hardwareConcurrency;}}catch(_e){{}}' +
+                        'Object.defineProperty(__wProto,"hardwareConcurrency",{{get:function(){{return {cpu_cores};}},configurable:true,enumerable:true}});' +
+                        'try{{delete navigator.deviceMemory;}}catch(_e){{}}' +
+                        'Object.defineProperty(__wProto,"deviceMemory",{{get:function(){{return {memory_gb};}},configurable:true,enumerable:true}});' +
+                        'try{{delete navigator.userAgent;}}catch(_e){{}}' +
+                        'Object.defineProperty(__wProto,"userAgent",{{get:function(){{return {ua_json};}},configurable:true,enumerable:true}});' +
                         '}}' +
                         'var R={canvas_r_offset},G={canvas_g_offset},B={canvas_b_offset};' +
                         'function noise(id,ox,oy,sw){{var d=id.data,seed=(Math.imul(R,73856093)^Math.imul(G,19349663)^Math.imul(B,83492791))>>>0;' +
@@ -1980,7 +2033,7 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
 (function(){try{
   var __mobile = !!(navigator.userAgentData && navigator.userAgentData.mobile);
   if(!__mobile){
-    try{Object.defineProperty(navigator,'maxTouchPoints',{get:function(){return 0;},configurable:true});}catch(_e){}
+    try{delete navigator.maxTouchPoints;Object.defineProperty(Navigator.prototype,'maxTouchPoints',{get:function(){return 0;},configurable:true,enumerable:true});}catch(_e){}
     try{delete window.ontouchstart;}catch(_e2){}
     var __om=window.matchMedia;
     if(typeof __om==='function'){
@@ -2595,11 +2648,13 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
             }
 
             try { delete navigator.webdriver; } catch (e) {}
-            Object.defineProperty(navigator, 'webdriver', {
-                get: __makeNative(function() { return false; }, 'get webdriver'),
-                enumerable: false,
-                configurable: true
-            });
+            try {
+                Object.defineProperty(Navigator.prototype, 'webdriver', {
+                    get: __makeNative(function() { return false; }, 'get webdriver'),
+                    enumerable: true,
+                    configurable: true
+                });
+            } catch (e) {}
 
             // Ensure navigator.userAgentData exists and matches launch metadata.
             // Playwright UA overrides can strip Client Hints; CDP Emulation should
@@ -2678,7 +2733,8 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                 try {
                     var existing = navigator.userAgentData;
                     if (!existing || !existing.brands || !existing.brands.length) {
-                        Object.defineProperty(navigator, 'userAgentData', {
+                        try { delete navigator.userAgentData; } catch (e3) {}
+                        Object.defineProperty(Navigator.prototype, 'userAgentData', {
                             get: __makeNative(function() { return makeUAData(); }, 'get userAgentData'),
                             configurable: true,
                             enumerable: true
@@ -2686,7 +2742,8 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                     }
                 } catch (e) {
                     try {
-                        Object.defineProperty(navigator, 'userAgentData', {
+                        try { delete navigator.userAgentData; } catch (e4) {}
+                        Object.defineProperty(Navigator.prototype, 'userAgentData', {
                             get: __makeNative(function() { return makeUAData(); }, 'get userAgentData'),
                             configurable: true,
                             enumerable: true
@@ -2855,14 +2912,16 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
             // ponytail: enforce advanced-dict hardwareConcurrency / deviceMemory when provided.
             if (%s) {
                 try {
-                    Object.defineProperty(navigator, 'hardwareConcurrency', {
+                    delete navigator.hardwareConcurrency;
+                    Object.defineProperty(Navigator.prototype, 'hardwareConcurrency', {
                         get: __makeNative(function() { return %s; }, 'get hardwareConcurrency'),
                         enumerable: true,
                         configurable: true
                     });
                 } catch (e) {}
                 try {
-                    Object.defineProperty(navigator, 'deviceMemory', {
+                    delete navigator.deviceMemory;
+                    Object.defineProperty(Navigator.prototype, 'deviceMemory', {
                         get: __makeNative(function() { return %s; }, 'get deviceMemory'),
                         enumerable: true,
                         configurable: true
@@ -2997,7 +3056,8 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
             // ponytail: surface mobile touch / pointer expectations for mobile profiles.
             if (__isMobileProfile) {
                 try {
-                    Object.defineProperty(navigator, 'maxTouchPoints', {
+                    delete navigator.maxTouchPoints;
+                    Object.defineProperty(Navigator.prototype, 'maxTouchPoints', {
                         get: __makeNative(function() { return __profileMaxTouchPoints; }, 'get maxTouchPoints'),
                         enumerable: true,
                         configurable: true
@@ -3100,7 +3160,8 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                     onlevelchange: null
                 };
                 try {
-                    Object.defineProperty(navigator, 'getBattery', {
+                    delete navigator.getBattery;
+                    Object.defineProperty(Navigator.prototype, 'getBattery', {
                         value: __makeNative(function() { return Promise.resolve(__batteryManager); }, 'getBattery'),
                         writable: true,
                         enumerable: true,
@@ -3325,7 +3386,8 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
 
             var needPlugins = !navigator.plugins || navigator.plugins.length === 0 || typeof navigator.plugins.refresh !== 'function';
             if (needPlugins) {
-                Object.defineProperty(navigator, 'plugins', {
+                try { delete navigator.plugins; } catch (e) {}
+                Object.defineProperty(Navigator.prototype, 'plugins', {
                     get: __makeNative(function() { return makeFakePluginArray(__fakePlugins); }, 'get plugins'),
                     enumerable: true,
                     configurable: true
@@ -3334,7 +3396,8 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
 
             var needMimeTypes = !navigator.mimeTypes || navigator.mimeTypes.length === 0;
             if (needMimeTypes) {
-                Object.defineProperty(navigator, 'mimeTypes', {
+                try { delete navigator.mimeTypes; } catch (e) {}
+                Object.defineProperty(Navigator.prototype, 'mimeTypes', {
                     get: __makeNative(function() { return makeFakeMimeTypeArray(__fakeMimeTypes); }, 'get mimeTypes'),
                     enumerable: true,
                     configurable: true
@@ -3529,7 +3592,8 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                     dispatchEvent: __makeNative(function() { return true; }, 'dispatchEvent')
                 };
                 try {
-                    Object.defineProperty(navigator, 'connection', {
+                    delete navigator.connection;
+                    Object.defineProperty(Navigator.prototype, 'connection', {
                         get: __makeNative(function() { return __connection; }, 'get connection'),
                         enumerable: true,
                         configurable: true

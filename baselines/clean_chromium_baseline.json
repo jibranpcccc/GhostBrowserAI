@@ -1,0 +1,230 @@
+{
+  "executable_path": "C:\\Users\\jibra\\AppData\\Local\\ms-playwright\\chromium-1140\\chrome-win\\chrome.exe",
+  "version": "130.0.6723.31",
+  "telemetry": {
+    "navProps": {
+      "userAgent": {
+        "isOwn": false,
+        "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/130.0.6723.31 Safari/537.36",
+        "descriptor": null
+      },
+      "platform": {
+        "isOwn": false,
+        "value": "Win32",
+        "descriptor": null
+      },
+      "languages": {
+        "isOwn": false,
+        "value": [
+          "en-GB"
+        ],
+        "descriptor": null
+      },
+      "language": {
+        "isOwn": false,
+        "value": "en-GB",
+        "descriptor": null
+      },
+      "hardwareConcurrency": {
+        "isOwn": false,
+        "value": 16,
+        "descriptor": null
+      },
+      "deviceMemory": {
+        "isOwn": false,
+        "value": null,
+        "descriptor": null
+      },
+      "webdriver": {
+        "isOwn": false,
+        "value": true,
+        "descriptor": null
+      },
+      "maxTouchPoints": {
+        "isOwn": false,
+        "value": 10,
+        "descriptor": null
+      },
+      "cookieEnabled": {
+        "isOwn": false,
+        "value": true,
+        "descriptor": null
+      },
+      "pdfViewerEnabled": {
+        "isOwn": false,
+        "value": false,
+        "descriptor": null
+      },
+      "vendor": {
+        "isOwn": false,
+        "value": "Google Inc.",
+        "descriptor": null
+      },
+      "product": {
+        "isOwn": false,
+        "value": "Gecko",
+        "descriptor": null
+      },
+      "productSub": {
+        "isOwn": false,
+        "value": "20030107",
+        "descriptor": null
+      }
+    },
+    "navProtoProps": {
+      "userAgent": {
+        "isOwn": true,
+        "descriptor": {
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false,
+          "valueType": "undefined"
+        }
+      },
+      "platform": {
+        "isOwn": true,
+        "descriptor": {
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false,
+          "valueType": "undefined"
+        }
+      },
+      "languages": {
+        "isOwn": true,
+        "descriptor": {
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false,
+          "valueType": "undefined"
+        }
+      },
+      "language": {
+        "isOwn": true,
+        "descriptor": {
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false,
+          "valueType": "undefined"
+        }
+      },
+      "hardwareConcurrency": {
+        "isOwn": true,
+        "descriptor": {
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false,
+          "valueType": "undefined"
+        }
+      },
+      "deviceMemory": {
+        "isOwn": false,
+        "descriptor": null
+      },
+      "webdriver": {
+        "isOwn": true,
+        "descriptor": {
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false,
+          "valueType": "undefined"
+        }
+      },
+      "maxTouchPoints": {
+        "isOwn": true,
+        "descriptor": {
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false,
+          "valueType": "undefined"
+        }
+      },
+      "cookieEnabled": {
+        "isOwn": true,
+        "descriptor": {
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false,
+          "valueType": "undefined"
+        }
+      },
+      "pdfViewerEnabled": {
+        "isOwn": true,
+        "descriptor": {
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false,
+          "valueType": "undefined"
+        }
+      },
+      "vendor": {
+        "isOwn": true,
+        "descriptor": {
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false,
+          "valueType": "undefined"
+        }
+      },
+      "product": {
+        "isOwn": true,
+        "descriptor": {
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false,
+          "valueType": "undefined"
+        }
+      },
+      "productSub": {
+        "isOwn": true,
+        "descriptor": {
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false,
+          "valueType": "undefined"
+        }
+      }
+    },
+    "uadata": null,
+    "webgl1": {
+      "vendor": "WebKit",
+      "renderer": "WebKit WebGL",
+      "version": "WebGL 1.0 (OpenGL ES 2.0 Chromium)",
+      "shadingLanguageVersion": "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)",
+      "unmaskedVendor": "Google Inc. (Google)",
+      "unmaskedRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "maxTextureSize": 8192,
+      "extensionsCount": 35
+    },
+    "webgl2": null,
+    "webgpu": {
+      "supported": false
+    },
+    "pluginsLength": 0,
+    "mimeTypesLength": 0
+  }
+}

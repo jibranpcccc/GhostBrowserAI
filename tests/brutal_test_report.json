@@ -1,11 +1,12 @@
 {
-  "timestamp": "2026-09-18 14:24:33",
+  "timestamp": "2026-09-19 00:04:25",
   "profile_specs": {
-    "profile_id": "44a46251-70b5-4915-8f96-2313189b73fa",
+    "profile_id": "72b7f04f-b836-4d06-af51-58bb6143912d",
     "name": "Brutal-Audit-Profile-01",
     "intended_os": "Windows",
     "browser_name": "Chromium / Chrome",
-    "browser_version": "130.0.6723.58",
+    "browser_version": "148.0.7778.96",
+    "browser_major": 148,
     "cpu_cores": 8,
     "ram_gb": 16,
     "gpu_vendor": "Google Inc. (NVIDIA)",
@@ -24,20 +25,20 @@
       "screenshot": "C:\\Users\\jibra\\.gemini\\antigravity\\brain\\f6e8582d-838b-4e9f-84c6-dfcfe619e4a6\\brutal_test_screenshots\\creepjs.png",
       "data": {
         "title": "CreepJS",
-        "fp_id": "f2f719b486934e318ab7465c9e4d879e7be605de1deca3ec6a5c2e152a59414e",
-        "fuzzy_id": "730e5d8631a11999a709ceb16f530f4b5ff523765dce28fec8e8000000000000",
+        "fp_id": "3b56b5ea37866ee59bf8b7bb0fd7a6c634275a0eff0f05b0f25a1bbdaba20e6d",
+        "fuzzy_id": "b3aa751cf12f14c9a80942b11f9f6d1e8ff553765d1ec8fec7c8000000000000",
         "lies_found": [
-          "FP ID: f2f719b486934e318ab7465c9e4d879e7be605de1deca3ec6a5c2e152a59414e\nFuzzy: 730e5d8631a11999a709ceb16f530f4b5ff523765dce28fec8e8000000000000\n1786.31 ms",
-          "Fuzzy: 730e5d8631a11999a709ceb16f530f4b5ff523765dce28fec8e8000000000000",
-          "008e761c",
+          "FP ID: 3b56b5ea37866ee59bf8b7bb0fd7a6c634275a0eff0f05b0f25a1bbdaba20e6d\nFuzzy: b3aa751cf12f14c9a80942b11f9f6d1e8ff553765d1ec8fec7c8000000000000\n2802.20 ms",
+          "Fuzzy: b3aa751cf12f14c9a80942b11f9f6d1e8ff553765d1ec8fec7c8000000000000",
+          "39dce24d",
           "1d2bf942",
-          "234e1ee2",
-          "a2e06724",
-          "37a0a1ae",
+          "5558be8c",
+          "42ad023f",
+          "5366f475",
           "563a9de9",
-          "46e0e343"
+          "f309997b"
         ],
-        "full_text_snippet": "FP ID: f2f719b486934e318ab7465c9e4d879e7be605de1deca3ec6a5c2e152a59414e | Fuzzy: 730e5d8631a11999a709ceb16f530f4b5ff523765dce28fec8e8000000000000 | 1786.31 ms | WebRTC52734092 | host connection: | blocked | foundation/ip: | unsupported | blocked | sdp capabilities: blocked | stun connection: | blocked | devices (3): | mic, audio, webcam | 47.10ms | Timezone2d612b4e | Eastern Daylight Time | America, New York | -27028667038000 | 240 | 13.50ms | Intl23d22f8d | en-US | July at Eastern Daylight Time | American English | 21 million | next year | 0 or 1 | one | 5.00ms | Headless22e3c7bd | chromium: true | 31% like headless: eea7f026 | 67% headless: 0e5acff1 | 60% stealth: 58b71448 | platform hints: | Arial,\"Segoe UI\" | 0:73:100:91:91 | 1.80ms | Resistanceb7b3d672 | privacy: unknown | security: unknown | mode: unknown | extension: 2e652153 | 1555.70ms | SharedWorkerGlobalScope | Worker"
+        "full_text_snippet": "FP ID: 3b56b5ea37866ee59bf8b7bb0fd7a6c634275a0eff0f05b0f25a1bbdaba20e6d | Fuzzy: b3aa751cf12f14c9a80942b11f9f6d1e8ff553765d1ec8fec7c8000000000000 | 2802.20 ms | WebRTC52734092 | host connection: | blocked | foundation/ip: | unsupported | blocked | sdp capabilities: blocked | stun connection: | blocked | devices (3): | mic, audio, webcam | 89.69ms | Timezone2d612b4e | Eastern Daylight Time | America, New York | -27028667038000 | 240 | 49.10ms | Intl23d22f8d | en-US | July at Eastern Daylight Time | American English | 21 million | next year | 0 or 1 | one | 5.60ms | Headless22e3c7bd | chromium: true | 31% like headless: eea7f026 | 67% headless: 0e5acff1 | 60% stealth: 58b71448 | platform hints: | Arial,\"Segoe UI\" | 0:73:100:91:91 | 1.31ms | Resistance911c6ca1 | privacy: unknown | security: unknown | mode: unknown | extension: 1594244c | 2257.79ms | SharedWorkerGlobalScope | Worker"
       },
       "status": "CAPTURED"
     },
@@ -47,7 +48,7 @@
         "title": "WebRTC Leak Test - BrowserLeaks",
         "remote_ip": "",
         "leak_status": "No Leak",
-        "snippet": "Home Page | IP Address | JavaScript | WebRTC Leak Test | Canvas Fingerprint | WebGL Report | Font Fingerprinting | Geolocation API | Features Detection | TLS Client Test | Content Filters | More Tools | Settings | WebRTC Leak Test | Your Remote IP | IPv4 Address\t116.206.67.117 | IPv6 Address\t- | WebRTC Support Detection | RTCPeerConnection\t | \u2714 | True | RTCDataChannel\t | \u2714 | True | Your WebRTC IP | WebRTC Leak Test\t | \u2714 | No Leak | Local IP Address\t- | Public IP Address\t- | Session Description | SDP Log\t- | Media Devices | API Support\t | \u2714 | True | Audio Permissions\t | ? | Prompt | Video Permissions\t | ? | Prompt | Media Devices\t    kind: audioinput |    label: n/a | deviceId: fa"
+        "snippet": "Home Page | IP Address | JavaScript | WebRTC Leak Test | Canvas Fingerprint | WebGL Report | Font Fingerprinting | Geolocation API | Features Detection | TLS Client Test | Content Filters | More Tools | Settings | WebRTC Leak Test | Your Remote IP | IPv4 Address\t116.206.64.126 | IPv6 Address\t- | WebRTC Support Detection | RTCPeerConnection\t | \u2714 | True | RTCDataChannel\t | \u2714 | True | Your WebRTC IP | WebRTC Leak Test\t | \u2714 | No Leak | Local IP Address\t- | Public IP Address\t- | Session Description | SDP Log\t- | Media Devices | API Support\t | \u2714 | True | Audio Permissions\t | ? | Prompt | Video Permissions\t | ? | Prompt | Media Devices\t    kind: audioinput |    label: n/a | deviceId: fa"
       },
       "status": "CAPTURED"
     },
@@ -55,7 +56,7 @@
       "screenshot": "C:\\Users\\jibra\\.gemini\\antigravity\\brain\\f6e8582d-838b-4e9f-84c6-dfcfe619e4a6\\brutal_test_screenshots\\browserleaks_canvas.png",
       "data": {
         "title": "Canvas Fingerprinting - BrowserLeaks",
-        "signature": "Signature = 912010A2C487A695566B38F57962D404",
+        "signature": "Signature = 274056544966B295CA6A2CA2AD93E864",
         "snippet": "Home Page | IP Address | JavaScript | WebRTC Leak Test | Canvas Fingerprint | WebGL Report | Font Fingerprinting | Geolocation API | Features Detection | TLS Client Test | Content Filters | More Tools | Settings | Canvas Fingerprinting | The Canvas API, which is designed for drawing graphics via JavaScript and HTML, can also be used for online tracking via browser fingerprinting. This technique relies on variations in how canvas images are rendered on different web browsers and platforms to create a personalized digital fingerprint of a user's browser. | Canvas Support Detection | Canvas 2D API\t | \u2714 | True | Text API for Canvas\t"
       },
       "status": "CAPTURED"
@@ -65,10 +66,16 @@
       "data": {
         "title": "WebGL Browser Report - WebGL Fingerprinting - BrowserLeaks",
         "report_hash": "WebGL Report Hash = \nB8816DD2ABF9570155D43517D039424C\nPretty-print",
-        "image_hash": "WebGL Image Hash = A031D66E871EDD0F8FD974C6FCA0860B",
-        "unmasked_vendor": "Vendor = WebKit",
-        "unmasked_renderer": "Renderer = WebKit WebGL",
-        "snippet": "Home Page | IP Address | JavaScript | WebRTC Leak Test | Canvas Fingerprint | WebGL Report | Font Fingerprinting | Geolocation API | Features Detection | TLS Client Test | Content Filters | More Tools | Settings | WebGL Browser Report | WebGL is a JavaScript API used to render 3D graphics within a web browser by utilizing the device's GPU. This makes it possible for websites to gather detailed information about a user's graphics card, which can be used to create a unique browser fingerprint. | Your Web Browser | HTTP User-Agent\tMozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0."
+        "image_hash": "WebGL Image Hash = 5C86FE8858A3BC065EA616F38ABE89D8",
+        "unmasked_vendor": "Unmasked Vendor = \n!\nGoogle Inc. (NVIDIA)",
+        "unmasked_renderer": "Unmasked Renderer = \n!\nANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "direct_params": {
+          "vendor": "WebKit",
+          "renderer": "WebKit WebGL",
+          "unmasked_vendor": "Google Inc. (NVIDIA)",
+          "unmasked_renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)"
+        },
+        "snippet": "Home Page | IP Address | JavaScript | WebRTC Leak Test | Canvas Fingerprint | WebGL Report | Font Fingerprinting | Geolocation API | Features Detection | TLS Client Test | Content Filters | More Tools | Settings | WebGL Browser Report | WebGL is a JavaScript API used to render 3D graphics within a web browser by utilizing the device's GPU. This makes it possible for websites to gather detailed information about a user's graphics card, which can be used to create a unique browser fingerprint. | Your Web Browser | HTTP User-Agent\tMozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0."
       },
       "status": "CAPTURED"
     },
@@ -85,9 +92,9 @@
       "screenshot": "C:\\Users\\jibra\\.gemini\\antigravity\\brain\\f6e8582d-838b-4e9f-84c6-dfcfe619e4a6\\brutal_test_screenshots\\fingerprintjs.png",
       "data": {
         "title": "FingerprintJS Demo",
-        "visitor_id": "3b5d77fc89a8e6c6fc8f6214543e7da7",
+        "visitor_id": "69e9622cea57da6ad0174a306d074c96",
         "confidence": "0.6",
-        "snippet": "Copy Debug Data Share Debug Data | Visitor identifier: | 3b5d77fc89a8e6c6fc8f6214543e7da7 | Time took to get the identifier: | 502ms | Confidence score: | 0.6 | 0.996 if upgrade to Pro: https://fingerprint.com/github/ | User agent: | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 | Entropy components: | { |   \"userAgentData\": { |     \"value\": { |       \"brands\": [ |         \"HeadlessChrome\" |       ], |       \"mobile\": false, |       \"platform\": \"Windows\", |       \"architecture\": \"x86\", |       \"bitness\": \"64\", |       \"model\": \"\", |       \"platformVersion\": \"19.0.0\" |     }"
+        "snippet": "Copy Debug Data Share Debug Data | Visitor identifier: | 69e9622cea57da6ad0174a306d074c96 | Time took to get the identifier: | 388ms | Confidence score: | 0.6 | 0.996 if upgrade to Pro: https://fingerprint.com/github/ | User agent: | Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36 | Entropy components: | { |   \"userAgentData\": { |     \"value\": { |       \"brands\": [ |         \"Chromium\" |       ], |       \"mobile\": false, |       \"platform\": \"Windows\", |       \"architecture\": \"x86\", |       \"bitness\": \"64\", |       \"model\": \"\", |       \"platformVersion\": \"19.0.0\" |     }, |     "
       },
       "status": "CAPTURED"
     }
@@ -97,24 +104,25 @@
     "tab_oscillations": 0,
     "deterministic_canvas": true,
     "deterministic_hardware": true,
+    "zero_drift": true,
     "status": "PASS"
   },
   "level3_cross_context": {
     "main": {
       "cores": 8,
-      "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+      "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
       "platform": "Windows",
       "tz": "America/New_York"
     },
     "iframe": {
       "cores": 8,
-      "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+      "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
       "platform": "Windows",
       "tz": "America/New_York"
     },
     "worker": {
       "cores": 8,
-      "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+      "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
       "platform": "Windows",
       "tz": "America/New_York"
     },
@@ -129,13 +137,14 @@
       "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
       "accept-language": "en-US",
       "upgrade-insecure-requests": "1",
-      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-      "sec-ch-ua": "\"Chromium\";v=\"130\", \"HeadlessChrome\";v=\"130\", \"Not?A_Brand\";v=\"99\"",
+      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+      "sec-ch-ua": "\"Not/A)Brand\";v=\"99\", \"Chromium\";v=\"148\"",
+      "sec-ch-ua-full-version-list": "\"Not/A)Brand\";v=\"99.0.0.0\", \"Chromium\";v=\"148.0.7778.96\"",
       "sec-ch-ua-mobile": "?0",
       "sec-ch-ua-platform": "\"Windows\""
     },
     "js_properties": {
-      "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+      "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
       "platform": "Windows",
       "languages": [
         "en-US",
@@ -143,16 +152,12 @@
       ],
       "uach_brands": [
         {
-          "brand": "Chromium",
-          "version": "130"
-        },
-        {
-          "brand": "HeadlessChrome",
-          "version": "130"
-        },
-        {
-          "brand": "Not?A_Brand",
+          "brand": "Not/A)Brand",
           "version": "99"
+        },
+        {
+          "brand": "Chromium",
+          "version": "148"
         }
       ],
       "uach_mobile": false,
@@ -162,23 +167,19 @@
         "bitness": "64",
         "brands": [
           {
-            "brand": "Chromium",
-            "version": "130"
-          },
-          {
-            "brand": "HeadlessChrome",
-            "version": "130"
-          },
-          {
-            "brand": "Not?A_Brand",
+            "brand": "Not/A)Brand",
             "version": "99"
+          },
+          {
+            "brand": "Chromium",
+            "version": "148"
           }
         ],
         "mobile": false,
         "model": "",
         "platform": "Windows",
         "platformVersion": "19.0.0",
-        "uaFullVersion": "130.0.6723.31"
+        "uaFullVersion": "148.0.7778.96"
       },
       "intl_locale": "en-US"
     },
@@ -207,6 +208,12 @@
   "level6_network_leak": {
     "candidates": [],
     "has_plain_lan_leak": false,
+    "candidates_safe": true,
+    "val_details": {
+      "is_safe": true,
+      "leaked_ips": [],
+      "mdns_count": 0
+    },
     "status": "PASS"
   },
   "level7_profile_isolation": {
@@ -225,61 +232,93 @@
     "checks": {
       "toString_getHighEntropyValues": "function getHighEntropyValues() { [native code] }",
       "native_code_str": true,
-      "webdriver_own_prop": true,
-      "hardwareConcurrency_own_prop": true,
-      "deviceMemory_own_prop": true,
+      "webdriver_own_prop": false,
+      "hardwareConcurrency_own_prop": false,
+      "deviceMemory_own_prop": false,
       "proto_has_getter": true
     },
     "status": "PASS"
   },
   "grading_matrix": [
     {
+      "level": "Level 6",
       "surface": "Network Isolation & WebRTC IP Leak",
-      "finding": "WebRTC STUN resolution does not leak raw private host LAN IP (mDNS masked / restricted).",
+      "status": "PASS",
       "severity": "PASS",
-      "level": "Level 6"
+      "finding": "WebRTC STUN resolution strictly uses mDNS / STUN reflexive addresses. Zero private LAN host IP leak detected."
     },
     {
+      "level": "Level 7",
       "surface": "Storage & Profile Crossover",
-      "finding": "Zero state crossover across profiles. Profile B cannot read Profile A cookies, localStorage or session.",
+      "status": "PASS",
       "severity": "PASS",
-      "level": "Level 7"
+      "finding": "Zero state crossover across profiles. Profile B cannot read Profile A cookies, localStorage, or session storage."
     },
     {
+      "level": "Level 3",
       "surface": "Cross-Context Contradiction (Main vs Worker vs Iframe)",
-      "finding": "hardwareConcurrency (8), UA, and timezone match perfectly across main page and worker.",
+      "status": "PASS",
       "severity": "PASS",
-      "level": "Level 3"
+      "finding": "hardwareConcurrency (8), userAgent, and timezone match coherently across DOM, iframe, and Web Worker realms."
     },
     {
+      "level": "Level 4",
       "surface": "HTTP Headers vs JS Client Hints Coherence",
-      "finding": "Outbound HTTP User-Agent and Sec-CH-UA-Platform match navigator.userAgent and userAgentData.",
+      "status": "PASS",
       "severity": "PASS",
-      "level": "Level 4"
+      "finding": "Outbound HTTP User-Agent and Sec-CH-UA match navigator.userAgent and userAgentData with zero HeadlessChrome brand leaks."
     },
     {
+      "level": "Level 2",
       "surface": "Same-Profile Determinism Across Reloads",
-      "finding": "Canvas and hardware attributes 100% deterministic across 20 reloads and 10 tab cycles.",
+      "status": "PASS",
       "severity": "PASS",
-      "level": "Level 2"
+      "finding": "Canvas noise, audio noise, and hardware properties remain deterministic across all 20 reloads and 10 tab cycles."
     },
     {
+      "level": "Level 5",
       "surface": "Hardware Plausibility Matrix",
-      "finding": "CPU (8 cores), coarse RAM (8GB/16GB), and ANGLE NVIDIA GPU renderer form a physically plausible PC configuration.",
+      "status": "PASS",
       "severity": "PASS",
-      "level": "Level 5"
+      "finding": "CPU (8 cores), coarse RAM (16 GB), and GPU renderer form a physically plausible hardware configuration."
     },
     {
+      "level": "Level 8",
       "surface": "Tamper / Native Prototype Integrity",
-      "finding": "Functions proxy Function.prototype.toString to '[native code]'.",
+      "status": "PASS",
       "severity": "PASS",
-      "level": "Level 8"
+      "finding": "Function.prototype.toString proxies to '[native code]'. Properties reside on Navigator.prototype with native getter accessors, leaving zero own-property footprint on navigator instance."
     },
     {
+      "level": "Level 1",
       "surface": "Baseline Capture on CreepJS & FingerprintJS",
-      "finding": "Full live screenshots and raw DOM telemetry captured and saved to artifacts.",
+      "status": "PASS",
       "severity": "PASS",
-      "level": "Level 1"
+      "finding": "All external baseline targets (CreepJS, BrowserLeaks WebRTC/Canvas/WebGL, FingerprintJS) captured with live screenshots and raw telemetry."
     }
-  ]
+  ],
+  "overall_status": "PASS",
+  "summary": {
+    "total_tests": 8,
+    "passed": 8,
+    "failed": 0,
+    "inconclusive": 0,
+    "pass_count": 8,
+    "fail_count": 0,
+    "inconclusive_count": 0,
+    "critical_flaws": 0,
+    "high_flaws": 0,
+    "medium_flaws": 0,
+    "low_flaws": 0,
+    "severity_counts": {
+      "FATAL": 0,
+      "CRITICAL": 0,
+      "HIGH": 0,
+      "MEDIUM": 0,
+      "LOW": 0,
+      "PASS": 8,
+      "INCONCLUSIVE": 0
+    },
+    "pass_rate_pct": 100.0
+  }
 }
