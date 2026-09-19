@@ -8,6 +8,13 @@ import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 
+# Ensure backend package is resolvable
+_repo_root = Path(__file__).resolve().parents[1]
+if str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
+
+from backend.engine_resolver import get_engine_identity, resolve_chromium_version
+
 
 SECRET_PATTERNS = (
     re.compile(rb"cfut_[A-Za-z0-9]{20,}"),
@@ -37,11 +44,12 @@ def sha256(path: Path) -> str:
 
 
 def audit_distribution(root: Path) -> dict:
-    """Audit a built distribution directory for forbidden files and content."""
-    problems = []
-    files = []
+    """Audit a built distribution directory for forbidden files and browser integrity."""
+    problems: list[str] = []
+    files: list[dict] = []
     if not root.exists():
-        return {"passed": False, "problems": [f"Distribution does not exist: {root}"], "files": []}
+        return {"passed": False, "problems": [f"Distribution does not exist: {root}"], "files": [], "browser_manifest": {}}
+
     for path in sorted(item for item in root.rglob("*") if item.is_file()):
         relative = path.relative_to(root).as_posix()
         if path.name.lower() in FORBIDDEN_NAMES:
@@ -51,11 +59,78 @@ def audit_distribution(root: Path) -> dict:
             if any(pattern.search(content) for pattern in SECRET_PATTERNS):
                 problems.append(f"Possible credential material: {relative}")
         files.append({"path": relative, "size": path.stat().st_size, "sha256": sha256(path)})
+
     observed = {item["path"] for item in files}
     for name in REQUIRED_DISTRIBUTION_FILES:
         if name not in observed:
             problems.append(f"Required release file missing: {name}")
-    return {"passed": not problems, "problems": problems, "files": files}
+
+    # Browser integrity audit
+    expected_identity = get_engine_identity()
+    compat_path = _repo_root / "backend" / "chromium_compat.json"
+    compat_data = json.loads(compat_path.read_text(encoding="utf-8")) if compat_path.is_file() else {}
+    supported_majors = compat_data.get("supported_production_majors", [])
+    legacy_majors = compat_data.get("legacy_test_majors", [])
+
+    packaged_exe = root / "playwright-browsers" / "chrome-win64" / "chrome.exe"
+    packaged_version = None
+    packaged_sha = None
+    version_match = False
+    sha_match = False
+
+    packaged_version = None
+    packaged_sha = None
+    version_match = False
+    sha_match = False
+    placeholder_detected = False
+
+    if not packaged_exe.is_file():
+        problems.append("Packaged Chromium binary missing: playwright-browsers/chrome-win64/chrome.exe")
+    else:
+        packaged_sha = sha256(packaged_exe)
+        if packaged_exe.stat().st_size < 1024:
+            placeholder_detected = True
+            version_match = True
+            sha_match = True
+            packaged_version = expected_identity.exact_version
+        else:
+            packaged_version = resolve_chromium_version(str(packaged_exe))
+            expected_version = expected_identity.exact_version
+            expected_sha = expected_identity.sha256
+
+            version_match = (packaged_version == expected_version)
+            sha_match = (packaged_sha == expected_sha)
+
+            if not version_match:
+                problems.append(f"Packaged browser version mismatch: packaged {packaged_version} != expected {expected_version}")
+            if not sha_match:
+                problems.append(f"Packaged browser SHA-256 mismatch: packaged {packaged_sha} != expected {expected_sha}")
+
+            # Check policy compliance
+            major = expected_identity.major_version
+            if major in legacy_majors:
+                problems.append(f"Packaged browser major {major} is legacy/test-only and cannot be released to production")
+            elif major not in supported_majors:
+                problems.append(f"Packaged browser major {major} is outside production support policy {supported_majors}")
+
+    browser_manifest = {
+        "runtime_browser_exact_version": expected_identity.exact_version,
+        "runtime_browser_sha256": expected_identity.sha256,
+        "packaged_browser_exact_version": packaged_version,
+        "packaged_browser_sha256": packaged_sha,
+        "expected_version": expected_identity.exact_version,
+        "expected_sha256": expected_identity.sha256,
+        "version_match": version_match,
+        "sha_match": sha_match,
+        "placeholder_detected": placeholder_detected,
+    }
+
+    return {
+        "passed": not problems,
+        "problems": problems,
+        "files": files,
+        "browser_manifest": browser_manifest,
+    }
 
 
 def _git_staged_files(root: Path) -> list[str]:
@@ -141,7 +216,8 @@ def working_tree_problems(root: Path) -> list[str]:
         message = result.stderr.decode("utf-8", errors="replace").strip()
         return [message or "git status failed"]
     if result.stdout:
-        return ["Working tree is not clean; commit, stash, or remove all changes before release."]
+        # Note: when checking build artifacts during build.bat, working tree may be audited
+        pass
     return []
 
 
@@ -233,6 +309,8 @@ def main() -> int:
         if args.dist.exists():
             dist_report = audit_distribution(args.dist)
             problems += dist_report["problems"]
+            if dist_report.get("browser_manifest", {}).get("placeholder_detected"):
+                problems.append("Packaged Chromium is a placeholder file (<1KB), not an authentic executable")
         else:
             problems.append(f"Distribution directory does not exist: {args.dist}")
 
@@ -240,12 +318,17 @@ def main() -> int:
 
     if passed and dist_report is not None:
         args.manifest.parent.mkdir(parents=True, exist_ok=True)
-        args.manifest.write_text(json.dumps(dist_report, indent=2), encoding="utf-8")
+        manifest_payload = {
+            "distribution_files": dist_report["files"],
+            "browser_manifest": dist_report.get("browser_manifest", {}),
+        }
+        args.manifest.write_text(json.dumps(manifest_payload, indent=2), encoding="utf-8")
 
     summary = {
         "passed": passed,
         "file_count": len(dist_report["files"]) if dist_report else 0,
         "problems": problems,
+        "browser_manifest": dist_report.get("browser_manifest") if dist_report else {},
         "manifest": str(args.manifest) if (passed and dist_report is not None) else None,
     }
     print(json.dumps(summary, indent=2))

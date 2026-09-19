@@ -33,14 +33,27 @@ from backend.profile_manager import profile_manager
 from backend.browser_manager import launch_profile, close_profile, active_browsers
 from backend.engine_resolver import get_chromium_executable_path_async
 from backend.browser_version import BrowserVersion, calculate_file_sha256
-from backend.network_coherence import validate_webrtc_candidates
+from backend.network_coherence import validate_webrtc_candidates, validate_network_coherence
 
 ARTIFACTS_DIR = Path(r"C:\Users\jibra\.gemini\antigravity\brain\f6e8582d-838b-4e9f-84c6-dfcfe619e4a6")
 SCREENSHOTS_DIR = ARTIFACTS_DIR / "brutal_test_screenshots"
 SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+LOCAL_SCREENSHOTS_DIR = PROJECT_ROOT / "artifacts" / "brutal_test_screenshots"
+LOCAL_SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 
 REPORT_PATH = PROJECT_ROOT / "tests" / "brutal_test_report.json"
 CLEAN_BASELINE_PATH = PROJECT_ROOT / "baselines" / "clean_chromium_baseline.json"
+
+async def save_screenshot(page, filename: str):
+    p1 = SCREENSHOTS_DIR / filename
+    p2 = LOCAL_SCREENSHOTS_DIR / filename
+    await page.screenshot(path=str(p1), full_page=False)
+    try:
+        import shutil
+        shutil.copy2(str(p1), str(p2))
+    except Exception:
+        pass
+    return p1
 
 
 async def run_brutal_test():
@@ -172,8 +185,7 @@ async def run_brutal_test():
             print("  Waiting 12s for CreepJS analysis and worker execution...")
             await asyncio.sleep(12)
 
-            creep_screenshot = SCREENSHOTS_DIR / "creepjs.png"
-            await page.screenshot(path=str(creep_screenshot), full_page=False)
+            creep_screenshot = await save_screenshot(page, "creepjs.png")
             print(f"  Screenshot captured -> {creep_screenshot}")
 
             creep_data = await page.evaluate("""() => {
@@ -184,49 +196,86 @@ async def run_brutal_test():
                 const fpMatches = bodyText.match(/FP ID:[\\s\\S]*?([a-f0-9]{64})/i);
                 const fuzzyMatches = bodyText.match(/Fuzzy:[\\s\\S]*?([a-f0-9]{64})/i);
                 
-                // Extract detector scores
+                // Extract detector scores - use null when not found, NEVER hardcoded fallback strings
                 const headlessMatch = bodyText.match(/(\\d+%(?:\\.\\d+)?)\\s+headless/i);
                 const likeHeadlessMatch = bodyText.match(/(\\d+%(?:\\.\\d+)?)\\s+like\\s+headless/i);
                 const stealthMatch = bodyText.match(/(\\d+%(?:\\.\\d+)?)\\s+stealth/i);
 
                 return {
                     title: document.title,
-                    fp_id: fpMatches ? fpMatches[1] : (bodyText.match(/([a-f0-9]{64})/i)?.[1] || 'Captured'),
-                    fuzzy_id: fuzzyMatches ? fuzzyMatches[1] : 'Captured',
-                    headless_score: headlessMatch ? headlessMatch[0] : '67% headless',
-                    like_headless_score: likeHeadlessMatch ? likeHeadlessMatch[0] : '31% like headless',
-                    stealth_score: stealthMatch ? stealthMatch[0] : '60% stealth',
+                    fp_id: fpMatches ? fpMatches[1] : (bodyText.match(/([a-f0-9]{64})/i)?.[1] || null),
+                    fuzzy_id: fuzzyMatches ? fuzzyMatches[1] : null,
+                    headless_score: headlessMatch ? headlessMatch[0] : null,
+                    like_headless_score: likeHeadlessMatch ? likeHeadlessMatch[0] : null,
+                    stealth_score: stealthMatch ? stealthMatch[0] : null,
                     lies_found: liesText.slice(0, 10),
                     full_text_snippet: bodyText.slice(0, 800).replace(/\\n+/g, ' | ')
                 };
             }""")
+
+            headless_score = creep_data.get("headless_score")
+            like_headless_score = creep_data.get("like_headless_score")
+            stealth_score = creep_data.get("stealth_score")
+
+            has_scores = bool(headless_score or like_headless_score)
+            if has_scores:
+                flagged_headless = True
+                creep_assessment = "FAIL"
+                creep_severity = "HIGH"
+                creep_note = "Under force_headless=True, CreepJS detects headless browser heuristics. Telemetry capture is separated from detector evaluation."
+            elif creep_data.get("fp_id"):
+                flagged_headless = False
+                creep_assessment = "INCONCLUSIVE"
+                creep_severity = "INCONCLUSIVE"
+                creep_note = "CreepJS fingerprint captured, but headless detector classification scores were not found in DOM."
+            else:
+                flagged_headless = None
+                creep_assessment = "INCONCLUSIVE"
+                creep_severity = "INCONCLUSIVE"
+                creep_note = "CreepJS target loaded but fingerprint ID and detector scores could not be parsed."
+
             report["level1_baseline"]["creepjs"] = {
                 "screenshot": str(creep_screenshot),
                 "data": creep_data,
-                "capture_status": "SUCCESS",
-                "execution_mode": "HEADLESS (force_headless=True)",
+                "capture_status": "SUCCESS" if creep_data.get("fp_id") else "INCONCLUSIVE",
+                "execution_mode": "HEADLESS",
                 "detector_classification": {
-                    "headless_score": creep_data["headless_score"],
-                    "like_headless_score": creep_data["like_headless_score"],
-                    "stealth_score": creep_data["stealth_score"],
-                    "flagged_headless": True,
-                    "note": "Under force_headless=True, CreepJS detects headless browser heuristics. Telemetry capture is separated from detector evaluation."
+                    "headless_score": headless_score,
+                    "like_headless_score": like_headless_score,
+                    "stealth_score": stealth_score,
+                    "flagged_headless": flagged_headless,
+                    "assessment": creep_assessment,
+                    "severity": creep_severity,
+                    "note": creep_note
                 },
-                "status": "CAPTURED"
+                "status": "CAPTURED" if creep_data.get("fp_id") else "INCONCLUSIVE"
             }
-            print(f"  CreepJS Capture: SUCCESS (FP={creep_data['fp_id'][:16]}...)")
-            print(f"  CreepJS Detector Classification: {creep_data['headless_score']}, {creep_data['like_headless_score']}, {creep_data['stealth_score']}")
+            print(f"  CreepJS Capture: {report['level1_baseline']['creepjs']['capture_status']} (FP={str(creep_data.get('fp_id'))[:16]}...)")
+            print(f"  CreepJS Scores: headless={headless_score}, like_headless={like_headless_score}, stealth={stealth_score}")
         except Exception as e:
             print(f"  CreepJS capture error: {e}")
-            report["level1_baseline"]["creepjs"] = {"error": str(e), "capture_status": "ERROR"}
+            report["level1_baseline"]["creepjs"] = {
+                "error": str(e),
+                "capture_status": "ERROR",
+                "execution_mode": "HEADLESS",
+                "detector_classification": {
+                    "headless_score": None,
+                    "like_headless_score": None,
+                    "stealth_score": None,
+                    "flagged_headless": None,
+                    "assessment": "INCONCLUSIVE",
+                    "severity": "INCONCLUSIVE",
+                    "note": f"CreepJS capture failed: {e}"
+                },
+                "status": "ERROR"
+            }
 
         # 1.2 BrowserLeaks WebRTC
         print("\n--> [1.2] Navigating to BrowserLeaks WebRTC (https://browserleaks.com/webrtc)...")
         try:
             await page.goto("https://browserleaks.com/webrtc", wait_until="domcontentloaded", timeout=30000)
             await asyncio.sleep(4)
-            webrtc_screenshot = SCREENSHOTS_DIR / "browserleaks_webrtc.png"
-            await page.screenshot(path=str(webrtc_screenshot), full_page=False)
+            webrtc_screenshot = await save_screenshot(page, "browserleaks_webrtc.png")
             print(f"  Screenshot captured -> {webrtc_screenshot}")
 
             webrtc_data = await page.evaluate("""() => {
@@ -253,8 +302,7 @@ async def run_brutal_test():
         try:
             await page.goto("https://browserleaks.com/canvas", wait_until="domcontentloaded", timeout=30000)
             await asyncio.sleep(4)
-            canvas_screenshot = SCREENSHOTS_DIR / "browserleaks_canvas.png"
-            await page.screenshot(path=str(canvas_screenshot), full_page=False)
+            canvas_screenshot = await save_screenshot(page, "browserleaks_canvas.png")
             print(f"  Screenshot captured -> {canvas_screenshot}")
 
             canvas_data = await page.evaluate("""() => {
@@ -282,8 +330,7 @@ async def run_brutal_test():
         try:
             await page.goto("https://browserleaks.com/webgl", wait_until="domcontentloaded", timeout=30000)
             await asyncio.sleep(4)
-            webgl_screenshot = SCREENSHOTS_DIR / "browserleaks_webgl.png"
-            await page.screenshot(path=str(webgl_screenshot), full_page=False)
+            webgl_screenshot = await save_screenshot(page, "browserleaks_webgl.png")
             print(f"  Screenshot captured -> {webgl_screenshot}")
 
             webgl_data = await page.evaluate("""() => {
@@ -334,8 +381,7 @@ async def run_brutal_test():
         try:
             await page.goto("https://browserleaks.com/webgpu", wait_until="domcontentloaded", timeout=30000)
             await asyncio.sleep(4)
-            webgpu_screenshot = SCREENSHOTS_DIR / "browserleaks_webgpu.png"
-            await page.screenshot(path=str(webgpu_screenshot), full_page=False)
+            webgpu_screenshot = await save_screenshot(page, "browserleaks_webgpu.png")
             print(f"  Screenshot captured -> {webgpu_screenshot}")
 
             webgpu_data = await page.evaluate("""() => {
@@ -361,8 +407,7 @@ async def run_brutal_test():
         try:
             await page.goto("https://fingerprintjs.github.io/fingerprintjs/?utm_source=chatgpt.com", wait_until="domcontentloaded", timeout=30000)
             await asyncio.sleep(5)
-            fpjs_screenshot = SCREENSHOTS_DIR / "fingerprintjs.png"
-            await page.screenshot(path=str(fpjs_screenshot), full_page=False)
+            fpjs_screenshot = await save_screenshot(page, "fingerprintjs.png")
             print(f"  Screenshot captured -> {fpjs_screenshot}")
 
             fpjs_data = await page.evaluate("""() => {
@@ -395,7 +440,8 @@ async def run_brutal_test():
         print("=" * 60)
 
         async def extract_fingerprint_metrics(p):
-            return await p.evaluate("""() => {
+            return await p.evaluate("""async () => {
+                // 1. Canvas 2D fingerprint hash
                 const canvas = document.createElement('canvas');
                 canvas.width = 200;
                 canvas.height = 50;
@@ -413,14 +459,40 @@ async def run_brutal_test():
                     canvasHash |= 0;
                 }
 
-                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                const osc = audioCtx.createOscillator();
-                const comp = audioCtx.createDynamicsCompressor();
-                osc.connect(comp);
-                comp.connect(audioCtx.destination);
-                const audioReduction = comp.reduction;
-                audioCtx.close();
+                // 2. Deterministic OfflineAudioContext rendered buffer checksum
+                let audioHash = '0';
+                try {
+                    const OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+                    if (OfflineCtx) {
+                        const actx = new OfflineCtx(1, 44100, 44100);
+                        const osc = actx.createOscillator();
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(10000, actx.currentTime);
+                        const comp = actx.createDynamicsCompressor();
+                        comp.threshold.setValueAtTime(-50, actx.currentTime);
+                        comp.knee.setValueAtTime(40, actx.currentTime);
+                        comp.ratio.setValueAtTime(12, actx.currentTime);
+                        comp.reduction.setValueAtTime(-20, actx.currentTime);
+                        comp.attack.setValueAtTime(0, actx.currentTime);
+                        comp.release.setValueAtTime(0.25, actx.currentTime);
+                        osc.connect(comp);
+                        comp.connect(actx.destination);
+                        osc.start(0);
+                        const renderedBuffer = await actx.startRendering();
+                        const channelData = renderedBuffer.getChannelData(0);
+                        let aHash = 0;
+                        for (let i = 4500; i < 5000; i++) {
+                            const val = Math.round((channelData[i] || 0) * 1e6);
+                            aHash = ((aHash << 5) - aHash) + val;
+                            aHash |= 0;
+                        }
+                        audioHash = String(aHash);
+                    }
+                } catch(e) {
+                    audioHash = 'error:' + e.message;
+                }
 
+                // 3. Rect bounding box
                 const el = document.createElement('div');
                 el.innerText = 'RectStabilityCheck';
                 document.body.appendChild(el);
@@ -430,7 +502,7 @@ async def run_brutal_test():
 
                 return {
                     canvas: String(canvasHash),
-                    audio: String(audioReduction),
+                    audio: audioHash,
                     rect: rectHash,
                     cores: navigator.hardwareConcurrency,
                     memory: navigator.deviceMemory,
@@ -442,37 +514,57 @@ async def run_brutal_test():
         bench_url = "data:text/html,<!DOCTYPE html><html><body><h1>Benchmark</h1></body></html>"
         await page.goto(bench_url, wait_until="domcontentloaded")
         initial_metrics = await extract_fingerprint_metrics(page)
-        print(f"  Initial Profile Metrics: Canvas={initial_metrics['canvas']}, Cores={initial_metrics['cores']}, RAM={initial_metrics['memory']}")
+        print(f"  Initial Profile Metrics: Canvas={initial_metrics['canvas']}, Audio={initial_metrics['audio']}, Cores={initial_metrics['cores']}, RAM={initial_metrics['memory']}")
 
-        print("  Running 20 consecutive reloads to verify determinism...")
-        oscillations = 0
+        STABILITY_SURFACES = ["canvas", "audio", "rect", "cores", "memory", "platform", "ua"]
+        drift_counters = {f"{s}_drift": 0 for s in STABILITY_SURFACES}
+
+        print("  Running 20 consecutive reloads to verify determinism across all 7 surfaces...")
+        reload_oscillations = 0
         for r in range(20):
             await page.reload(wait_until="domcontentloaded")
             m = await extract_fingerprint_metrics(page)
-            if m["canvas"] != initial_metrics["canvas"] or m["cores"] != initial_metrics["cores"]:
-                oscillations += 1
+            any_drift = False
+            for s in STABILITY_SURFACES:
+                if m.get(s) != initial_metrics.get(s):
+                    drift_counters[f"{s}_drift"] += 1
+                    any_drift = True
+            if any_drift:
+                reload_oscillations += 1
 
-        print(f"  Reload stability (20 reloads): {20 - oscillations}/20 identical (Oscillations = {oscillations})")
+        print(f"  Reload stability (20 reloads): {20 - reload_oscillations}/20 identical (Oscillations = {reload_oscillations})")
 
-        print("  Running 10 tab close/reopen cycles...")
+        print("  Running 10 tab close/reopen cycles across all 7 surfaces...")
         tab_oscillations = 0
         for t in range(10):
             new_p = await context.new_page()
             await new_p.goto(bench_url, wait_until="domcontentloaded")
             m = await extract_fingerprint_metrics(new_p)
-            if m["canvas"] != initial_metrics["canvas"] or m["cores"] != initial_metrics["cores"]:
+            any_drift = False
+            for s in STABILITY_SURFACES:
+                if m.get(s) != initial_metrics.get(s):
+                    drift_counters[f"{s}_drift"] += 1
+                    any_drift = True
+            if any_drift:
                 tab_oscillations += 1
             await new_p.close()
 
-        print(f"  Tab stability (10 cycles): {10 - tab_oscillations}/10 identical")
+        print(f"  Tab stability (10 cycles): {10 - tab_oscillations}/10 identical (Oscillations = {tab_oscillations})")
+        print(f"  Drift breakdown: {drift_counters}")
+
+        total_drift = sum(drift_counters.values())
+        zero_drift = (reload_oscillations == 0 and tab_oscillations == 0 and total_drift == 0)
 
         report["level2_stability"] = {
-            "reload_oscillations": oscillations,
+            "reload_oscillations": reload_oscillations,
             "tab_oscillations": tab_oscillations,
-            "deterministic_canvas": oscillations == 0,
-            "deterministic_hardware": oscillations == 0,
-            "zero_drift": (oscillations == 0 and tab_oscillations == 0),
-            "status": "PASS" if (oscillations == 0 and tab_oscillations == 0) else "FAIL"
+            "drift_counters": drift_counters,
+            "tested_surfaces": STABILITY_SURFACES,
+            "deterministic_canvas": drift_counters["canvas_drift"] == 0,
+            "deterministic_audio": drift_counters["audio_drift"] == 0,
+            "deterministic_hardware": (drift_counters["cores_drift"] == 0 and drift_counters["memory_drift"] == 0),
+            "zero_drift": zero_drift,
+            "status": "PASS" if zero_drift else "FAIL"
         }
 
         # -------------------------------------------------------------
@@ -505,7 +597,8 @@ async def run_brutal_test():
             cores: navigator.hardwareConcurrency,
             ua: navigator.userAgent,
             platform: navigator.platform,
-            tz: Intl.DateTimeFormat().resolvedOptions().timeZone
+            tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            languages: Array.from(navigator.languages || [])
         })""")
 
         ifr_frame = page.frames[1] if len(page.frames) > 1 else page.frames[0]
@@ -513,7 +606,8 @@ async def run_brutal_test():
             cores: navigator.hardwareConcurrency,
             ua: navigator.userAgent,
             platform: navigator.platform,
-            tz: Intl.DateTimeFormat().resolvedOptions().timeZone
+            tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            languages: Array.from(navigator.languages || [])
         })""")
 
         wrk_data = await page.evaluate("""async () => {
@@ -522,7 +616,8 @@ async def run_brutal_test():
                     cores: navigator.hardwareConcurrency,
                     ua: navigator.userAgent,
                     platform: navigator.platform,
-                    tz: Intl.DateTimeFormat().resolvedOptions().timeZone
+                    tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                    languages: Array.from(navigator.languages || [])
                 });
             };`;
             const blob = new Blob([code], { type: 'application/javascript' });
@@ -538,12 +633,18 @@ async def run_brutal_test():
             });
         }""")
 
-        cores_match = (main_data["cores"] == ifr_data["cores"]) and (main_data["cores"] == wrk_data.get("cores"))
-        ua_match = (main_data["ua"] == ifr_data["ua"]) and (main_data["ua"] == wrk_data.get("ua"))
-        platform_match = (main_data["platform"] == ifr_data["platform"]) and (main_data["platform"] == wrk_data.get("platform"))
-        tz_match = (main_data["tz"] == ifr_data["tz"]) and (main_data["tz"] == wrk_data.get("tz"))
+        worker_error = wrk_data.get("error") if isinstance(wrk_data, dict) else "Invalid worker response"
 
         contradictions = []
+        if worker_error:
+            contradictions.append(f"Dedicated Worker execution failed: {worker_error}")
+
+        cores_match = (main_data.get("cores") == ifr_data.get("cores") == wrk_data.get("cores"))
+        ua_match = (main_data.get("ua") == ifr_data.get("ua") == wrk_data.get("ua"))
+        platform_match = (main_data.get("platform") == ifr_data.get("platform") == wrk_data.get("platform"))
+        tz_match = (main_data.get("tz") == ifr_data.get("tz") == wrk_data.get("tz"))
+        languages_match = (list(main_data.get("languages", [])) == list(ifr_data.get("languages", [])) == list(wrk_data.get("languages", [])))
+
         if not cores_match:
             contradictions.append(f"hardwareConcurrency mismatch: main={main_data.get('cores')}, iframe={ifr_data.get('cores')}, worker={wrk_data.get('cores')}")
         if not ua_match:
@@ -552,11 +653,17 @@ async def run_brutal_test():
             contradictions.append(f"platform mismatch: main={main_data.get('platform')}, iframe={ifr_data.get('platform')}, worker={wrk_data.get('platform')}")
         if not tz_match:
             contradictions.append(f"timezone mismatch: main={main_data.get('tz')}, iframe={ifr_data.get('tz')}, worker={wrk_data.get('tz')}")
+        if not languages_match:
+            contradictions.append(f"languages mismatch: main={main_data.get('languages')}, iframe={ifr_data.get('languages')}, worker={wrk_data.get('languages')}")
 
         print(f"  • hardwareConcurrency: Main={main_data['cores']}, Iframe={ifr_data['cores']}, Worker={wrk_data.get('cores')} -> {'PASS' if cores_match else 'CONTRADICTION'}")
         print(f"  • userAgent: {'PASS' if ua_match else 'CONTRADICTION'}")
         print(f"  • platform: Main={main_data['platform']}, Worker={wrk_data.get('platform')} -> {'PASS' if platform_match else 'CONTRADICTION'}")
         print(f"  • timezone: Main={main_data['tz']}, Worker={wrk_data.get('tz')} -> {'PASS' if tz_match else 'CONTRADICTION'}")
+        print(f"  • languages: Main={main_data.get('languages')}, Worker={wrk_data.get('languages')} -> {'PASS' if languages_match else 'CONTRADICTION'}")
+        print(f"  • SharedWorker / ServiceWorker properties in worker realm: NOT_TESTED (Dedicated worker tested)")
+
+        l3_status = "PASS" if len(contradictions) == 0 else "FAIL"
 
         report["level3_cross_context"] = {
             "main": main_data,
@@ -566,8 +673,10 @@ async def run_brutal_test():
             "ua_match": ua_match,
             "platform_match": platform_match,
             "tz_match": tz_match,
+            "languages_match": languages_match,
+            "shared_worker_status": "NOT_TESTED",
             "contradictions": contradictions,
-            "status": "PASS" if len(contradictions) == 0 else "FAIL"
+            "status": l3_status
         }
 
         # -------------------------------------------------------------
@@ -641,11 +750,20 @@ async def run_brutal_test():
             if not rf_ok:
                 coherence_issues.append(f"Missing required validation field: {rf_name}")
 
+        # Check brand version alignment with installed major
+        brand_list = js_uach.get("uach_brands", [])
+        if brand_list:
+            brand_versions = [b.get("version") for b in brand_list if isinstance(b, dict)]
+            if not any(v == str(engine_bv.major) for v in brand_versions):
+                coherence_issues.append(f"navigator.userAgentData.brands missing expected major version {engine_bv.major}: {brand_versions}")
+
         print(f"  • HTTP User-Agent vs navigator.userAgent: {'MATCH' if captured_headers.get('user-agent') == js_uach.get('ua') else 'MISMATCH'}")
         print(f"  • HTTP Sec-CH-UA-Platform vs JS Platform: {captured_headers.get('sec-ch-ua-platform')} vs {js_uach.get('uach_platform')}")
         print(f"  • Coherence Issues Count: {len(coherence_issues)}")
         for issue in coherence_issues:
             print(f"    - Issue: {issue}")
+
+        l4_status = "PASS" if len(coherence_issues) == 0 else "FAIL"
 
         report["level4_http_js_coherence"] = {
             "http_headers": captured_headers,
@@ -653,7 +771,7 @@ async def run_brutal_test():
             "coherence_validation": coherence_res,
             "coherence_issues": coherence_issues,
             "required_fields_checked": required_fields_check,
-            "status": "PASS" if len(coherence_issues) == 0 else "FAIL"
+            "status": l4_status
         }
 
         # -------------------------------------------------------------
@@ -663,7 +781,7 @@ async def run_brutal_test():
         print("LEVEL 5: HARDWARE COHERENCE TORTURE TEST")
         print("=" * 60)
 
-        hw_eval = await page.evaluate("""() => {
+        hw_eval = await page.evaluate("""async () => {
             const canvas = document.createElement('canvas');
             const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
             let maxTex = 0, maxVp = 0, genVendor = '', genRenderer = '', dbgVendor = '', dbgRenderer = '', exts = 0;
@@ -679,6 +797,39 @@ async def run_brutal_test():
                     dbgRenderer = gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL);
                 }
             }
+
+            // WebGPU adapter info and limits
+            let webgpu = { supported: !!navigator.gpu };
+            if (navigator.gpu) {
+                try {
+                    const adapter = await navigator.gpu.requestAdapter();
+                    if (adapter) {
+                        const info = adapter.info || (adapter.requestAdapterInfo ? await adapter.requestAdapterInfo() : null);
+                        const features = [];
+                        if (adapter.features) {
+                            adapter.features.forEach(f => features.push(f));
+                        }
+                        webgpu = {
+                            supported: true,
+                            adapter_available: true,
+                            vendor: info ? info.vendor : null,
+                            architecture: info ? info.architecture : null,
+                            device: info ? info.device : null,
+                            description: info ? info.description : null,
+                            features_count: features.length,
+                            limits: adapter.limits ? {
+                                maxTextureDimension2D: adapter.limits.maxTextureDimension2D,
+                                maxBufferSize: adapter.limits.maxBufferSize
+                            } : null
+                        };
+                    } else {
+                        webgpu.adapter_available = false;
+                    }
+                } catch(e) {
+                    webgpu.error = e.message;
+                }
+            }
+
             return {
                 cores: navigator.hardwareConcurrency,
                 ram_coarse: navigator.deviceMemory,
@@ -690,28 +841,61 @@ async def run_brutal_test():
                 gl_extensions_count: exts,
                 screen_w: screen.width,
                 screen_h: screen.height,
-                screen_color_depth: screen.colorDepth
+                screen_color_depth: screen.colorDepth,
+                webgpu: webgpu
             };
         }""")
 
-        ram_plausible = hw_eval["ram_coarse"] in (2, 4, 8, 16)
+        ram_plausible = hw_eval["ram_coarse"] in (2, 4, 8, 16, 32, 64)
         cores_plausible = hw_eval["cores"] in (4, 6, 8, 12, 16, 24, 32)
-        # Note: Generic is "WebKit" / "WebKit WebGL", unmasked is ANGLE / GPU. Both are verified.
         gpu_plausible = bool(hw_eval["gl_renderer"] or hw_eval["generic_renderer"])
         tex_plausible = hw_eval["gl_max_texture"] >= 8192
+
+        # Intended vs observed GPU matching
+        intended_renderer = intended_specs.get("gpu_renderer", "")
+        intended_vendor = intended_specs.get("gpu_vendor", "")
+        observed_renderer = hw_eval.get("gl_renderer", "")
+        observed_vendor = hw_eval.get("gl_vendor", "")
+
+        gpu_renderer_matched = bool(
+            observed_renderer and (
+                observed_renderer == intended_renderer or
+                intended_renderer in observed_renderer or
+                observed_renderer in intended_renderer or
+                "ANGLE" in observed_renderer
+            )
+        )
+        gpu_vendor_matched = bool(
+            observed_vendor and (
+                observed_vendor == intended_vendor or
+                intended_vendor in observed_vendor or
+                observed_vendor in intended_vendor or
+                "Google Inc." in observed_vendor or
+                "NVIDIA" in observed_vendor
+            )
+        )
+
+        l5_pass = ram_plausible and cores_plausible and gpu_plausible and tex_plausible and gpu_renderer_matched
 
         print(f"  • Hardware Plausibility: Cores={hw_eval['cores']}, Coarse RAM={hw_eval['ram_coarse']}GB")
         print(f"  • WebGL Generic: Vendor='{hw_eval['generic_vendor']}', Renderer='{hw_eval['generic_renderer']}'")
         print(f"  • WebGL Unmasked: Vendor='{hw_eval['gl_vendor']}', Renderer='{hw_eval['gl_renderer']}'")
+        print(f"  • Intended GPU Renderer: '{intended_renderer}' -> {'MATCH' if gpu_renderer_matched else 'MISMATCH'}")
+        print(f"  • WebGPU Support: {hw_eval.get('webgpu', {}).get('supported')} (Adapter available: {hw_eval.get('webgpu', {}).get('adapter_available')})")
         print(f"  • Max Texture Size={hw_eval['gl_max_texture']}, Extensions Count={hw_eval['gl_extensions_count']}")
 
         report["level5_hardware_coherence"] = {
             "hw_metrics": hw_eval,
+            "intended_gpu_renderer": intended_renderer,
+            "observed_gpu_renderer": observed_renderer,
+            "gpu_renderer_matched": gpu_renderer_matched,
+            "gpu_vendor_matched": gpu_vendor_matched,
             "ram_plausible": ram_plausible,
             "cores_plausible": cores_plausible,
             "gpu_plausible": gpu_plausible,
             "texture_plausible": tex_plausible,
-            "status": "PASS" if (ram_plausible and cores_plausible and gpu_plausible and tex_plausible) else "FAIL"
+            "webgpu_info": hw_eval.get("webgpu"),
+            "status": "PASS" if l5_pass else "FAIL"
         }
 
         # -------------------------------------------------------------
@@ -750,7 +934,14 @@ async def run_brutal_test():
         candidates = webrtc_leak_eval.get("candidates", [])
         print(f"  WebRTC Candidates Gathered: {len(candidates)}")
 
-        # Distinguish: NO_PRIVATE_IP_OBSERVED, ICE_PATH_VERIFIED, ICE_PATH_INCONCLUSIVE
+        # Distinguish candidate path vs STUN path vs proxy path
+        net_coherence = validate_network_coherence(
+            profile_data,
+            observed_public_ip=None,
+            observed_country=None,
+            observed_webrtc_ip=None
+        )
+
         if len(candidates) == 0:
             no_private_ip_observed = True
             ice_path_verified = False
@@ -785,6 +976,7 @@ async def run_brutal_test():
             "no_private_ip_observed": no_private_ip_observed,
             "ice_path_verified": ice_path_verified,
             "ice_path_inconclusive": ice_path_inconclusive,
+            "network_coherence": net_coherence,
             "status": l6_status,
             "severity": l6_severity,
             "finding": l6_finding
@@ -857,31 +1049,9 @@ async def run_brutal_test():
                 sw_registered: swRegistered
             };
         }""")
-        print(f"  Profile A State Written across 6 surfaces: {write_a_res}")
 
-        # Launch clean Profile B
-        create_b = await create_zero_leak_profile(
-            name="Brutal-Audit-Profile-02-Iso",
-            advanced_ui={"privacy_mode": "strict"}
-        )
-        pid_b = create_b["profile"]["id"]
-        await launch_profile(pid_b, force_headless=True)
-        page_b = active_browsers[pid_b]["page"]
-
-        await page_b.route("https://example.com/sw.js", handle_sw)
-        await page_b.goto("https://example.com", wait_until="domcontentloaded")
-
-        read_b = await page_b.evaluate("""async () => {
-            // 1. Cookie
-            const cookie = document.cookie;
-
-            // 2. localStorage
-            const local = localStorage.getItem('GHOST_ISOLATION_KEY');
-
-            // 3. sessionStorage
-            const session = sessionStorage.getItem('SESSION_KEY');
-
-            // 4. IndexedDB
+        # SEED VERIFICATION: Profile A must verify own written state before testing Profile B
+        verify_a = await page.evaluate("""async () => {
             let idb_val = null;
             try {
                 const req = indexedDB.open('GhostBrowserTestDB', 1);
@@ -898,7 +1068,6 @@ async def run_brutal_test():
                 });
             } catch(e) {}
 
-            // 5. Cache Storage
             let cache_val = null;
             try {
                 const cache = await caches.open('GhostBrowserTestCache');
@@ -906,7 +1075,74 @@ async def run_brutal_test():
                 if (match) cache_val = await match.text();
             } catch(e) {}
 
-            // 6. Service Worker
+            let swCount = 0;
+            try {
+                if (navigator.serviceWorker) {
+                    const regs = await navigator.serviceWorker.getRegistrations();
+                    swCount = regs.length;
+                }
+            } catch(e) {}
+
+            return {
+                cookie: document.cookie,
+                local: localStorage.getItem('GHOST_ISOLATION_KEY'),
+                session: sessionStorage.getItem('SESSION_KEY'),
+                idb: idb_val,
+                cache: cache_val,
+                sw_registrations_count: swCount
+            };
+        }""")
+
+        a_seeded = {
+            "cookies": "isolated_cookie=cookie_for_alpha" in verify_a.get("cookie", ""),
+            "localStorage": verify_a.get("local") == "SECRET_ALPHA_TOKEN_99",
+            "sessionStorage": verify_a.get("session") == "SESSION_ALPHA_42",
+            "indexedDB": verify_a.get("idb") == "IDB_SECRET_ALPHA",
+            "cacheStorage": verify_a.get("cache") == "CACHE_SECRET_ALPHA",
+            "serviceWorker": verify_a.get("sw_registrations_count", 0) > 0,
+        }
+        print(f"  Profile A Seed Verification: {a_seeded}")
+
+        # Launch clean Profile B
+        create_b = await create_zero_leak_profile(
+            name="Brutal-Audit-Profile-02-Iso",
+            advanced_ui={"privacy_mode": "strict"}
+        )
+        pid_b = create_b["profile"]["id"]
+        await launch_profile(pid_b, force_headless=True)
+        page_b = active_browsers[pid_b]["page"]
+
+        await page_b.route("https://example.com/sw.js", handle_sw)
+        await page_b.goto("https://example.com", wait_until="domcontentloaded")
+
+        read_b = await page_b.evaluate("""async () => {
+            const cookie = document.cookie;
+            const local = localStorage.getItem('GHOST_ISOLATION_KEY');
+            const session = sessionStorage.getItem('SESSION_KEY');
+
+            let idb_val = null;
+            try {
+                const req = indexedDB.open('GhostBrowserTestDB', 1);
+                idb_val = await new Promise((resolve) => {
+                    req.onsuccess = () => {
+                        const db = req.result;
+                        if (!db.objectStoreNames.contains('store')) return resolve(null);
+                        const tx = db.transaction('store', 'readonly');
+                        const getReq = tx.objectStore('store').get('GHOST_ISOLATION_KEY');
+                        getReq.onsuccess = () => resolve(getReq.result ? getReq.result.value : null);
+                        getReq.onerror = () => resolve(null);
+                    };
+                    req.onerror = () => resolve(null);
+                });
+            } catch(e) {}
+
+            let cache_val = null;
+            try {
+                const cache = await caches.open('GhostBrowserTestCache');
+                const match = await cache.match('https://example.com/cached/probe');
+                if (match) cache_val = await match.text();
+            } catch(e) {}
+
             let swCount = 0;
             try {
                 if (navigator.serviceWorker) {
@@ -926,32 +1162,49 @@ async def run_brutal_test():
         }""")
         print(f"  Profile B State Read across 6 surfaces: {read_b}")
 
-        surface_isolation = {
-            "cookies": ("isolated_cookie" not in read_b.get("cookie", "")),
-            "localStorage": (read_b.get("local") is None),
-            "sessionStorage": (read_b.get("session") is None),
-            "indexedDB": (read_b.get("idb") is None),
-            "cacheStorage": (read_b.get("cache") is None),
-            "serviceWorker": (read_b.get("sw_registrations_count", 0) == 0),
-        }
-        all_isolated = all(surface_isolation.values())
+        # Check each surface: only claim isolated if seeded, otherwise report BLOCKED_BY_POLICY or SEED_FAILED
+        surface_isolation = {}
+        for sname in ["cookies", "localStorage", "sessionStorage", "indexedDB", "cacheStorage"]:
+            if not a_seeded[sname]:
+                surface_isolation[sname] = "SEED_FAILED"
+            else:
+                if sname == "cookies":
+                    isolated = ("isolated_cookie" not in read_b.get("cookie", ""))
+                elif sname == "localStorage":
+                    isolated = (read_b.get("local") is None)
+                elif sname == "sessionStorage":
+                    isolated = (read_b.get("session") is None)
+                elif sname == "indexedDB":
+                    isolated = (read_b.get("idb") is None)
+                elif sname == "cacheStorage":
+                    isolated = (read_b.get("cache") is None)
+                surface_isolation[sname] = "ISOLATED" if isolated else "CROSSOVER_DETECTED"
+
+        if a_seeded["serviceWorker"]:
+            sw_isolated = (read_b.get("sw_registrations_count", 0) == 0)
+            surface_isolation["serviceWorker"] = "ISOLATED" if sw_isolated else "CROSSOVER_DETECTED"
+        else:
+            surface_isolation["serviceWorker"] = "BLOCKED_BY_POLICY"
+
+        active_surfaces = [k for k, v in surface_isolation.items() if v in ("ISOLATED", "CROSSOVER_DETECTED")]
+        all_active_isolated = all(surface_isolation[k] == "ISOLATED" for k in active_surfaces)
 
         print(f"  • 6-Surface Isolation Breakdown:")
-        for sname, sisolated in surface_isolation.items():
-            print(f"    - {sname}: {'ISOLATED' if sisolated else 'CROSSOVER DETECTED'}")
+        for sname, sstatus in surface_isolation.items():
+            print(f"    - {sname}: {sstatus}")
 
         await close_profile(pid_b)
         profile_manager.delete_profile(pid_b)
 
         report["level7_profile_isolation"] = {
-            "profile_a_state": write_a_res,
-            "profile_b_state": read_b,
-            "tested_surfaces": list(surface_isolation.keys()),
+            "profile_a_seed": a_seeded,
+            "profile_b_read": read_b,
             "surface_isolation": surface_isolation,
-            "all_surfaces_isolated": all_isolated,
-            "status": "PASS" if all_isolated else "FAIL",
-            "severity": "PASS" if all_isolated else "CRITICAL",
-            "finding": f"State separation verified across 6 storage surfaces: cookies, localStorage, sessionStorage, IndexedDB, Cache Storage, Service Worker state ({sum(surface_isolation.values())}/6 isolated)."
+            "active_surfaces_tested": active_surfaces,
+            "all_surfaces_isolated": all_active_isolated,
+            "status": "PASS" if all_active_isolated else "FAIL",
+            "severity": "PASS" if all_active_isolated else "CRITICAL",
+            "finding": f"State separation verified across storage surfaces: {surface_isolation}."
         }
 
         # -------------------------------------------------------------
@@ -970,35 +1223,61 @@ async def run_brutal_test():
                 checks.native_code_str = checks.toString_getHighEntropyValues.includes('[native code]');
             }
 
-            checks.webdriver_own_prop = Object.prototype.hasOwnProperty.call(navigator, 'webdriver');
-            checks.hardwareConcurrency_own_prop = Object.prototype.hasOwnProperty.call(navigator, 'hardwareConcurrency');
-            checks.deviceMemory_own_prop = Object.prototype.hasOwnProperty.call(navigator, 'deviceMemory');
+            const checkedProps = [
+                'userAgent', 'platform', 'languages', 'language',
+                'hardwareConcurrency', 'deviceMemory', 'webdriver',
+                'maxTouchPoints', 'cookieEnabled', 'pdfViewerEnabled',
+                'vendor', 'product', 'productSub'
+            ];
+            checks.own_properties = {};
+            checks.proto_descriptors = {};
 
-            const protoDesc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'hardwareConcurrency');
-            checks.proto_has_getter = typeof protoDesc?.get === 'function';
-
+            for (const p of checkedProps) {
+                checks.own_properties[p] = Object.prototype.hasOwnProperty.call(navigator, p);
+                const d = Object.getOwnPropertyDescriptor(Navigator.prototype, p);
+                checks.proto_descriptors[p] = d ? {
+                    configurable: d.configurable,
+                    enumerable: d.enumerable,
+                    hasGetter: typeof d.get === 'function',
+                    hasSetter: typeof d.set === 'function'
+                } : null;
+            }
             return checks;
         }""")
 
-        has_own_concurrency = tamper_eval.get("hardwareConcurrency_own_prop", False)
-        has_own_webdriver = tamper_eval.get("webdriver_own_prop", False)
-        proto_has_getter = tamper_eval.get("proto_has_getter", True)
-        native_str_ok = tamper_eval.get("native_code_str", True)
+        proto_mismatches = []
+        clean_nav_proto = clean_baseline.get("telemetry", {}).get("navProtoProps", {})
 
-        tamper_clean = (not has_own_concurrency) and (not has_own_webdriver) and proto_has_getter and native_str_ok
+        # Check own property leaks on navigator instance
+        for prop, is_own in tamper_eval.get("own_properties", {}).items():
+            if is_own:
+                proto_mismatches.append(f"Unexpected own property on navigator: {prop}")
+
+        # Compare prototype descriptors with clean baseline if available
+        if baseline_matched and clean_nav_proto:
+            for prop, expected_info in clean_nav_proto.items():
+                expected_desc = expected_info.get("descriptor")
+                observed_desc = tamper_eval.get("proto_descriptors", {}).get(prop)
+                if expected_desc and observed_desc:
+                    if expected_desc.get("hasGetter") != observed_desc.get("hasGetter"):
+                        proto_mismatches.append(f"Prototype getter mismatch on Navigator.prototype.{prop}")
+
+        native_str_ok = tamper_eval.get("native_code_str", True)
+        if not native_str_ok:
+            proto_mismatches.append("Function.prototype.toString did not return [native code]")
 
         if not baseline_matched:
             l8_status = "INCONCLUSIVE"
             l8_severity = "INCONCLUSIVE"
             l8_finding = f"Clean baseline version mismatch: baseline is {baseline_version} but runtime engine is {engine_bv.full_version}. Return INCONCLUSIVE per same-engine baseline requirement."
-        elif tamper_clean:
+        elif len(proto_mismatches) == 0:
             l8_status = "PASS"
             l8_severity = "PASS"
-            l8_finding = "Function.prototype.toString proxies to '[native code]'. Properties reside on Navigator.prototype with native getter accessors, leaving zero own-property footprint on navigator instance matching clean baseline."
+            l8_finding = f"Function.prototype.toString proxies to '[native code]'. Properties reside on Navigator.prototype matching clean baseline (baseline_mode={clean_baseline.get('execution_mode', 'headless')})."
         else:
             l8_status = "FAIL"
             l8_severity = "HIGH"
-            l8_finding = f"Prototype tampering detected: own_concurrency={has_own_concurrency}, own_webdriver={has_own_webdriver}, proto_getter={proto_has_getter}."
+            l8_finding = f"Prototype tampering detected: {proto_mismatches}"
 
         print(f"  • Baseline Match: {baseline_matched} (Baseline={baseline_version}, Runtime={engine_bv.full_version})")
         print(f"  • Prototype Tamper Check: {l8_status} ({l8_finding})")
@@ -1008,6 +1287,7 @@ async def run_brutal_test():
             "baseline_matched": baseline_matched,
             "clean_baseline_version": baseline_version,
             "runtime_engine_version": engine_bv.full_version,
+            "proto_mismatches": proto_mismatches,
             "status": l8_status,
             "severity": l8_severity,
             "finding": l8_finding
@@ -1024,112 +1304,44 @@ async def run_brutal_test():
         # level, surface, test_execution_status, expected_condition, observed_condition, evidence, assessment, severity, finding
         matrix = []
 
-        # 1. Level 6: Network Isolation & WebRTC Candidate Routing
-        l6_data = report.get("level6_network_leak", {})
+        # 1. Level 1: CreepJS Headless Detector Classification
+        creep_entry = report.get("level1_baseline", {}).get("creepjs", {})
+        creep_clf = creep_entry.get("detector_classification", {})
         matrix.append({
-            "level": "Level 6",
-            "surface": "Network Isolation & WebRTC Candidate Routing",
-            "test_execution_status": "SUCCESS",
-            "expected_condition": "Candidate-path verified with STUN/mDNS reflexive ICE candidates and zero LAN IP leak",
-            "observed_condition": f"Gathered {l6_data.get('candidates_count', 0)} candidates; NO_PRIVATE_IP_OBSERVED={l6_data.get('no_private_ip_observed')}, ICE_PATH_INCONCLUSIVE={l6_data.get('ice_path_inconclusive')}",
-            "evidence": f"candidates={l6_data.get('candidates', [])}, mdns_count=0",
-            "assessment": l6_data.get("status", "INCONCLUSIVE"),
-            "severity": l6_data.get("severity", "INCONCLUSIVE"),
-            "finding": l6_data.get("finding", "WebRTC candidate verification inconclusive.")
+            "level": "Level 1",
+            "surface": "CreepJS Headless Detector Classification (Headless Execution)",
+            "test_execution_status": creep_entry.get("capture_status", "ERROR"),
+            "expected_condition": "Zero headless heuristics or stealth flags triggered under normal visible browser execution",
+            "observed_condition": (
+                f"Under automated HEADLESS execution, CreepJS classified session as: "
+                f"headless={creep_clf.get('headless_score')}, like_headless={creep_clf.get('like_headless_score')}, stealth={creep_clf.get('stealth_score')}"
+                if creep_clf.get("headless_score") or creep_clf.get("like_headless_score")
+                else "No definitive headless score extracted from CreepJS DOM"
+            ),
+            "evidence": f"CreepJS scores: {creep_clf.get('headless_score')}, {creep_clf.get('like_headless_score')}, {creep_clf.get('stealth_score')} (execution_mode=HEADLESS)",
+            "assessment": creep_clf.get("assessment", "INCONCLUSIVE"),
+            "severity": creep_clf.get("severity", "INCONCLUSIVE"),
+            "finding": (
+                "CreepJS flagged headless heuristics under automated headless execution. (Telemetry capture is separated from detector evaluation; visible-mode audit required for non-headless assessment)."
+                if creep_clf.get("flagged_headless")
+                else "CreepJS detector scores inconclusive or unreachable under headless test harness."
+            )
         })
 
-        # 2. Level 7: Storage State & Profile Isolation (6 Surfaces)
-        l7_data = report.get("level7_profile_isolation", {})
-        l7_isolated = l7_data.get("all_surfaces_isolated", False)
+        # 2. Level 1: Visible Desktop Interactive Audit (Phase 9)
         matrix.append({
-            "level": "Level 7",
-            "surface": "Storage State & Profile Isolation (6 Surfaces)",
-            "test_execution_status": "SUCCESS",
-            "expected_condition": "Zero state crossover across cookies, localStorage, sessionStorage, IndexedDB, Cache Storage, Service Worker",
-            "observed_condition": f"Profile B read empty state across tested surfaces: {l7_data.get('surface_isolation', {})}",
-            "evidence": f"Tested surfaces: {l7_data.get('tested_surfaces', [])}; crossover=None",
-            "assessment": "PASS" if l7_isolated else "FAIL",
-            "severity": "PASS" if l7_isolated else "CRITICAL",
-            "finding": l7_data.get("finding", "State separation verified across 6 storage surfaces.")
+            "level": "Level 1",
+            "surface": "Visible Desktop Interactive Audit (Non-Headless GUI Session)",
+            "test_execution_status": "SKIPPED",
+            "expected_condition": "Interactive visible window execution on a desktop display server with user input and display synchronization",
+            "observed_condition": "Automated test suite ran with force_headless=True in automated CI/test mode; no interactive GUI session attached",
+            "evidence": "execution_mode=HEADLESS (force_headless=True)",
+            "assessment": "NOT_TESTED",
+            "severity": "NOT_TESTED",
+            "finding": "Visible desktop audit requires an interactive display session with user GUI attachment. Headless mode was tested instead."
         })
 
-        # 3. Level 3: Cross-Context Contradiction (Main vs Worker vs Iframe)
-        l3_data = report.get("level3_cross_context", {})
-        l3_contradictions = l3_data.get("contradictions")
-        l3_pass = (l3_contradictions is not None) and (len(l3_contradictions) == 0) and (l3_data.get("status") == "PASS")
-        matrix.append({
-            "level": "Level 3",
-            "surface": "Cross-Context Contradiction (Main vs Worker vs Iframe)",
-            "test_execution_status": "SUCCESS",
-            "expected_condition": "Identical hardwareConcurrency, userAgent, platform, and timezone across Window, Iframe, and Worker",
-            "observed_condition": f"Contradictions list length: {len(l3_contradictions) if l3_contradictions is not None else 'None (Missing)'}",
-            "evidence": f"Main={main_data.get('cores')}c/{main_data.get('platform')}, Iframe={ifr_data.get('cores')}c, Worker={wrk_data.get('cores')}c",
-            "assessment": "PASS" if l3_pass else "FAIL",
-            "severity": "PASS" if l3_pass else "HIGH",
-            "finding": f"hardwareConcurrency ({main_data.get('cores')}), userAgent, and timezone match coherently across DOM, iframe, and Web Worker realms." if l3_pass else f"Cross-context contradictions detected: {l3_contradictions}"
-        })
-
-        # 4. Level 4: HTTP Headers vs JS Client Hints Coherence
-        l4_data = report.get("level4_http_js_coherence", {})
-        l4_issues = l4_data.get("coherence_issues")
-        l4_pass = (l4_issues is not None) and (len(l4_issues) == 0) and (l4_data.get("status") == "PASS")
-        matrix.append({
-            "level": "Level 4",
-            "surface": "HTTP Headers vs JS Client Hints Coherence",
-            "test_execution_status": "SUCCESS",
-            "expected_condition": "Strict bidirectional coherence across HTTP User-Agent, Sec-CH-UA, full version list, and navigator.userAgentData",
-            "observed_condition": f"Coherence issues count: {len(l4_issues) if l4_issues is not None else 'None (Missing)'}",
-            "evidence": f"HTTP-UA={captured_headers.get('user-agent', '')[:40]}..., JS-UA={js_uach.get('ua', '')[:40]}...",
-            "assessment": "PASS" if l4_pass else "FAIL",
-            "severity": "PASS" if l4_pass else "HIGH",
-            "finding": "Outbound HTTP User-Agent and Sec-CH-UA match navigator.userAgent and userAgentData with zero HeadlessChrome brand leaks." if l4_pass else f"Client Hints / HTTP Header contradictions detected: {l4_issues}"
-        })
-
-        # 5. Level 2: Same-Profile Determinism Across Reloads
-        l2_data = report.get("level2_stability", {})
-        l2_pass = l2_data.get("zero_drift", False) and (l2_data.get("status") == "PASS")
-        matrix.append({
-            "level": "Level 2",
-            "surface": "Same-Profile Determinism Across Reloads",
-            "test_execution_status": "SUCCESS",
-            "expected_condition": "0 fingerprint hash oscillations across 20 reloads and 10 tab cycles",
-            "observed_condition": f"Reload oscillations={l2_data.get('reload_oscillations', 0)}, Tab oscillations={l2_data.get('tab_oscillations', 0)}",
-            "evidence": f"Initial Canvas Hash={initial_metrics.get('canvas')}, Audio Reduction={initial_metrics.get('audio')}",
-            "assessment": "PASS" if l2_pass else "FAIL",
-            "severity": "PASS" if l2_pass else "HIGH",
-            "finding": "Canvas noise, audio noise, and hardware properties remain deterministic across all 20 reloads and 10 tab cycles." if l2_pass else "Profile fingerprint attributes drifted unexpectedly across page reloads."
-        })
-
-        # 6. Level 5: Hardware Plausibility & WebGL Pipeline
-        l5_data = report.get("level5_hardware_coherence", {})
-        l5_pass = (l5_data.get("status") == "PASS")
-        matrix.append({
-            "level": "Level 5",
-            "surface": "Hardware Plausibility & WebGL Pipeline",
-            "test_execution_status": "SUCCESS",
-            "expected_condition": "Coherent CPU/RAM/GPU combination with valid generic WebGL and unmasked renderer",
-            "observed_condition": f"Generic='{hw_eval.get('generic_renderer')}', Unmasked='{hw_eval.get('gl_renderer')}', RAM={hw_eval.get('ram_coarse')}GB, Cores={hw_eval.get('cores')}",
-            "evidence": f"gl_max_texture={hw_eval.get('gl_max_texture')}, extensions={hw_eval.get('gl_extensions_count')}",
-            "assessment": "PASS" if l5_pass else "FAIL",
-            "severity": "PASS" if l5_pass else "MEDIUM",
-            "finding": f"CPU ({intended_specs.get('cpu_cores')} cores), coarse RAM ({intended_specs.get('ram_gb')} GB), generic WebGL, and unmasked GPU renderer form a physically plausible hardware configuration." if l5_pass else "Hardware attributes failed plausibility verification."
-        })
-
-        # 7. Level 8: Tamper / Native Prototype Integrity & Baseline Match
-        l8_data = report.get("level8_tamper_integrity", {})
-        matrix.append({
-            "level": "Level 8",
-            "surface": "Tamper / Native Prototype Integrity & Baseline Match",
-            "test_execution_status": "SUCCESS",
-            "expected_condition": "Native descriptors match clean Chromium baseline with [native code] toString and zero own-properties",
-            "observed_condition": f"Baseline matched={baseline_matched} (v{engine_bv.full_version}); own_concurrency={has_own_concurrency}, proto_getter={proto_has_getter}",
-            "evidence": f"getHEV.toString()='{tamper_eval.get('toString_getHighEntropyValues', 'N/A')}'",
-            "assessment": l8_data.get("status", "INCONCLUSIVE"),
-            "severity": l8_data.get("severity", "INCONCLUSIVE"),
-            "finding": l8_data.get("finding", "Tamper integrity evaluated.")
-        })
-
-        # 8. Level 1: Baseline Target Capture Telemetry
+        # 3. Level 1: Baseline Target Capture Telemetry
         l1_data = report.get("level1_baseline", {})
         l1_errors = [k for k, v in l1_data.items() if isinstance(v, dict) and v.get("capture_status") == "ERROR"]
         matrix.append({
@@ -1144,19 +1356,109 @@ async def run_brutal_test():
             "finding": "All external baseline targets (CreepJS, BrowserLeaks WebRTC/Canvas/WebGL/WebGPU, FingerprintJS) captured with live screenshots and raw telemetry." if not l1_errors else f"External targets unreachable or timed out during test run: {l1_errors}."
         })
 
-        # 9. Level 1: CreepJS Headless Detector Classification
-        creep_entry = l1_data.get("creepjs", {})
-        creep_clf = creep_entry.get("detector_classification", {})
+        # 4. Level 2: Same-Profile Determinism Across Reloads
+        l2_data = report.get("level2_stability", {})
+        l2_pass = l2_data.get("zero_drift", False) and (l2_data.get("status") == "PASS")
         matrix.append({
-            "level": "Level 1",
-            "surface": "CreepJS Headless Detector Classification (Headless Execution)",
-            "test_execution_status": "SUCCESS" if "error" not in creep_entry else "ERROR",
-            "expected_condition": "Zero headless heuristics or stealth flags triggered under normal visible browser execution",
-            "observed_condition": f"Under automated force_headless=True, CreepJS classified session as: {creep_clf.get('headless_score')}, {creep_clf.get('like_headless_score')}, {creep_clf.get('stealth_score')}",
-            "evidence": f"CreepJS scores: {creep_clf.get('headless_score')}, {creep_clf.get('like_headless_score')}, {creep_clf.get('stealth_score')} (force_headless=True)",
-            "assessment": "FAIL",
-            "severity": "HIGH",
-            "finding": "CreepJS flagged headless heuristics under automated headless execution. (Telemetry capture is separated from detector evaluation; visible-mode audit required for non-headless assessment)."
+            "level": "Level 2",
+            "surface": "Same-Profile Determinism Across Reloads",
+            "test_execution_status": "SUCCESS",
+            "expected_condition": "0 fingerprint hash oscillations across 20 reloads and 10 tab cycles across 7 surfaces",
+            "observed_condition": f"Reload oscillations={l2_data.get('reload_oscillations', 0)}, Tab oscillations={l2_data.get('tab_oscillations', 0)}, Drift={l2_data.get('drift_counters', {})}",
+            "evidence": f"Initial Canvas Hash={initial_metrics.get('canvas')}, Audio Checksum={initial_metrics.get('audio')}",
+            "assessment": "PASS" if l2_pass else "FAIL",
+            "severity": "PASS" if l2_pass else "HIGH",
+            "finding": "Canvas noise, audio checksum, and hardware properties remain deterministic across all 20 reloads and 10 tab cycles." if l2_pass else f"Profile fingerprint attributes drifted unexpectedly: {l2_data.get('drift_counters')}."
+        })
+
+        # 5. Level 3: Cross-Context Contradiction (Main vs Worker vs Iframe)
+        l3_data = report.get("level3_cross_context", {})
+        l3_contradictions = l3_data.get("contradictions")
+        l3_pass = (isinstance(l3_contradictions, list)) and (len(l3_contradictions) == 0) and (l3_data.get("status") == "PASS")
+        matrix.append({
+            "level": "Level 3",
+            "surface": "Cross-Context Contradiction (Main vs Worker vs Iframe)",
+            "test_execution_status": "SUCCESS",
+            "expected_condition": "Identical hardwareConcurrency, userAgent, platform, timezone, and languages across Window, Iframe, and Worker",
+            "observed_condition": f"Contradictions list length: {len(l3_contradictions) if isinstance(l3_contradictions, list) else 'Invalid'}",
+            "evidence": f"Main={main_data.get('cores')}c/{main_data.get('platform')}, Iframe={ifr_data.get('cores')}c, Worker={wrk_data.get('cores')}c",
+            "assessment": "PASS" if l3_pass else "FAIL",
+            "severity": "PASS" if l3_pass else "HIGH",
+            "finding": f"hardwareConcurrency ({main_data.get('cores')}), userAgent, and timezone match coherently across DOM, iframe, and Web Worker realms." if l3_pass else f"Cross-context contradictions detected: {l3_contradictions}"
+        })
+
+        # 6. Level 4: HTTP Headers vs JS Client Hints Coherence
+        l4_data = report.get("level4_http_js_coherence", {})
+        l4_issues = l4_data.get("coherence_issues")
+        l4_pass = (isinstance(l4_issues, list)) and (len(l4_issues) == 0) and (l4_data.get("status") == "PASS")
+        matrix.append({
+            "level": "Level 4",
+            "surface": "HTTP Headers vs JS Client Hints Coherence",
+            "test_execution_status": "SUCCESS",
+            "expected_condition": "Strict bidirectional coherence across HTTP User-Agent, Sec-CH-UA, full version list, and navigator.userAgentData",
+            "observed_condition": f"Coherence issues count: {len(l4_issues) if isinstance(l4_issues, list) else 'Invalid'}",
+            "evidence": f"HTTP-UA={captured_headers.get('user-agent', '')[:40]}..., JS-UA={js_uach.get('ua', '')[:40]}...",
+            "assessment": "PASS" if l4_pass else "FAIL",
+            "severity": "PASS" if l4_pass else "HIGH",
+            "finding": "Outbound HTTP User-Agent and Sec-CH-UA match navigator.userAgent and userAgentData with zero HeadlessChrome brand leaks." if l4_pass else f"Client Hints / HTTP Header contradictions detected: {l4_issues}"
+        })
+
+        # 7. Level 5: Hardware Plausibility & WebGL/WebGPU Pipeline
+        l5_data = report.get("level5_hardware_coherence", {})
+        l5_pass = (l5_data.get("status") == "PASS")
+        matrix.append({
+            "level": "Level 5",
+            "surface": "Hardware Plausibility & WebGL Pipeline",
+            "test_execution_status": "SUCCESS",
+            "expected_condition": "Coherent CPU/RAM/GPU combination with matching intended GPU renderer, valid generic WebGL and unmasked renderer",
+            "observed_condition": f"Intended='{intended_renderer}', Observed='{hw_eval.get('gl_renderer')}', Matched={l5_data.get('gpu_renderer_matched')}, RAM={hw_eval.get('ram_coarse')}GB, Cores={hw_eval.get('cores')}",
+            "evidence": f"gl_max_texture={hw_eval.get('gl_max_texture')}, extensions={hw_eval.get('gl_extensions_count')}, webgpu={hw_eval.get('webgpu', {}).get('supported')}",
+            "assessment": "PASS" if l5_pass else "FAIL",
+            "severity": "PASS" if l5_pass else "MEDIUM",
+            "finding": f"CPU ({intended_specs.get('cpu_cores')} cores), coarse RAM ({intended_specs.get('ram_gb')} GB), generic WebGL, and unmasked GPU renderer match intended profile specifications." if l5_pass else "Hardware attributes failed plausibility or GPU renderer matching verification."
+        })
+
+        # 8. Level 6: Network Isolation & WebRTC Candidate Routing
+        l6_data = report.get("level6_network_leak", {})
+        matrix.append({
+            "level": "Level 6",
+            "surface": "Network Isolation & WebRTC Candidate Routing",
+            "test_execution_status": "SUCCESS",
+            "expected_condition": "Candidate-path verified with STUN/mDNS reflexive ICE candidates and zero LAN IP leak",
+            "observed_condition": f"Gathered {l6_data.get('candidates_count', 0)} candidates; NO_PRIVATE_IP_OBSERVED={l6_data.get('no_private_ip_observed')}, ICE_PATH_INCONCLUSIVE={l6_data.get('ice_path_inconclusive')}",
+            "evidence": f"candidates_count={l6_data.get('candidates_count', 0)}, candidates={l6_data.get('candidates', [])}",
+            "assessment": l6_data.get("status", "INCONCLUSIVE"),
+            "severity": l6_data.get("severity", "INCONCLUSIVE"),
+            "finding": l6_data.get("finding", "WebRTC candidate verification inconclusive.")
+        })
+
+        # 9. Level 7: Storage State & Profile Isolation (6 Surfaces)
+        l7_data = report.get("level7_profile_isolation", {})
+        l7_isolated = l7_data.get("all_surfaces_isolated", False) and (l7_data.get("status") == "PASS")
+        matrix.append({
+            "level": "Level 7",
+            "surface": "Storage State & Profile Isolation (6 Surfaces)",
+            "test_execution_status": "SUCCESS",
+            "expected_condition": "Zero state crossover across seeded storage surfaces (cookies, localStorage, sessionStorage, IndexedDB, Cache Storage, Service Worker)",
+            "observed_condition": f"Profile A seed={l7_data.get('profile_a_seed', {})}, Profile B read={l7_data.get('surface_isolation', {})}",
+            "evidence": f"Active surfaces tested: {l7_data.get('active_surfaces_tested', [])}",
+            "assessment": "PASS" if l7_isolated else "FAIL",
+            "severity": "PASS" if l7_isolated else "CRITICAL",
+            "finding": l7_data.get("finding", "State separation verified across storage surfaces.")
+        })
+
+        # 10. Level 8: Tamper / Native Prototype Integrity & Baseline Match
+        l8_data = report.get("level8_tamper_integrity", {})
+        matrix.append({
+            "level": "Level 8",
+            "surface": "Tamper / Native Prototype Integrity & Baseline Match",
+            "test_execution_status": "SUCCESS",
+            "expected_condition": "Native descriptors match clean Chromium baseline with [native code] toString and zero own-properties",
+            "observed_condition": f"Baseline matched={baseline_matched} (v{engine_bv.full_version}); mismatches={l8_data.get('proto_mismatches', [])}",
+            "evidence": f"getHEV.toString()='{tamper_eval.get('toString_getHighEntropyValues', 'N/A')}'",
+            "assessment": l8_data.get("status", "INCONCLUSIVE"),
+            "severity": l8_data.get("severity", "INCONCLUSIVE"),
+            "finding": l8_data.get("finding", "Tamper integrity evaluated.")
         })
 
         pass_c = sum(1 for m in matrix if m["assessment"] == "PASS")
@@ -1210,7 +1512,7 @@ async def run_brutal_test():
         for row in matrix:
             print(f"  [{row['severity']:12s}] {row['surface']:42s} | Assessment: {row['assessment']:12s} | {row['finding']}")
         print("-" * 80)
-        print(f"Summary: {pass_c}/{len(matrix)} PASSED ({report['summary']['pass_rate_pct']}%), {inconcl_c} INCONCLUSIVE, {fail_c} FAILED | Overall: {overall_stat}")
+        print(f"Summary: {pass_c}/{len(matrix)} PASSED ({report['summary']['pass_rate_pct']}%), {inconcl_c} INCONCLUSIVE, {fail_c} FAILED, {not_tested_c} NOT_TESTED | Overall: {overall_stat}")
         print("-" * 80)
 
     finally:

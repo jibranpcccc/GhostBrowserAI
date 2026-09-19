@@ -1,0 +1,8 @@
+{
+  "executable_path": "C:\\Users\\jibra\\AppData\\Local\\ms-playwright\\chromium-1228\\chrome-win64\\chrome.exe",
+  "sha256": "b798f9e53a98d29eb7f36f8c409f905d3184780a04d2bcb56989067194784bd1",
+  "exact_version": "149.0.7827.55",
+  "major_version": 149,
+  "source": "playwright_browser",
+  "resolution_timestamp": "2026-09-19T11:07:23.954947+00:00"
+}

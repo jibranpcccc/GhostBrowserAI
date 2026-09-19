@@ -541,7 +541,12 @@ async def _call_zen_deepseek_api(target_os: str, target_browser: str,
     if not api_keys:
         return None
 
-    model_name = os.environ.get("ZEN_MODEL", ZEN_MODEL)
+    raw_fallback_models = os.environ.get("ZEN_FALLBACK_MODELS", "")
+    if raw_fallback_models.strip():
+        models = [m.strip() for m in raw_fallback_models.split(",") if m.strip()]
+    else:
+        models = [os.environ.get("ZEN_MODEL", ZEN_MODEL)]
+
     race_size = _safe_int_env("ZEN_RACE_SIZE", 3, minimum=1, maximum=32)
     timeout_seconds = _safe_float_env("ZEN_REQUEST_TIMEOUT", 60.0, minimum=1.0)
     inter_batch_delay = _safe_float_env("ZEN_INTER_BATCH_DELAY", 1.0, minimum=0.0)
@@ -553,75 +558,76 @@ async def _call_zen_deepseek_api(target_os: str, target_browser: str,
     )
     system_prompt = build_system_prompt(chrome_major_version)
 
-    async def try_key(api_key: str) -> Optional[dict]:
-        try:
-            response = await _shared_client.post(
-                ZEN_API_URL,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model_name,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    "max_tokens": 2048,
-                },
-                timeout=timeout_seconds,
-            )
+    for model_name in models:
+        async def try_key(api_key: str) -> Optional[dict]:
+            try:
+                response = await _shared_client.post(
+                    ZEN_API_URL,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": model_name,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt},
+                        ],
+                        "max_tokens": 2048,
+                    },
+                    timeout=timeout_seconds,
+                )
 
-            if response.status_code == 200:
-                data = response.json()
-                raw_content = data["choices"][0]["message"]["content"]
-                for parsed in _extract_json_objects(raw_content):
-                    finalized = _finalize_ai_result(
-                        parsed, data, "zen_deepseek", chrome_major_version, requested_model=model_name
-                    )
-                    if finalized:
-                        print(f"[AI Generator] Zen DeepSeek profile details generated (model={model_name}).")
-                        return finalized
-                print("[AI Generator] Zen DeepSeek returned no valid fingerprint JSON object.")
+                if response.status_code == 200:
+                    data = response.json()
+                    raw_content = data["choices"][0]["message"]["content"]
+                    for parsed in _extract_json_objects(raw_content):
+                        finalized = _finalize_ai_result(
+                            parsed, data, "zen_deepseek", chrome_major_version, requested_model=model_name
+                        )
+                        if finalized:
+                            print(f"[AI Generator] Zen DeepSeek profile details generated (model={model_name}).")
+                            return finalized
+                    print("[AI Generator] Zen DeepSeek returned no valid fingerprint JSON object.")
 
-            elif response.status_code in (401, 403):
-                print(f"[AI Generator] Zen DeepSeek auth failed ({response.status_code}). Check ZEN_API_KEY.")
-            elif response.status_code == 429:
-                print("[AI Generator] Zen DeepSeek rate-limited. Key exhausted or too many requests.")
-            else:
-                print(f"[AI Generator] Zen DeepSeek HTTP {response.status_code}.")
+                elif response.status_code in (401, 403):
+                    print(f"[AI Generator] Zen DeepSeek auth failed ({response.status_code}). Check ZEN_API_KEY.")
+                elif response.status_code == 429:
+                    print(f"[AI Generator] Zen DeepSeek rate-limited on {model_name}. Key exhausted or too many requests.")
+                else:
+                    print(f"[AI Generator] Zen DeepSeek HTTP {response.status_code}.")
 
-        except httpx.TimeoutException:
-            print("[AI Generator] Zen DeepSeek request timed out.")
-        except Exception as e:
-            print(f"[AI Generator] Zen DeepSeek request failed: {type(e).__name__}")
+            except httpx.TimeoutException:
+                print(f"[AI Generator] Zen DeepSeek request timed out on {model_name}.")
+            except Exception as e:
+                print(f"[AI Generator] Zen DeepSeek request failed: {type(e).__name__}")
 
-        return None
+            return None
 
-    # Bounded parallel racing across keys, mirroring the Mistral pool.
-    for offset in range(0, len(api_keys), race_size):
-        batch = api_keys[offset:offset + race_size]
-        tasks = {asyncio.create_task(try_key(key)) for key in batch}
-        try:
-            while tasks:
-                done, tasks = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-                for task in done:
-                    result = task.result()
-                    if result:
-                        for pending in tasks:
-                            pending.cancel()
-                        await asyncio.gather(*tasks, return_exceptions=True)
-                        return result
-        finally:
-            for pending in tasks:
-                pending.cancel()
-            if tasks:
-                await asyncio.gather(*tasks, return_exceptions=True)
+        # Bounded parallel racing across keys for this model
+        for offset in range(0, len(api_keys), race_size):
+            batch = api_keys[offset:offset + race_size]
+            tasks = {asyncio.create_task(try_key(key)) for key in batch}
+            try:
+                while tasks:
+                    done, tasks = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                    for task in done:
+                        result = task.result()
+                        if result:
+                            for pending in tasks:
+                                pending.cancel()
+                            await asyncio.gather(*tasks, return_exceptions=True)
+                            return result
+            finally:
+                for pending in tasks:
+                    pending.cancel()
+                if tasks:
+                    await asyncio.gather(*tasks, return_exceptions=True)
 
-        if offset + race_size < len(api_keys):
-            await asyncio.sleep(inter_batch_delay)
+            if offset + race_size < len(api_keys):
+                await asyncio.sleep(inter_batch_delay)
 
-    print(f"[AI Generator] All {len(api_keys)} Zen DeepSeek keys exhausted.")
+    print(f"[AI Generator] All {len(api_keys)} Zen DeepSeek keys exhausted across {len(models)} models.")
     return None
 
 
@@ -782,45 +788,17 @@ async def generate_fingerprint_ai(target_os: str = "Windows", target_browser: st
     """
     Main entry point. Tries:
     1. OpenCode Zen (DeepSeek) — free model, rotating all configured ZEN_API_KEY_* env vars
-    2. Mistral AI API — rotating all configured MISTRAL_API_KEY_* env vars
-    3. Direct Cloudflare API — rotating private priority pool
-    4. Hermes Racing Proxy (port 8005)
-    5. Direct Cloudflare API — standard local account pool
-    6. Local fallback generator (returns _is_fallback=True — STRICT MODE will refuse this)
+    2. Local fallback generator (returns _is_fallback=True — STRICT MODE will refuse this)
     """
     if chrome_major_version is None:
         chrome_major_version = get_installed_chromium_major_version()
 
-    # --- ATTEMPT 1: Mistral API (fast, OpenAI-compatible, JSON mode, codestral-latest) ---
-    result = await _call_mistral_api(target_os, target_browser, chrome_major_version)
-    if result:
-        return sanitize_native_surface_fields(result)
-
-    # --- ATTEMPT 2: OpenCode Zen DeepSeek (fast, OpenAI-compatible, free model) ---
+    # --- ATTEMPT 1: OpenCode Zen DeepSeek (fast, OpenAI-compatible, free model) ---
     result = await _call_zen_deepseek_api(target_os, target_browser, chrome_major_version)
     if result:
         return sanitize_native_surface_fields(result)
 
-    # --- ATTEMPT 3: Private priority accounts (no proxy required) ---
-    result = await _call_direct_cloudflare(
-        target_os, target_browser, chrome_major_version, priority=True
-    )
-    if result:
-        return sanitize_native_surface_fields(result)
-
-    # --- ATTEMPT 4: Racing proxy (Hermes) ---
-    result = await _call_via_racing_proxy(target_os, target_browser, chrome_major_version)
-    if result:
-        return sanitize_native_surface_fields(result)
-
-    # --- ATTEMPT 5: Standard local accounts ---
-    result = await _call_direct_cloudflare(
-        target_os, target_browser, chrome_major_version, priority=False
-    )
-    if result:
-        return sanitize_native_surface_fields(result)
-
-    # --- ATTEMPT 6: Local fallback (will be rejected by strict mode) ---
+    # --- ATTEMPT 2: Local fallback (will be refused by strict mode) ---
     print("[AI Generator] ❌ All AI providers failed. Returning fallback (will be refused by strict mode).")
     fallback = sanitize_native_surface_fields(generate_fingerprint_fallback(target_os))
     fallback["_provenance"] = {

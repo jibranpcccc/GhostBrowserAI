@@ -616,6 +616,14 @@ class ProfileManager:
             return False
         return _verify_pin_hash(pin, pin_hash)
 
+    def clear_profile_pin(self, profile_id: str) -> bool:
+        """Remove the stored PIN hash for the profile."""
+        if profile_id not in self.profiles:
+            return False
+        self.profiles[profile_id].pop("pin_hash", None)
+        self._save_metadata()
+        return True
+
     def clear_profile_storage(self, profile_id: str) -> bool:
         """Clear browsing data (cookies, cache, storage) while preserving profile identity and fingerprint."""
         if profile_id not in self.profiles:

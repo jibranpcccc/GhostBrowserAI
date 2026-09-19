@@ -92,11 +92,13 @@ class ProfileCdpEndpointTests(unittest.TestCase):
         self.orig_token = os.environ.get("GHOSTBROWSER_ADMIN_TOKEN")
         self.orig_cdp = os.environ.get("GHOSTBROWSER_CDP_TEST")
         self.orig_test_env = os.environ.get("GHOSTBROWSER_TEST_ENV")
+        self.orig_prod = os.environ.get("GHOSTBROWSER_PROD")
         os.environ["GHOSTBROWSER_ADMIN_TOKEN"] = ADMIN_TOKEN
         os.environ["GHOSTBROWSER_CDP_TEST"] = "1"
         # Self-contained: this class runs under unittest discover too, where
         # conftest.py is not loaded, so TEST_ENV must be set here explicitly.
         os.environ["GHOSTBROWSER_TEST_ENV"] = "1"
+        os.environ.pop("GHOSTBROWSER_PROD", None)
         self._patchers = [
             mock.patch("backend.system_monitor.system_monitor.start", new=mock.AsyncMock()),
             mock.patch("backend.system_monitor.system_monitor.stop", new=mock.Mock()),
@@ -114,6 +116,7 @@ class ProfileCdpEndpointTests(unittest.TestCase):
             ("GHOSTBROWSER_ADMIN_TOKEN", self.orig_token),
             ("GHOSTBROWSER_CDP_TEST", self.orig_cdp),
             ("GHOSTBROWSER_TEST_ENV", self.orig_test_env),
+            ("GHOSTBROWSER_PROD", self.orig_prod),
         ):
             if orig is None:
                 os.environ.pop(name, None)
@@ -233,39 +236,45 @@ class CdpTestModeGuardTests(unittest.IsolatedAsyncioTestCase):
     async def test_cdp_disabled_when_prod(self):
         from backend.browser_manager import _cdp_test_mode_enabled, build_browser_launch_config
 
-        os.environ["GHOSTBROWSER_PROD"] = "1"
-        self.assertFalse(_cdp_test_mode_enabled())
+        try:
+            os.environ["GHOSTBROWSER_PROD"] = "1"
+            self.assertFalse(_cdp_test_mode_enabled())
 
-        # Deterministic unit test: mock the native metadata probe so this test
-        # only exercises the CDP flag behavior (no real browser/threads/spawns).
-        fake_meta = {
-            "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/139.0.0.0 Safari/537.36",
-            "uadata": {
-                "brands": [{"brand": "Chromium", "version": "139"}, {"brand": "Not A(Brand", "version": "99"}],
-                "platform": "Windows",
-                "platformVersion": "10.0.0",
-                "architecture": "x86",
-                "bitness": "64",
-                "uaFullVersion": "139.0.0.0",
-            },
-        }
-        with mock.patch(
-            "backend.browser_manager.probe_native_metadata", new=mock.AsyncMock(return_value=fake_meta)
-        ):
-            config = await build_browser_launch_config(
-                {"id": "abcd1234", "path": ".", "advanced": {}}, force_headless=True
-            )
-        self.assertNotIn("--remote-debugging-port=0", config["args"])
+            # Deterministic unit test: mock the native metadata probe so this test
+            # only exercises the CDP flag behavior (no real browser/threads/spawns).
+            fake_meta = {
+                "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/139.0.0.0 Safari/537.36",
+                "uadata": {
+                    "brands": [{"brand": "Chromium", "version": "139"}, {"brand": "Not A(Brand", "version": "99"}],
+                    "platform": "Windows",
+                    "platformVersion": "10.0.0",
+                    "architecture": "x86",
+                    "bitness": "64",
+                    "uaFullVersion": "139.0.0.0",
+                },
+            }
+            with mock.patch(
+                "backend.browser_manager.probe_native_metadata", new=mock.AsyncMock(return_value=fake_meta)
+            ):
+                config = await build_browser_launch_config(
+                    {"id": "abcd1234", "path": ".", "advanced": {}}, force_headless=True
+                )
+            self.assertNotIn("--remote-debugging-port=0", config["args"])
+        finally:
+            os.environ.pop("GHOSTBROWSER_PROD", None)
 
     async def test_prod_wins_even_with_both_test_flags(self):
         # Production always denies, even if CDP_TEST and TEST_ENV are both set:
         # a deployed instance misconfigured with test flags is still closed.
         from backend.browser_manager import _cdp_test_mode_enabled
 
-        os.environ["GHOSTBROWSER_PROD"] = "1"
-        os.environ["GHOSTBROWSER_CDP_TEST"] = "1"
-        os.environ["GHOSTBROWSER_TEST_ENV"] = "1"
-        self.assertFalse(_cdp_test_mode_enabled())
+        try:
+            os.environ["GHOSTBROWSER_PROD"] = "1"
+            os.environ["GHOSTBROWSER_CDP_TEST"] = "1"
+            os.environ["GHOSTBROWSER_TEST_ENV"] = "1"
+            self.assertFalse(_cdp_test_mode_enabled())
+        finally:
+            os.environ.pop("GHOSTBROWSER_PROD", None)
 
     async def test_truthy_values_are_normalized(self):
         from backend.browser_manager import _cdp_test_mode_enabled, _env_flag

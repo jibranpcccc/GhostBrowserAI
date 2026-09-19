@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal enabledelayedexpansion
 title GhostBrowser Build
 
 cd /d "%~dp0" || (
@@ -27,7 +27,16 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo [2/5] Checking launcher syntax and importing the application...
+echo [2/5] Resolving authoritative Chromium engine identity...
+set "ENGINE_IDENTITY_FILE=%CD%\artifacts\engine_identity.json"
+if not exist "%CD%\artifacts" mkdir "%CD%\artifacts"
+"%PYTHON%" -c "from backend.engine_resolver import get_engine_identity; id = get_engine_identity(); id.save(); print('Authoritative Engine: ' + id.executable_path + ' (v' + id.exact_version + ', SHA: ' + id.sha256[:16] + '...)')"
+if errorlevel 1 (
+  echo [ERROR] Authoritative Chromium engine could not be resolved.
+  exit /b 1
+)
+
+echo Checking launcher syntax and importing application...
 "%PYTHON%" -m py_compile "%CD%\run_server.py" "%CD%\backend\main.py"
 if errorlevel 1 (
   echo [ERROR] Python syntax validation failed. Build aborted.
@@ -44,23 +53,23 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo [3/5] Locating the validated Chromium bundle...
+echo [3/5] Locating the validated Chromium directory...
 set "CHROMIUM_PATH_FILE=%TEMP%\ghostbrowser-chromium-path-%RANDOM%.txt"
-"%PYTHON%" -c "from backend.config import get_installed_chromium_path; print(get_installed_chromium_path())" > "%CHROMIUM_PATH_FILE%"
+"%PYTHON%" -c "from backend.engine_resolver import get_engine_identity; print(get_engine_identity().executable_path)" > "%CHROMIUM_PATH_FILE%"
 if errorlevel 1 (
   if exist "%CHROMIUM_PATH_FILE%" del /q "%CHROMIUM_PATH_FILE%"
-  echo [ERROR] Could not query Playwright Chromium.
+  echo [ERROR] Could not query engine path.
   exit /b 1
 )
 set /p CHROMIUM_EXE=<"%CHROMIUM_PATH_FILE%"
 del /q "%CHROMIUM_PATH_FILE%"
 if not defined CHROMIUM_EXE (
-  echo [ERROR] Could not resolve Playwright Chromium.
+  echo [ERROR] Could not resolve Chromium executable.
   exit /b 1
 )
 for %%I in ("%CHROMIUM_EXE%") do set "CHROMIUM_DIR=%%~dpI"
 if not exist "%CHROMIUM_DIR%chrome.exe" (
-  echo [ERROR] Resolved Chromium directory is invalid.
+  echo [ERROR] Resolved Chromium directory is invalid: %CHROMIUM_DIR%
   exit /b 1
 )
 
@@ -72,7 +81,7 @@ if errorlevel 1 exit /b 1
 if exist "%CD%\GhostBrowser.spec" del /q "%CD%\GhostBrowser.spec"
 if errorlevel 1 exit /b 1
 
-echo [5/5] Compiling without account files or production profile data...
+echo [5/5] Compiling application executable with PyInstaller...
 "%PYTHON%" -m PyInstaller --noconfirm --clean --onedir ^
   --name "GhostBrowser" ^
   --add-data "frontend;frontend" ^
@@ -94,7 +103,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo Copying the validated Chromium runtime...
+echo Copying the exact validated Chromium bundle...
 xcopy "%CHROMIUM_DIR%*" "%CD%\dist\GhostBrowser\playwright-browsers\chrome-win64\" /E /I /H /Y >nul
 if errorlevel 1 (
   echo [ERROR] Chromium could not be copied into the distribution.
@@ -105,8 +114,16 @@ if not exist "%CD%\dist\GhostBrowser\GhostBrowser.exe" (
   echo [ERROR] Build command returned successfully but the executable is missing.
   exit /b 1
 )
-if not exist "%CD%\dist\GhostBrowser\playwright-browsers\chrome-win64\chrome.exe" (
-  echo [ERROR] Build output is missing its validated Chromium executable.
+set "PACKAGED_CHROME=%CD%\dist\GhostBrowser\playwright-browsers\chrome-win64\chrome.exe"
+if not exist "%PACKAGED_CHROME%" (
+  echo [ERROR] Build output is missing its validated Chromium executable: %PACKAGED_CHROME%
+  exit /b 1
+)
+
+echo Validating packaged browser integrity against pre-build engine identity...
+"%PYTHON%" "%CD%\scripts\verify_packaged_browser.py" "%PACKAGED_CHROME%"
+if errorlevel 1 (
+  echo [ERROR] Packaged browser failed integrity check against validated EngineIdentity. Build aborted.
   exit /b 1
 )
 
@@ -130,6 +147,7 @@ if exist "%CD%\dist\GhostBrowser\cloudflare_accounts.priority.txt" (
   exit /b 1
 )
 
+echo Running release audit...
 "%PYTHON%" "%CD%\scripts\release_audit.py"
 if errorlevel 1 (
   echo [ERROR] Release audit failed. Build output must not be distributed.
@@ -140,6 +158,7 @@ echo.
 echo ==============================================
 echo BUILD SUCCESSFUL
 echo Output: dist\GhostBrowser\GhostBrowser.exe
+echo Validated Chromium: %PACKAGED_CHROME%
 echo Account credentials and profile data were not bundled.
 echo ==============================================
 exit /b 0

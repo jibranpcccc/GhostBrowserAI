@@ -16,7 +16,7 @@ async def capture():
     with open(exe_path, "rb") as f:
         exe_sha256 = hashlib.sha256(f.read()).hexdigest()
 
-    bv = BrowserVersion.from_installed_engine()
+    bv = BrowserVersion.from_installed_engine(exe_path)
     version = bv.full_version
     execution_mode = "headless"
     capture_timestamp = datetime.now(timezone.utc).isoformat()

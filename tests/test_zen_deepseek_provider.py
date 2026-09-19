@@ -194,12 +194,11 @@ class ZenCallTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(result)
         request_json = post.await_args.kwargs["json"]
         self.assertEqual(request_json["model"], ai_generator.ZEN_MODEL)
-        self.assertEqual(request_json["model"], "big-pickle")
         headers = post.await_args.kwargs["headers"]
         self.assertEqual(headers["Authorization"], "Bearer zen-test-key")
         self.assertEqual(post.await_args.args[0], ai_generator.ZEN_API_URL)
         self.assertEqual(result["_provenance"]["source"], "zen_deepseek")
-        self.assertEqual(result["_provenance"]["requested_model"], "big-pickle")
+        self.assertEqual(result["_provenance"]["requested_model"], ai_generator.ZEN_MODEL)
 
     async def test_fallback_models_env_override_wins(self):
         os.environ["ZEN_API_KEY"] = "zen-test-key"

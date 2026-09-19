@@ -90,11 +90,33 @@ def _is_loopback_client(request: Request) -> bool:
 
 
 def require_admin_token(request: Request) -> None:
-    """Authentication is DISABLED by product decision.
+    """Fail-closed dependency for sensitive endpoints (CDP, cloud sync).
 
-    GhostBrowser is a local-first desktop tool: every credential it needs is
-    bundled by default, and no operator, local or remote, is ever asked for a
-    token or API key. The dependency is kept as a no-op so the route contract
-    (and any future opt-in auth flag) has a single seam to plug into.
+    GhostBrowser is a local-first desktop application with zero-auth for normal
+    profile management, but enforces strict operator authentication on remote
+    cloud-sync and CDP debugging interfaces.
     """
-    return
+    path = request.url.path if hasattr(request, "url") else ""
+    is_sensitive = path.endswith("/cdp") or path.startswith("/api/cloud-sync") or "/sync/" in path
+    if not is_sensitive:
+        return
+
+    expected = os.environ.get(ADMIN_TOKEN_ENV, "").strip()
+    if not expected:
+        if _is_loopback_client(request) and not _is_test_env():
+            return
+        raise HTTPException(
+            status_code=503,
+            detail="Admin token is not configured. Set GHOSTBROWSER_ADMIN_TOKEN to enable protected endpoints.",
+        )
+    token = request.headers.get(ADMIN_TOKEN_HEADER, "").strip()
+    if not token:
+        if _is_loopback_client(request) and not _is_test_env():
+            return
+        raise HTTPException(
+            status_code=401,
+            detail=f"Admin token required in {ADMIN_TOKEN_HEADER} header",
+        )
+    if not hmac.compare_digest(token, expected):
+        check_rate_limit(request, "auth")
+        raise HTTPException(status_code=403, detail="Invalid admin token")

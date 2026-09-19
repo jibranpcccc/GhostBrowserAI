@@ -50,6 +50,15 @@ def _resolve_chromium_info():
     if _cached_chromium_version is not None and _cached_chromium_path is not None:
         return
 
+    try:
+        from backend.engine_resolver import get_engine_identity
+        identity = get_engine_identity()
+        _cached_chromium_path = identity.executable_path
+        _cached_chromium_version = identity.exact_version
+        return
+    except Exception:
+        pass
+
     import platform
     import subprocess
     import re
@@ -59,14 +68,14 @@ def _resolve_chromium_info():
 
     exe_path = None
 
-    # Prefer a custom-built Chromium engine supplied by the user. This lets
-    # GhostBrowser use a hardened fork while still falling back to the
-    # Playwright-managed binary when no custom build is configured.
+    # Authoritatively resolve the exact Chromium engine via engine_resolver.
     try:
-        from backend.engine_resolver import get_chromium_executable_path
-        engine_path = get_chromium_executable_path()
-        if engine_path and os.path.isfile(engine_path):
-            exe_path = engine_path
+        from backend.engine_resolver import get_engine_identity
+        ident = get_engine_identity()
+        if ident and ident.executable_path and os.path.isfile(ident.executable_path):
+            _cached_chromium_path = ident.executable_path
+            _cached_chromium_version = ident.exact_version
+            return
     except Exception:
         pass
 

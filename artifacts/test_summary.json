@@ -1,0 +1,57 @@
+{
+  "timestamp": "2026-09-19T11:05:00Z",
+  "engine_identity": {
+    "executable_path": "C:\\Users\\jibra\\AppData\\Local\\ms-playwright\\chromium-1228\\chrome-win64\\chrome.exe",
+    "exact_version": "149.0.7827.55",
+    "major_version": 149,
+    "sha256": "b798f9e53a98d29eb7f36f8c409f905d3184780a04d2bcb56989067194784bd1",
+    "source": "playwright_browser",
+    "compatibility_status": "production_supported",
+    "supported_production_majors": [148, 149, 150, 151, 152]
+  },
+  "test_suites": {
+    "pytest_unit_integration": {
+      "passed": 380,
+      "failed": 0,
+      "total": 380,
+      "status": "PASSED"
+    },
+    "lifecycle_cdp_tests": {
+      "passed": 124,
+      "failed": 0,
+      "total": 124,
+      "status": "PASSED"
+    },
+    "qa_verification_suite": {
+      "passed": 26,
+      "failed": 0,
+      "total": 26,
+      "status": "PASSED"
+    },
+    "brutal_antidetect_suite": {
+      "total_levels": 10,
+      "passed": 7,
+      "inconclusive": 1,
+      "failed": 1,
+      "not_tested": 1,
+      "level_breakdown": {
+        "Level 1 (Direct Leaks)": "PASSED",
+        "Level 2 (Audio Fingerprint)": "PASSED",
+        "Level 3 (DOM Prototyping)": "PASSED",
+        "Level 4 (Client Hints & Network Coherence)": "PASSED",
+        "Level 5 (Hardware & Sensor Plausibility)": "PASSED",
+        "Level 6 (WebRTC & Network Leaks)": "INCONCLUSIVE",
+        "Level 7 (Profile Isolation Torture)": "PASSED",
+        "Level 8 (Headless Heuristics)": "FAILED",
+        "Level 9 (Behavioral & Timing Integrity)": "PASSED",
+        "Level 10 (Full System Multi-Detector Benchmark)": "NOT_TESTED"
+      },
+      "status": "COMPLETED_WITH_KNOWN_HEADLESS_LIMITATION"
+    }
+  },
+  "audit_status": {
+    "check_chromium_compat": "PASSED",
+    "release_audit_tree": "PASSED",
+    "git_whitespace_check": "PASSED"
+  }
+}

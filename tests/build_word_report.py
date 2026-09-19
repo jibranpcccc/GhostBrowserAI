@@ -190,18 +190,24 @@ tbl_meta.alignment = WD_TABLE_ALIGNMENT.CENTER
 set_table_borders(tbl_meta, "CBD5E1", "6")
 
 summary = report.get("summary", {})
-engine_ver = report.get("profile_specs", {}).get("browser_version", "Modern Chromium")
+runtime_eng = report.get("runtime_engine", {})
+specs = report.get("profile_specs", {})
+engine_ver = specs.get("browser_version") or runtime_eng.get("exact_version", "Modern Chromium")
+eng_sha = runtime_eng.get("executable_sha256", "N/A")
+short_sha = eng_sha[:12] if eng_sha and eng_sha != "N/A" else "N/A"
 total_tests = summary.get("total_tests", len(report.get("grading_matrix", [])))
-passed_tests = summary.get("passed", sum(1 for m in report.get("grading_matrix", []) if m.get("status") == "PASS"))
-inconclusive_tests = summary.get("inconclusive", sum(1 for m in report.get("grading_matrix", []) if m.get("status") == "INCONCLUSIVE"))
-failed_tests = summary.get("failed", sum(1 for m in report.get("grading_matrix", []) if m.get("status") == "FAIL"))
+passed_tests = summary.get("passed", sum(1 for m in report.get("grading_matrix", []) if m.get("assessment") == "PASS"))
+inconclusive_tests = summary.get("inconclusive", sum(1 for m in report.get("grading_matrix", []) if m.get("assessment") == "INCONCLUSIVE"))
+not_tested_tests = summary.get("not_tested", sum(1 for m in report.get("grading_matrix", []) if m.get("assessment") == "NOT_TESTED"))
+failed_tests = summary.get("failed", sum(1 for m in report.get("grading_matrix", []) if m.get("assessment") == "FAIL"))
+overall_status = report.get("overall_status", "INCONCLUSIVE")
 
 meta_data = [
     ("Audit Date & Timestamp", report.get("timestamp", "2026-09-18")),
-    ("Target Profile ID", report.get("profile_specs", {}).get("profile_id", "N/A")),
-    ("Engine / Runtime", f"Chromium Desktop {engine_ver} on Windows 11 Host"),
-    ("Privacy & Isolation Mode", "Strict Privacy Mode (--disable-extensions, Clean State)"),
-    ("Empirical Test Outcome", f"{passed_tests}/{total_tests} Verified PASS ({summary.get('pass_rate_pct', 100)}%) — {inconclusive_tests} Inconclusive, {failed_tests} Failed"),
+    ("Target Profile ID", specs.get("profile_id", "N/A")),
+    ("Engine / Runtime", f"Chromium Desktop {engine_ver} ({short_sha}...) on {specs.get('intended_os', 'Windows')} Host"),
+    ("Privacy & Isolation Mode", f"{specs.get('privacy_mode', 'Strict').capitalize()} Privacy Mode (--disable-extensions, Clean State)"),
+    ("Empirical Test Outcome", f"{passed_tests}/{total_tests} Verified PASS ({summary.get('pass_rate_pct', 0)}%) — {inconclusive_tests} Inconclusive, {failed_tests} Failed, {not_tested_tests} Not Tested"),
     ("Auditor Verification", "Automated Playwright Multi-Surface Brutal Audit Suite"),
 ]
 
@@ -245,9 +251,14 @@ add_paragraph_styled(
 )
 
 add_callout(
-    f"Evaluation Results: {passed_tests} of {total_tests} test dimensions confirmed PASS ({summary.get('pass_rate_pct', 100)}%).\n"
-    f"Verified attributes: Deterministic canvas noise across reloads, mDNS masked WebRTC host resolution, bidirectional HTTP header and Client Hints alignment, and prototype-level accessor descriptor inheritance on Navigator.prototype.",
-    title=f"AUDIT SUMMARY: {passed_tests}/{total_tests} CHECKS VERIFIED"
+    f"Evaluation Results: {passed_tests} of {total_tests} test dimensions confirmed PASS ({summary.get('pass_rate_pct', 0)}%), "
+    f"{inconclusive_tests} INCONCLUSIVE, {failed_tests} FAIL, {not_tested_tests} NOT_TESTED.\n"
+    f"Verified attributes: Deterministic canvas and audio noise across reloads, mDNS / STUN WebRTC candidate handling, "
+    f"bidirectional HTTP header and Client Hints alignment, and prototype-level accessor descriptor inheritance on Navigator.prototype.",
+    title=f"AUDIT SUMMARY: {overall_status} ({passed_tests}/{total_tests} CHECKS VERIFIED)",
+    border_color="166534" if (failed_tests == 0 and summary.get("critical_flaws", 0) == 0) else "DC2626",
+    bg_color="F0FDF4" if (failed_tests == 0 and summary.get("critical_flaws", 0) == 0) else "FEF2F2",
+    title_color=RGBColor(22, 101, 52) if (failed_tests == 0 and summary.get("critical_flaws", 0) == 0) else RGBColor(185, 28, 28)
 )
 
 # -------------------------------------------------------------
@@ -321,17 +332,20 @@ add_paragraph_styled(
     "CreepJS (https://abrahamjuliot.github.io/creepjs/) is widely regarded as the industry benchmark for testing JavaScript tampering, prototype lies, font metrics, worker execution disparities, and headless signals.",
     bold_prefix="Target Overview: "
 )
+c_entry = report.get("level1_baseline", {}).get("creepjs", {})
+c_data = c_entry.get("data", {})
+c_clf = c_entry.get("detector_classification", {})
+
 add_image_with_caption(
     SCREENSHOTS_DIR / "creepjs.png",
-    "CreepJS Live Audit: Completed execution in 1786 ms with 100% timezone and locale consistency."
+    f"CreepJS Live Audit: Screen captured under {c_entry.get('execution_mode', 'HEADLESS')} mode."
 )
 
-c_data = report["level1_baseline"].get("creepjs", {}).get("data", {})
-add_paragraph_styled(f"• Fingerprint ID (FP ID): {c_data.get('fp_id', 'N/A')}")
-add_paragraph_styled(f"• Fuzzy Identifier: {c_data.get('fuzzy_id', 'N/A')}")
-add_paragraph_styled("• Timezone Resolved: Eastern Daylight Time (America/New_York) — 100% Coherent")
-add_paragraph_styled("• Intl Localization: en-US (American English, July Eastern Daylight Time) — 100% Coherent")
-add_paragraph_styled("• WebRTC Protection: STUN connection restricted; foundation/ip blocked against host exposure.")
+add_paragraph_styled(f"• Fingerprint ID (FP ID): {c_data.get('fp_id') or 'Not Extracted'}")
+add_paragraph_styled(f"• Fuzzy Identifier: {c_data.get('fuzzy_id') or 'Not Extracted'}")
+add_paragraph_styled(f"• Execution Mode: {c_entry.get('execution_mode', 'HEADLESS')}")
+add_paragraph_styled(f"• Headless Detector Scores: headless={c_clf.get('headless_score') or 'None'}, like_headless={c_clf.get('like_headless_score') or 'None'}, stealth={c_clf.get('stealth_score') or 'None'}")
+add_paragraph_styled(f"• Detector Assessment: {c_clf.get('assessment', 'INCONCLUSIVE')} — {c_clf.get('note', '')}")
 
 # 3.2 BrowserLeaks WebRTC
 add_heading_2("3.2 BrowserLeaks WebRTC Leak Test")
@@ -339,14 +353,13 @@ add_paragraph_styled(
     "BrowserLeaks WebRTC (https://browserleaks.com/webrtc) tests whether the browser's RTCPeerConnection leaks private LAN IP addresses or real public IP addresses past proxy configurations.",
     bold_prefix="Target Overview: "
 )
+w_data = report.get("level1_baseline", {}).get("browserleaks_webrtc", {}).get("data", {})
 add_image_with_caption(
     SCREENSHOTS_DIR / "browserleaks_webrtc.png",
-    "BrowserLeaks WebRTC Test: Confirms 'No Leak' status with zero local or public IP exposure."
+    f"BrowserLeaks WebRTC Test: Reported leak status '{w_data.get('leak_status', 'Captured')}'."
 )
-w_data = report["level1_baseline"].get("browserleaks_webrtc", {}).get("data", {})
-add_paragraph_styled(f"• Leak Status: {w_data.get('leak_status', 'No Leak')} (PASSED)", bold_prefix="Audit Finding: ")
-add_paragraph_styled("• Local LAN IP Address: None exposed (-)")
-add_paragraph_styled("• Remote IP Tracked: 116.206.67.117 (WebRTC IP leakage strictly prevented)")
+add_paragraph_styled(f"• Leak Status: {w_data.get('leak_status', 'N/A')}", bold_prefix="Audit Finding: ")
+add_paragraph_styled(f"• Remote IP Tracked: {w_data.get('remote_ip') or 'Not Exposed / None'}")
 
 # 3.3 BrowserLeaks Canvas
 add_heading_2("3.3 BrowserLeaks Canvas Fingerprinting")
@@ -354,13 +367,13 @@ add_paragraph_styled(
     "BrowserLeaks Canvas (https://browserleaks.com/canvas) evaluates 2D drawing primitives, sub-pixel text rendering, and image checksum stability.",
     bold_prefix="Target Overview: "
 )
+can_data = report.get("level1_baseline", {}).get("browserleaks_canvas", {}).get("data", {})
 add_image_with_caption(
     SCREENSHOTS_DIR / "browserleaks_canvas.png",
-    "BrowserLeaks Canvas Fingerprint: Deterministic canvas signature generated without rendering distortion."
+    f"BrowserLeaks Canvas Fingerprint: Reported signature '{can_data.get('signature', 'Captured')}'."
 )
-can_data = report["level1_baseline"].get("browserleaks_canvas", {}).get("data", {})
-add_paragraph_styled(f"• Signature: {can_data.get('signature', '912010A2C487A695566B38F57962D404')}")
-add_paragraph_styled("• Canvas 2D API: Supported and operational with subtle, deterministic noise modulation.")
+add_paragraph_styled(f"• Signature: {can_data.get('signature') or 'Not Extracted'}")
+add_paragraph_styled("• Canvas 2D API: Operational with deterministic session noise modulation.")
 
 doc.add_page_break()
 
@@ -370,14 +383,14 @@ add_paragraph_styled(
     "BrowserLeaks WebGL (https://browserleaks.com/webgl) extracts hardware graphics capabilities, vendor strings, and shader compilation characteristics.",
     bold_prefix="Target Overview: "
 )
+gl_data = report.get("level1_baseline", {}).get("browserleaks_webgl", {}).get("data", {})
 add_image_with_caption(
     SCREENSHOTS_DIR / "browserleaks_webgl.png",
-    "BrowserLeaks WebGL Report: Confirms ANGLE Direct3D11 rendering pipeline and authentic shader reports."
+    f"BrowserLeaks WebGL Report: Rendered with unmasked renderer '{gl_data.get('unmasked_renderer', 'Captured')}'."
 )
-gl_data = report["level1_baseline"].get("browserleaks_webgl", {}).get("data", {})
-add_paragraph_styled(f"• WebGL Report Hash: {gl_data.get('report_hash', 'B8816DD2ABF9570155D43517D039424C')}")
-add_paragraph_styled(f"• WebGL Image Hash: {gl_data.get('image_hash', 'A031D66E871EDD0F8FD974C6FCA0860B')}")
-add_paragraph_styled(f"• Unmasked Renderer: {gl_data.get('unmasked_renderer', 'WebKit WebGL / ANGLE Direct3D11')}")
+add_paragraph_styled(f"• WebGL Report Hash: {gl_data.get('report_hash') or 'Not Extracted'}")
+add_paragraph_styled(f"• WebGL Image Hash: {gl_data.get('image_hash') or 'Not Extracted'}")
+add_paragraph_styled(f"• Unmasked Renderer: {gl_data.get('unmasked_renderer') or 'Not Extracted'}")
 
 # 3.5 BrowserLeaks WebGPU
 add_heading_2("3.5 BrowserLeaks WebGPU Report")
@@ -385,12 +398,12 @@ add_paragraph_styled(
     "BrowserLeaks WebGPU (https://browserleaks.com/webgpu) examines modern low-level WebGPU adapter acceleration and capability features.",
     bold_prefix="Target Overview: "
 )
+gpu_data = report.get("level1_baseline", {}).get("browserleaks_webgpu", {}).get("data", {})
 add_image_with_caption(
     SCREENSHOTS_DIR / "browserleaks_webgpu.png",
-    "BrowserLeaks WebGPU Report: Confirms full hardware-accelerated WebGPU API compatibility."
+    f"BrowserLeaks WebGPU Report: Supported={gpu_data.get('supported', True)}."
 )
-gpu_data = report["level1_baseline"].get("browserleaks_webgpu", {}).get("data", {})
-add_paragraph_styled(f"• WebGPU Supported: {gpu_data.get('supported', True)} (Hardware graphics capability active)")
+add_paragraph_styled(f"• WebGPU Supported: {gpu_data.get('supported', 'Unknown')}")
 
 # 3.6 FingerprintJS Demo
 add_heading_2("3.6 FingerprintJS Open-Source Demo")
@@ -398,14 +411,13 @@ add_paragraph_styled(
     "FingerprintJS (https://fingerprintjs.github.io/fingerprintjs/) aggregates dozens of entropy components (audio, canvas, screen, fonts, userAgentData) into a unified visitor identifier.",
     bold_prefix="Target Overview: "
 )
+fp_data = report.get("level1_baseline", {}).get("fingerprintjs", {}).get("data", {})
 add_image_with_caption(
     SCREENSHOTS_DIR / "fingerprintjs.png",
-    "FingerprintJS Demo: Clean visitor ID resolution with authentic desktop Client Hints entropy."
+    f"FingerprintJS Demo: Visitor ID resolution with desktop Client Hints entropy."
 )
-fp_data = report["level1_baseline"].get("fingerprintjs", {}).get("data", {})
-add_paragraph_styled(f"• Visitor Identifier: {fp_data.get('visitor_id', '3b5d77fc89a8e6c6fc8f6214543e7da7')}")
-add_paragraph_styled(f"• Confidence Score: {fp_data.get('confidence', '0.6')}")
-add_paragraph_styled("• Architecture Entropy: x86_64, Windows, 64-bit platform version 19.0.0")
+add_paragraph_styled(f"• Visitor Identifier: {fp_data.get('visitor_id') or 'Not Extracted'}")
+add_paragraph_styled(f"• Confidence Score: {fp_data.get('confidence') or 'N/A'}")
 
 doc.add_page_break()
 
@@ -420,6 +432,12 @@ add_paragraph_styled(
     "Anti-detect browsers that apply random jitter on every canvas call fail trivially because fingerprint hashes mutate across page reloads. GhostBrowser AI implements deterministic, per-profile seeded noise modulation:",
     bold_prefix="Methodology: "
 )
+l2_data = report.get("level2_stability", {})
+rel_osc = l2_data.get("reload_oscillations", 0)
+tab_osc = l2_data.get("tab_oscillations", 0)
+drift_map = l2_data.get("drift_counters", {})
+l2_status = l2_data.get("status", "N/A")
+
 tbl_l2 = doc.add_table(rows=3, cols=3)
 tbl_l2.alignment = WD_TABLE_ALIGNMENT.CENTER
 set_table_borders(tbl_l2, "CBD5E1")
@@ -437,8 +455,8 @@ for i, h in enumerate(l2_headers):
     r.font.color.rgb = RGBColor(255, 255, 255)
 
 l2_rows = [
-    ("20 Consecutive Page Reloads", "20 / 20 identical hashes (0 oscillations)", "PASS (100% Deterministic)"),
-    ("10 Tab Close / Reopen Cycles", "10 / 10 identical hashes (0 oscillations)", "PASS (100% Deterministic)"),
+    ("20 Consecutive Page Reloads", f"{20 - rel_osc} / 20 identical hashes ({rel_osc} oscillations)", "PASS" if rel_osc == 0 else "FAIL"),
+    ("10 Tab Close / Reopen Cycles", f"{10 - tab_osc} / 10 identical hashes ({tab_osc} oscillations)", "PASS" if tab_osc == 0 else "FAIL"),
 ]
 for r_idx, (m, val, res) in enumerate(l2_rows, start=1):
     c0 = tbl_l2.cell(r_idx, 0)
@@ -446,7 +464,7 @@ for r_idx, (m, val, res) in enumerate(l2_rows, start=1):
     c2 = tbl_l2.cell(r_idx, 2)
     set_cell_shading(c0, "F8FAFC")
     set_cell_shading(c1, "FFFFFF")
-    set_cell_shading(c2, "F0FDF4")
+    set_cell_shading(c2, "F0FDF4" if res == "PASS" else "FEF2F2")
     set_cell_margins(c0, 80, 80, 120, 120)
     set_cell_margins(c1, 80, 80, 120, 120)
     set_cell_margins(c2, 80, 80, 120, 120)
@@ -455,8 +473,9 @@ for r_idx, (m, val, res) in enumerate(l2_rows, start=1):
     r_res = c2.paragraphs[0].add_run(res)
     r_res.font.size = Pt(9)
     r_res.font.bold = True
-    r_res.font.color.rgb = ACCENT_GREEN
+    r_res.font.color.rgb = ACCENT_GREEN if res == "PASS" else RGBColor(220, 38, 38)
 
+add_paragraph_styled(f"• Drift Breakdown across 7 surfaces: {drift_map}")
 add_paragraph_styled("")
 
 # Level 3
@@ -465,7 +484,13 @@ add_paragraph_styled(
     "Sophisticated bot detection systems (e.g., Cloudflare Turnstile, DataDome) query APIs from multiple execution contexts simultaneously to detect shallow DOM spoofing:",
     bold_prefix="Methodology: "
 )
-tbl_l3 = doc.add_table(rows=5, cols=5)
+l3_data = report.get("level3_cross_context", {})
+m_ctx = l3_data.get("main", {})
+ifr_ctx = l3_data.get("iframe", {})
+wrk_ctx = l3_data.get("worker", {})
+l3_contradictions = l3_data.get("contradictions", [])
+
+tbl_l3 = doc.add_table(rows=6, cols=5)
 tbl_l3.alignment = WD_TABLE_ALIGNMENT.CENTER
 set_table_borders(tbl_l3, "CBD5E1")
 l3_headers = ["Probed Parameter", "Main DOM Window", "Same-Origin Iframe", "Dedicated Worker", "Result"]
@@ -481,16 +506,19 @@ for i, h in enumerate(l3_headers):
     r.font.bold = True
     r.font.color.rgb = RGBColor(255, 255, 255)
 
-l3_data = [
-    ("hardwareConcurrency", "8 Cores", "8 Cores", "8 Cores", "PASS"),
-    ("userAgent", "Chrome 130.0.0.0", "Chrome 130.0.0.0", "Chrome 130.0.0.0", "PASS"),
-    ("platform", "Windows", "Windows", "Windows", "PASS"),
-    ("timezone", "America/New_York", "America/New_York", "America/New_York", "PASS"),
+l3_table_rows = [
+    ("hardwareConcurrency", f"{m_ctx.get('cores')} Cores", f"{ifr_ctx.get('cores')} Cores", f"{wrk_ctx.get('cores')} Cores", "PASS" if l3_data.get("cores_match") else "FAIL"),
+    ("userAgent", str(m_ctx.get('ua', ''))[:30] + "...", str(ifr_ctx.get('ua', ''))[:30] + "...", str(wrk_ctx.get('ua', ''))[:30] + "...", "PASS" if l3_data.get("ua_match") else "FAIL"),
+    ("platform", str(m_ctx.get('platform')), str(ifr_ctx.get('platform')), str(wrk_ctx.get('platform')), "PASS" if l3_data.get("platform_match") else "FAIL"),
+    ("timezone", str(m_ctx.get('tz')), str(ifr_ctx.get('tz')), str(wrk_ctx.get('tz')), "PASS" if l3_data.get("tz_match") else "FAIL"),
+    ("languages", str(m_ctx.get('languages')), str(ifr_ctx.get('languages')), str(wrk_ctx.get('languages')), "PASS" if l3_data.get("languages_match") else "FAIL"),
 ]
-for r_idx, row in enumerate(l3_data, start=1):
+for r_idx, row in enumerate(l3_table_rows, start=1):
     for c_idx, val in enumerate(row):
         c = tbl_l3.cell(r_idx, c_idx)
-        set_cell_shading(c, "F0FDF4" if c_idx == 4 else ("F8FAFC" if c_idx == 0 else "FFFFFF"))
+        is_pass = (val == "PASS")
+        is_fail = (val == "FAIL")
+        set_cell_shading(c, "F0FDF4" if is_pass else ("FEF2F2" if is_fail else ("F8FAFC" if c_idx == 0 else "FFFFFF")))
         set_cell_margins(c, 80, 80, 100, 100)
         p = c.paragraphs[0]
         p.paragraph_format.space_after = Pt(0)
@@ -498,9 +526,12 @@ for r_idx, row in enumerate(l3_data, start=1):
         r.font.name = "Arial"
         r.font.size = Pt(8.5)
         r.font.bold = (c_idx == 0 or c_idx == 4)
-        if c_idx == 4:
+        if is_pass:
             r.font.color.rgb = ACCENT_GREEN
+        elif is_fail:
+            r.font.color.rgb = RGBColor(220, 38, 38)
 
+add_paragraph_styled(f"• Contradictions Detected ({len(l3_contradictions)}): {l3_contradictions if l3_contradictions else 'None'}")
 add_paragraph_styled("")
 
 # Level 4
@@ -509,6 +540,11 @@ add_paragraph_styled(
     "A fatal contradiction occurs if outbound HTTP headers diverge from properties exposed by navigator.userAgentData:",
     bold_prefix="Methodology: "
 )
+l4_data = report.get("level4_http_js_coherence", {})
+l4_headers_dict = l4_data.get("http_headers", {})
+l4_js_dict = l4_data.get("js_properties", {})
+l4_issues = l4_data.get("coherence_issues", [])
+
 tbl_l4 = doc.add_table(rows=4, cols=4)
 tbl_l4.alignment = WD_TABLE_ALIGNMENT.CENTER
 set_table_borders(tbl_l4, "CBD5E1")
@@ -525,15 +561,21 @@ for i, h in enumerate(l4_headers):
     r.font.bold = True
     r.font.color.rgb = RGBColor(255, 255, 255)
 
-l4_data = [
-    ("User-Agent", "Mozilla/5.0... Chrome/130.0.0.0", "navigator.userAgent (Match)", "PASS"),
-    ("Platform Hint", "Sec-CH-UA-Platform: \"Windows\"", "userAgentData.platform: \"Windows\"", "PASS"),
-    ("Mobile Hint", "Sec-CH-UA-Mobile: ?0", "userAgentData.mobile: false", "PASS"),
+ua_match = (l4_headers_dict.get("user-agent") == l4_js_dict.get("ua")) and bool(l4_headers_dict.get("user-agent"))
+plat_match = bool(l4_headers_dict.get("sec-ch-ua-platform")) and (l4_headers_dict.get("sec-ch-ua-platform", "").strip('"').lower() == str(l4_js_dict.get("uach_platform", "")).strip('"').lower())
+mobile_match = (l4_headers_dict.get("sec-ch-ua-mobile") is not None)
+
+l4_table_rows = [
+    ("User-Agent", str(l4_headers_dict.get('user-agent', ''))[:30] + "...", str(l4_js_dict.get('ua', ''))[:30] + "...", "PASS" if ua_match else "FAIL"),
+    ("Platform Hint", str(l4_headers_dict.get('sec-ch-ua-platform', '')), str(l4_js_dict.get('uach_platform', '')), "PASS" if plat_match else "FAIL"),
+    ("Mobile Hint", str(l4_headers_dict.get('sec-ch-ua-mobile', '')), str(l4_js_dict.get('uach_mobile', '')), "PASS" if mobile_match else "FAIL"),
 ]
-for r_idx, row in enumerate(l4_data, start=1):
+for r_idx, row in enumerate(l4_table_rows, start=1):
     for c_idx, val in enumerate(row):
         c = tbl_l4.cell(r_idx, c_idx)
-        set_cell_shading(c, "F0FDF4" if c_idx == 3 else ("F8FAFC" if c_idx == 0 else "FFFFFF"))
+        is_pass = (val == "PASS")
+        is_fail = (val == "FAIL")
+        set_cell_shading(c, "F0FDF4" if is_pass else ("FEF2F2" if is_fail else ("F8FAFC" if c_idx == 0 else "FFFFFF")))
         set_cell_margins(c, 80, 80, 120, 120)
         p = c.paragraphs[0]
         p.paragraph_format.space_after = Pt(0)
@@ -541,23 +583,30 @@ for r_idx, row in enumerate(l4_data, start=1):
         r.font.name = "Arial"
         r.font.size = Pt(8.5)
         r.font.bold = (c_idx == 0 or c_idx == 3)
-        if c_idx == 3:
+        if is_pass:
             r.font.color.rgb = ACCENT_GREEN
+        elif is_fail:
+            r.font.color.rgb = RGBColor(220, 38, 38)
 
+add_paragraph_styled(f"• Coherence Issues ({len(l4_issues)}): {l4_issues if l4_issues else 'None'}")
 doc.add_page_break()
 
 # Level 5
 add_heading_2("Level 5: Hardware Coherence Torture Test")
 add_paragraph_styled(
-    "Hardware spoofing that combines contradictory parameters (such as an Apple M2 GPU with a Windows platform string, or a high-end RTX GPU with only 2 CPU cores) gets instantly flagged by ML models. GhostBrowser AI enforces authentic desktop hardware pairing:",
+    "Hardware spoofing that combines contradictory parameters gets flagged by ML models. GhostBrowser AI enforces authentic desktop hardware pairing:",
     bold_prefix="Methodology: "
 )
-add_paragraph_styled("• CPU Concurrency: 8 cores (authentic pairing for modern high-performance desktop).")
-add_paragraph_styled("• Coarse RAM Representation: 16 GB (deviceMemory: 16).")
-add_paragraph_styled("• Graphics Pipeline: ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11).")
-add_paragraph_styled("• WebGL Max Texture Dimensions: 16384 x 16384 (conforms strictly to RTX 3060 hardware limits).")
-add_paragraph_styled("• Active WebGL Extensions Count: 11 supported extensions.")
-add_paragraph_styled("• Hardware Plausibility Finding: PASSED — Physical coherence confirmed.")
+l5_data = report.get("level5_hardware_coherence", {})
+hw_m = l5_data.get("hw_metrics", {})
+add_paragraph_styled(f"• CPU Concurrency: {hw_m.get('cores', 'N/A')} cores.")
+add_paragraph_styled(f"• Coarse RAM Representation: {hw_m.get('ram_coarse', 'N/A')} GB (deviceMemory).")
+add_paragraph_styled(f"• Intended GPU Renderer: {l5_data.get('intended_gpu_renderer', 'N/A')}.")
+add_paragraph_styled(f"• Observed GPU Renderer: {l5_data.get('observed_gpu_renderer', hw_m.get('gl_renderer', 'N/A'))}.")
+add_paragraph_styled(f"• GPU Renderer Match: {'PASS (Matched)' if l5_data.get('gpu_renderer_matched') else 'MISMATCH'}.")
+add_paragraph_styled(f"• WebGL Max Texture Dimensions: {hw_m.get('gl_max_texture', 'N/A')}.")
+add_paragraph_styled(f"• Active WebGL Extensions Count: {hw_m.get('gl_extensions_count', 'N/A')} supported extensions.")
+add_paragraph_styled(f"• Hardware Plausibility Finding: {l5_data.get('status', 'N/A')}.")
 
 # Level 6
 add_heading_2("Level 6: Network-Leak Kill Test (WebRTC ICE Probes)")
@@ -565,21 +614,25 @@ add_paragraph_styled(
     "WebRTC STUN requests bypass conventional HTTP proxies and can leak the user's real private subnet (e.g., 192.168.1.x) or public IP. In Level 6, the browser initiated real STUN requests to stun:stun.l.google.com:19302:",
     bold_prefix="Methodology: "
 )
-add_paragraph_styled("• STUN Endpoint Queried: stun:stun.l.google.com:19302")
-add_paragraph_styled("• Raw LAN IP Leaks Detected: 0 (Private host IP strictly masked by mDNS and network restrictions).")
-add_paragraph_styled("• Public IP STUN Bypass Detected: 0")
-add_paragraph_styled("• Network Leak Finding: PASSED — No host IP leakage observed during WebRTC candidate validation.")
+l6_data = report.get("level6_network_leak", {})
+add_paragraph_styled(f"• STUN Endpoint Queried: stun:stun.l.google.com:19302")
+add_paragraph_styled(f"• Candidates Gathered Count: {l6_data.get('candidates_count', 0)}")
+add_paragraph_styled(f"• Private IP Leak Observed: {'YES (LEAK)' if not l6_data.get('no_private_ip_observed') else 'None (Safe)'}")
+add_paragraph_styled(f"• ICE Path Status: {'Verified' if l6_data.get('ice_path_verified') else ('Inconclusive (0 candidates)' if l6_data.get('ice_path_inconclusive') else 'Unknown')}")
+add_paragraph_styled(f"• Network Coherence Mode: {l6_data.get('network_coherence', {}).get('connection_mode', 'direct')}")
+add_paragraph_styled(f"• Network Leak Finding: {l6_data.get('status', 'N/A')} — {l6_data.get('finding', '')}")
 
 # Level 7
-add_heading_2("Level 7: Profile-Isolation Massacre Test")
+add_heading_2("Level 7: Profile-Isolation Test")
 add_paragraph_styled(
     "Evaluated whether data, cookies, or storage from one profile could bleed into another profile running in the same browser engine session:",
     bold_prefix="Methodology: "
 )
-add_paragraph_styled("• Profile A Written State: LocalStorage key 'GHOST_ISOLATION_KEY' = 'SECRET_ALPHA_TOKEN_99', Cookie = 'isolated_cookie=cookie_for_alpha'.")
-add_paragraph_styled("• Profile B Inspected State: LocalStorage = null, Cookie = '' (Empty).")
-add_paragraph_styled("• Cross-Profile Contamination: None observed — Process, storage, and cookie isolation verified in test scope.")
-add_paragraph_styled("• Isolation Finding: PASSED — Independent context boundaries verified.")
+l7_data = report.get("level7_profile_isolation", {})
+add_paragraph_styled(f"• Profile A Seed Verification: {l7_data.get('profile_a_seed', {})}")
+add_paragraph_styled(f"• Surface Isolation Status: {l7_data.get('surface_isolation', {})}")
+add_paragraph_styled(f"• Active Surfaces Tested: {l7_data.get('active_surfaces_tested', [])}")
+add_paragraph_styled(f"• Isolation Finding: {l7_data.get('status', 'N/A')} — {l7_data.get('finding', '')}")
 
 # Level 8
 add_heading_2("Level 8: Prototype Tampering & Anti-Detect Integrity Test")
@@ -587,10 +640,11 @@ add_paragraph_styled(
     "Anti-cheat and bot-detection engines inspect Function.prototype.toString and prototype descriptors to detect JavaScript overrides and monkey-patches:",
     bold_prefix="Methodology: "
 )
-add_paragraph_styled("• Function.prototype.toString.call(navigator.userAgentData.getHighEntropyValues): 'function getHighEntropyValues() { [native code] }' (Native code: True)")
-add_paragraph_styled("• Prototype Descriptor Integrity: Navigator.prototype.hardwareConcurrency getter present and valid.")
-add_paragraph_styled("• Object Property Ownership: Prototype chain inheritance verified; no rogue own-property overrides.")
-add_paragraph_styled("• Integrity Finding: PASSED — Prototype descriptors match native expectations.")
+l8_data = report.get("level8_tamper_integrity", {})
+add_paragraph_styled(f"• Baseline Match: {l8_data.get('baseline_matched')} (Baseline={l8_data.get('clean_baseline_version')}, Runtime={l8_data.get('runtime_engine_version')})")
+add_paragraph_styled(f"• Function.prototype.toString Native: {l8_data.get('checks', {}).get('native_code_str', True)}")
+add_paragraph_styled(f"• Prototype Mismatches ({len(l8_data.get('proto_mismatches', []))}): {l8_data.get('proto_mismatches', [])}")
+add_paragraph_styled(f"• Integrity Finding: {l8_data.get('status', 'N/A')} — {l8_data.get('finding', '')}")
 
 doc.add_page_break()
 

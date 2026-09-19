@@ -6,7 +6,7 @@ A privacy-focused, anti-detect Chromium browser built on Playwright and FastAPI.
 
 ## What is GhostBrowser
 
-GhostBrowser launches isolated Chromium windows through a Playwright backend controlled by a FastAPI server. Every profile gets its own cookie jar, localStorage, IndexedDB, cache, service workers, and deterministic fingerprint seeds, so sessions cannot be linked by canvas, WebGL, audio, or storage fingerprints. The browser intentionally runs on upstream Chromium with the sandbox enabled rather than disabling security protections for stealth.
+GhostBrowser launches isolated Chromium windows through a Playwright backend controlled by a FastAPI server. Every profile gets its own cookie jar, localStorage, IndexedDB, cache, service workers, and deterministic fingerprint seeds, designed to minimize cross-session linkability across canvas, WebGL, audio, and storage surfaces. The browser intentionally runs on upstream Chromium with the sandbox enabled rather than disabling security protections for stealth.
 
 ---
 
@@ -14,10 +14,10 @@ GhostBrowser launches isolated Chromium windows through a Playwright backend con
 
 - **Profile isolation** — separate `profiles_data/<id>` directories for cookies, localStorage, IndexedDB, cache, and service workers.
 - **Fingerprint consistency** — canvas, WebGL vendor/renderer, audio context, fonts, screen resolution, DPR, `hardwareConcurrency`, `deviceMemory`, touch/pointer, media devices, battery, sensors, WebGPU, speech voices, and network information.
-- **Native prototype inheritance** — all navigator overrides reside on `Navigator.prototype` and `Screen.prototype` with native accessor getters, leaving zero own-property footprint on instances.
-- **Authoritative browser versioning** — dynamic engine detection via `BrowserVersion` model synchronizing `Sec-CH-UA`, Client Hints, and HTTP headers with zero headless leakage.
-- **Deterministic session noise** — 100% stable seeded session noise across dates without day-dependent hardware jitter.
-- **Network coherence & WebRTC safety** — strict mDNS and STUN reflexive mapping preventing private LAN host IP leaks.
+- **Native prototype inheritance** — navigator overrides reside on `Navigator.prototype` and `Screen.prototype` with native accessor getters, minimizing own-property footprint on instances.
+- **Authoritative browser versioning** — dynamic engine detection via `BrowserVersion` model synchronizing `Sec-CH-UA`, Client Hints, and HTTP headers with the exact installed Chromium executable.
+- **Deterministic session noise** — seeded session noise designed to maintain stable fingerprint values across reloads without day-dependent hardware jitter.
+- **Network coherence & WebRTC safety** — strict mDNS and STUN reflexive candidate handling designed to prevent private LAN host IP leaks.
 - **Proxy management** — per-profile HTTP/HTTPS/SOCKS5 proxy binding, health checks, failover pool, geo-based timezone/locale auto-match, and kill-switch.
 - **Privacy modes** — Standard, Strict, and Ephemeral browsing modes with configurable storage persistence.
 - **PIN lock** — optional per-profile launch lock. New and changed PINs must be 4–6 ASCII digits and are stored as PBKDF2 hashes; existing legacy PINs remain usable for unlock until changed.

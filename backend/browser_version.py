@@ -63,7 +63,13 @@ class BrowserVersion:
 
     @classmethod
     def from_installed_engine(cls, executable_path: Optional[str] = None) -> "BrowserVersion":
-        """Query config.py or an explicit executable for installed Chromium info."""
+        """Query engine resolver or an explicit executable for installed Chromium info."""
+        if not executable_path:
+            try:
+                from backend.engine_resolver import get_chromium_executable_path
+                executable_path = get_chromium_executable_path()
+            except Exception:
+                pass
         if executable_path:
             from backend.engine_resolver import resolve_chromium_version
             ver = resolve_chromium_version(executable_path)

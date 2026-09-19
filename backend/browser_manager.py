@@ -1182,12 +1182,7 @@ async def build_browser_launch_config(profile: dict, force_headless: bool = Fals
         else:
             max_touch_points = 1 + (_seed % 10)
 
-    extra_http_headers = {
-        "sec-ch-ua": sec_ch_ua,
-        "sec-ch-ua-mobile": "?1" if is_mobile_profile else "?0",
-        "sec-ch-ua-platform": sec_ch_ua_platform,
-        "sec-ch-ua-full-version-list": sec_ch_ua_full_version_list,
-    }
+    extra_http_headers = {}
     spoofing_script = f"""
             const spoofedFunctions = new WeakMap();
             const originalToString = Function.prototype.toString;
@@ -2311,10 +2306,12 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                 frame = request.frame
             except Exception:
                 frame = None
+            req_ref = (request.headers.get("referer") or request.headers.get("Referer") or "").lower()
             is_worker = (
                 request.resource_type in ("worker", "sharedworker", "serviceworker")
                 or frame is None
-                or (request.headers.get("referer") and "worker.js" in request.headers.get("referer"))
+                or "worker.js" in req_ref
+                or "/worker-fetch" in request.url
             )
 
             if is_worker:
@@ -2444,7 +2441,12 @@ async def _do_launch_profile(profile_id: str, force_headless: bool = False, pin:
                 # owning origin sends Accept-CH. Do not manufacture a worker-only
                 # header surface. Page and frame requests retain the origin-scoped
                 # native handshake behavior below.
-                if not is_worker:
+                if is_worker:
+                    for h in list(headers.keys()):
+                        if h.startswith("sec-ch-ua"):
+                            headers.pop(h)
+                            modified = True
+                else:
                     brands_list = metadata.get("brands", [])
                     brands_str = ", ".join(f'"{b["brand"]}";v="{b["version"]}"' for b in brands_list)
                     if brands_str and headers.get("sec-ch-ua") != brands_str:

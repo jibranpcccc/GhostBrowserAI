@@ -579,7 +579,10 @@ async def run_tests():
     print("\n--- Running Lifecycle and Fingerprint Validation ---")
     try:
         with patch("backend.profile_creator.generate_fingerprint_ai", mock_ai_gen):
-            p = await profile_creator.create_zero_leak_profile(name="Lifecycle-Test-Profile")
+            p = await profile_creator.create_zero_leak_profile(
+                name="Lifecycle-Test-Profile",
+                advanced_ui={"privacy_mode": "standard"}
+            )
             pid = p["profile"]["id"]
 
             # Launch persistent context
