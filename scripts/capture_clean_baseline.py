@@ -1,17 +1,32 @@
-﻿import sys
+import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import asyncio
 import json
-import os
+import hashlib
+from datetime import datetime, timezone
 from playwright.async_api import async_playwright
-from backend.config import get_installed_chromium_path, get_installed_chromium_version
+from backend.engine_resolver import get_chromium_executable_path
+from backend.browser_version import BrowserVersion
 
 async def capture():
-    exe_path = get_installed_chromium_path()
-    version = get_installed_chromium_version()
-    print(f"Capturing clean native baseline for: {exe_path} (Version: {version})")
+    from backend.engine_resolver import get_chromium_executable_path_async
+    exe_path = await get_chromium_executable_path_async()
+    with open(exe_path, "rb") as f:
+        exe_sha256 = hashlib.sha256(f.read()).hexdigest()
+
+    bv = BrowserVersion.from_installed_engine()
+    version = bv.full_version
+    execution_mode = "headless"
+    capture_timestamp = datetime.now(timezone.utc).isoformat()
+
+    print(f"Capturing clean native baseline for:")
+    print(f"  Executable: {exe_path}")
+    print(f"  SHA-256:    {exe_sha256}")
+    print(f"  Version:    {version} (Major: {bv.major})")
+    print(f"  Mode:       {execution_mode}")
+    print(f"  Timestamp:  {capture_timestamp}")
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(
@@ -142,8 +157,12 @@ async def capture():
         await browser.close()
 
         baseline = {
-            "executable_path": exe_path,
-            "version": version,
+            "exact_executable_path": exe_path,
+            "executable_sha256": exe_sha256,
+            "exact_version": version,
+            "browser_major": bv.major,
+            "execution_mode": execution_mode,
+            "capture_timestamp": capture_timestamp,
             "telemetry": telemetry
         }
 

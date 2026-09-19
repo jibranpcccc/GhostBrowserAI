@@ -74,3 +74,60 @@ def test_validate_coherence_fails_headless_leak():
     sec_ch_ua = '"Chromium";v="130", "HeadlessChrome";v="130", "Not?A_Brand";v="99"'
     issues = bv.validate_coherence(ua, sec_ch_ua, None, None, is_headless_expected=False)
     assert any("HeadlessChrome" in i for i in issues)
+
+def test_validate_coherence_comprehensive():
+    bv = BrowserVersion.parse("147.0.7727.15")
+    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+    http_ua = ua
+    sec_ch_ua = '"Chromium";v="147", "Google Chrome";v="147", "Not?A_Brand";v="99"'
+    sec_ch_ua_fvl = '"Chromium";v="147.0.7727.15", "Google Chrome";v="147.0.7727.15", "Not?A_Brand";v="99.0.0.0"'
+    uadata = {
+        "brands": [
+            {"brand": "Chromium", "version": "147"},
+            {"brand": "Google Chrome", "version": "147"},
+            {"brand": "Not?A_Brand", "version": "99"},
+        ],
+        "mobile": False,
+        "platform": "Windows"
+    }
+    high_entropy = {
+        "uaFullVersion": "147.0.7727.15",
+        "fullVersionList": [
+            {"brand": "Chromium", "version": "147.0.7727.15"},
+            {"brand": "Google Chrome", "version": "147.0.7727.15"},
+            {"brand": "Not?A_Brand", "version": "99.0.0.0"}
+        ]
+    }
+    issues = bv.validate_coherence(
+        ua=ua,
+        sec_ch_ua=sec_ch_ua,
+        uadata=uadata,
+        high_entropy=high_entropy,
+        is_headless_expected=False,
+        http_ua=http_ua,
+        sec_ch_ua_full_version_list=sec_ch_ua_fvl,
+        sec_ch_ua_platform='"Windows"',
+        sec_ch_ua_mobile="?0",
+        js_platform="Win32",
+        is_mobile_expected=False
+    )
+    assert len(issues) == 0
+
+    # Contradiction: HTTP UA mismatch
+    bad_http = bv.validate_coherence(
+        ua=ua,
+        sec_ch_ua=sec_ch_ua,
+        uadata=uadata,
+        http_ua="Mozilla/5.0 Different"
+    )
+    assert any("does not match" in i for i in bad_http)
+
+    # Contradiction: mobile flag mismatch
+    bad_mobile = bv.validate_coherence(
+        ua=ua,
+        sec_ch_ua=sec_ch_ua,
+        uadata=uadata,
+        sec_ch_ua_mobile="?1",
+        is_mobile_expected=False
+    )
+    assert any("Sec-CH-UA-Mobile" in i for i in bad_mobile)

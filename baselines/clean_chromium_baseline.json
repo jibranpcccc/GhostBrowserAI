@@ -1,6 +1,10 @@
 {
-  "executable_path": "C:\\Users\\jibra\\AppData\\Local\\ms-playwright\\chromium-1140\\chrome-win\\chrome.exe",
-  "version": "130.0.6723.31",
+  "exact_executable_path": "C:\\Users\\jibra\\AppData\\Local\\ms-playwright\\chromium-1140\\chrome-win\\chrome.exe",
+  "executable_sha256": "de88b8d38bf8807685bf0293e79f7a49a449309b05d36ecc0b22eed92cf445e8",
+  "exact_version": "130.0.6723.31",
+  "browser_major": 130,
+  "execution_mode": "headless",
+  "capture_timestamp": "2026-09-19T08:46:08.752146+00:00",
   "telemetry": {
     "navProps": {
       "userAgent": {
